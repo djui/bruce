@@ -159,6 +159,7 @@ struct SheetHost: View {
         case .login: LoginView()
         case .checkIn: CheckInView()
         case .info(let title): PlaceholderPage(title: title)
+        case .parakey(let id): ParakeySheet(studioId: id)
         case .search: SearchSheet()
         case .selectCity: SelectCitySheet()
         case .newArea: NewAreaSheet()

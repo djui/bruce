@@ -24,6 +24,8 @@ enum Theme {
     static let red = Color(red: 1, green: 0.22, blue: 0.24)
     static let strikeRed = Color(red: 0xE0 / 255, green: 0x10 / 255, blue: 0x10 / 255)
     static let waitlistOrange = Color(red: 0xF5 / 255, green: 0x8A / 255, blue: 0x1F / 255)
+    /// Parakey's teal (their app icon and buttons).
+    static let parakey = Color(red: 0x00 / 255, green: 0x8C / 255, blue: 0xB0 / 255)
     static let baseTag = Color(red: 0xCF / 255, green: 0xC8 / 255, blue: 0xC2 / 255)
     static let creditsBeige = Color(light: Color(red: 0xF9 / 255, green: 0xEC / 255, blue: 0xD9 / 255),
                                      dark: Color(red: 0.32, green: 0.27, blue: 0.2))
@@ -250,8 +252,9 @@ struct Avatar: View {
 }
 
 /// Class row used in Explore/Classes, Friends, My classes and Visits lists.
-/// States under the row: "On waitlist" (orange, with a bell next to the time) when the user is on the
-/// class's waitlist, otherwise red "Fully booked" when no spots are left. Wellness classes get a boxed tag.
+/// States under the row: an orange "On waitlist" pill when the user is on the class's waitlist, otherwise
+/// red "Fully booked" when no spots are left. Wellness classes get a boxed tag. Friends booked on the class
+/// show as small faces under the row (off where the row already shows its friend, e.g. Friends).
 struct ClassRow: View {
     @Environment(AppModel.self) var m
     let c: BruceAPI.BruceClass
@@ -259,22 +262,16 @@ struct ClassRow: View {
     /// Overrides the waitlist label (e.g. a list that is all waitlist entries).
     var badge: String? = nil
     var showMenu = true
+    var showFriends = true
     var trailing: AnyView? = nil
 
     var body: some View {
         let st = m.studio(c.studioId)
         let waitlisted = badge != nil || m.isOnWaitlist(c.id)
+        let friends = showFriends ? m.friendsBooked(c.id) : []
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .trailing, spacing: 3) {
                 Text(BruceDate.time(c.start)).font(.system(size: 17, weight: .semibold)).monospacedDigit()
-                    // Bell above the time (in the row's top padding, so times stay aligned with titles).
-                    .overlay(alignment: .topTrailing) {
-                        if waitlisted {
-                            Image(systemName: "bell.fill").font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Theme.waitlistOrange).offset(y: -13)
-                                .accessibilityLabel("On waitlist")
-                        }
-                    }
                 Text(c.durationMinutes.map { "\($0) min" } ?? "").font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 if m.isWellness(studioId: c.studioId) { WellnessTag().padding(.top, 3) }
             }
@@ -295,6 +292,7 @@ struct ClassRow: View {
                 } else if let a = c.availableSpots, a <= 0 {
                     Text("Fully booked").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.red).padding(.top, 2)
                 }
+                if !friends.isEmpty { FriendFaces(users: friends).padding(.top, 6) }
             }
             .foregroundStyle(Theme.ink)
             Spacer(minLength: 0)
@@ -303,6 +301,26 @@ struct ClassRow: View {
         }
         .padding(.vertical, 14).padding(.horizontal, Theme.gutter)
         .contentShape(Rectangle())
+    }
+}
+
+/// Overlapping faces of friends booked on a class (class rows), with a "+n" after five.
+struct FriendFaces: View {
+    let users: [BruceAPI.UserLite]
+    var size: CGFloat = 28
+    var body: some View {
+        HStack(spacing: -size * 0.3) {
+            ForEach(users.prefix(5), id: \.id) { u in
+                Avatar(fileId: u.photo, initials: u.initials, size: size)
+                    .overlay(Circle().stroke(Theme.background, lineWidth: 2))
+            }
+            if users.count > 5 {
+                Text("+\(users.count - 5)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondary)
+                    .padding(.leading, size * 0.3 + 4)
+            }
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Booked by " + users.compactMap(\.firstName).formatted(.list(type: .and)))
     }
 }
 

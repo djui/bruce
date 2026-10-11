@@ -209,7 +209,10 @@ extension BruceAPI {
         var nationalIdentity: String? = nil
         var photoValid: Bool? = nil
         var secret: String? = nil
+        /// Set once the Bruce account is linked with Parakey (the Parakey account's email).
+        var parakeyEmail: String? = nil
         enum CodingKeys: String, CodingKey {
+            case parakeyEmail = "parakey_email"
             case id, photo, social, email, secret, firstName = "first_name", lastName = "last_name"
             case emailConfirmed = "email_confirmed", nationalIdentity = "national_identity", photoValid = "photo_valid"
         }
@@ -474,4 +477,13 @@ enum ShareURL {
     static func forClass(_ id: Int, title: String) -> URL {
         URL(string: "https://app.brucestudios.com/classes/\(id)/\(slug(title))")!
     }
+}
+
+/// Parakey (door access app used by some studios). No Bruce endpoint links the accounts from the client:
+/// the link shows up as `parakey_email` on GET /v52/user/<id>, and keys are created at check-in.
+enum Parakey {
+    /// Opens the Parakey app when installed (the scheme is not documented; falls back to `storeURL`).
+    static let appURL = URL(string: "parakey://")!
+    static let storeURL = URL(string: "https://apps.apple.com/app/id1001574067")!
+    static let helpURL = URL(string: "https://help.parakey.co")!
 }

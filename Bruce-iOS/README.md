@@ -33,7 +33,7 @@ This is the real app; demo mode exists only for screenshots and tests and is nev
 Launch argument `-BRUCE_DEMO 1` (also in the scheme, disabled) or env `BRUCE_DEMO=1`. No API calls, no remote images, no map tiles; book, cancel and check-in only
 change local state. `BRUCE_SCREEN=<name>` opens a screen directly (same names as macOS: `explore`, `classes`,
 `detail`, `studio`, `checkin`, `myclasses`, `friends`, `notifications`, `menu`, `account`, `settings`,
-`rules`, `booked`, `filter`, `search`, `welcome`, …):
+`rules`, `booked`, `filter`, `search`, `welcome`, `parakey`, …):
 
 ```sh
 xcrun simctl install booted build/…/BruceiOS.app

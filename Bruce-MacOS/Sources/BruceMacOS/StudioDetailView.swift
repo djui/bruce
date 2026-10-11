@@ -115,6 +115,9 @@ struct StudioDetailView: View {
             notice
             photoCarousel
             actionButton.padding(.horizontal, Theme.gutter).padding(.top, 16)
+            if let studio, studio.usesParakey {
+                ParakeyRow(studio: studio, forClass: false).padding(.horizontal, Theme.gutter).padding(.top, 16)
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Text(studio?.name ?? "").font(.system(size: 17, weight: .semibold))
                 HStack(spacing: 4) {

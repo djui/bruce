@@ -24,7 +24,7 @@ enum SheetRoute: Hashable {
     case search, selectCity, newArea, createAccount, resetPassword
     case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts
     case bookingRules(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
-    case similarClasses(Int), area(UUID)
+    case similarClasses(Int), area(UUID), parakey(Int)
 }
 
 @MainActor
@@ -641,6 +641,13 @@ final class AppModel {
     func standby(forClass id: Int) -> BruceAPI.ClassHolder? { standbys.first { $0.class?.id == id } }
     /// The user is on this class's waitlist (from GET /v52/standby; the class payload has no such flag).
     func isOnWaitlist(_ classId: Int) -> Bool { standby(forClass: classId) != nil }
+    /// Friends booked on a class (GET /v52/booking?friends=true joined with GET /v52/friend), once per friend.
+    func friendsBooked(_ classId: Int) -> [BruceAPI.UserLite] {
+        var seen = Set<Int>()
+        return friendsBookings.filter { $0.classId == classId || $0.class?.id == classId }
+            .compactMap { b in friends.first { $0.friendUser?.id == b.userId }?.friendUser }
+            .filter { seen.insert($0.id).inserted }
+    }
     /// Wellness class = class at a studio labelled `WELLNESS` (the class payload carries no wellness flag;
     /// the same label drives the Wellness filter and the WELLNESS_MONTHLY visit limit).
     func isWellness(studioId: Int) -> Bool { studio(studioId)?.label?.uppercased() == "WELLNESS" }

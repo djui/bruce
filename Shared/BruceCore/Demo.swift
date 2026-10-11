@@ -25,6 +25,7 @@ extension AppModel {
           "description":"A placeholder gym used for the offline demo. Strength and cardio areas, open early to late.\\n\\n**Good to know**\\n\\n* Showers in every changing room.\\n* Towels for rent at the desk.\\n* Indoor shoes only in the training hall.",
           "studio_facilities":[{"facility":{"code":"changing","title":"Changing room"}},{"facility":{"code":"shower","title":"Shower"}}]},
          {"id":1489,"name":"Example Yoga Studio","status":"LIVE","vicinity":"Stockholm","city_id":1,"qr_code_id":"930",
+          "integration_door_type":"parakey","parakey_config":{"id":13,"optional":true},
           "photo":"mfrnofbzeqyucdflpasg","rating":{"total":120,"average":482},
           "studio_categories":[{"category_id":2,"main":true,"order":0,"category":{"id":2,"title":"Yoga"}}],
           "studio_addresses":[{"main":true,"address":{"address":"Example road 4","zip_code":"104 05","city":"Stockholm","latitude":59.3655,"longitude":18.0570}}],
@@ -97,7 +98,7 @@ extension AppModel {
         friends = dec([BruceAPI.Friend].self, """
         [{"id":1,"friend_user":{"id":1,"first_name":"Friend","last_name":"One"}},{"id":2,"friend_user":{"id":2,"first_name":"Friend","last_name":"Two"}}]
         """)
-        user = dec(BruceAPI.UserLite.self, #"{"id":0,"first_name":"Demo","last_name":"Member","email":"demo@example.com","email_confirmed":true,"national_identity":"199001011234","photo_valid":true,"social":true}"#)
+        user = dec(BruceAPI.UserLite.self, #"{"id":0,"first_name":"Demo","last_name":"Member","email":"demo@example.com","email_confirmed":true,"national_identity":"199001011234","photo_valid":true,"social":true,"parakey_email":"demo@example.com"}"#)
         social = true
         // Fictional spa: paid ticket (admission_access=false, price 28000 öre), slot ending within 2 h.
         let spa = dec(BruceAPI.Studio.self, """
@@ -189,6 +190,7 @@ extension AppModel {
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
         case "detail": push(.classDetail(9001))
+        case "parakey": push(.classDetail(9001)); present(.parakey(1489))
         case "studio": push(.studio(1724))
         case "studiohours": push(.studio(1724)); demoHoursOpen = true
         case "reviews": push(.studio(1724)); demoStudioTab = 1

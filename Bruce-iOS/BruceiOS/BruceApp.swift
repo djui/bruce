@@ -204,6 +204,7 @@ struct SheetScreen: View {
         case .login: LoginView()
         case .checkIn: CheckInScanner()
         case .info(let title): PlaceholderPage(title: title)
+        case .parakey(let id): ParakeySheet(studioId: id)
         case .search: EmptyView()
         case .selectCity: SelectCitySheet()
         case .newArea: NewAreaSheet()

@@ -26,7 +26,7 @@ struct FriendsView: View {
                             Section(header: SectionHeaderBar(text: BruceDate.dayHeader(day))) {
                                 ForEach(list, id: \.0.id) { _, u, c in
                                     NavigationLink(value: Route.classDetail(c.id)) {
-                                        ClassRow(c: c, showMenu: false,
+                                        ClassRow(c: c, showMenu: false, showFriends: false,
                                                  trailing: AnyView(Avatar(fileId: u?.photo, initials: u?.initials ?? "?", size: 40)))
                                     }
                                     .buttonStyle(.plain)

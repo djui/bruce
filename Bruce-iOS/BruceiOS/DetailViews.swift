@@ -1,6 +1,76 @@
 import SwiftUI
 import MapKit
 
+// MARK: - Parakey
+
+/// Parakey-connected studio (`integration_door_type` "parakey"): the door opens with the Parakey app, using
+/// an access key Bruce creates at check-in. For a class the key is valid from ten minutes before the start.
+struct ParakeyRow: View {
+    @Environment(AppModel.self) var m
+    let studio: BruceAPI.Studio
+    let forClass: Bool
+    var body: some View {
+        Button { m.present(.parakey(studio.id)) } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "key.radiowaves.forward.fill").font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Theme.parakey).frame(width: 32)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Doors open with Parakey").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Text(forClass ? "Check in, then unlock with the Parakey app – from ten minutes before class."
+                                  : "Check in, then unlock the door with the Parakey app.")
+                        .font(.system(size: 14)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.tertiary)
+            }
+            .padding(16).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular.tint(Theme.parakey.opacity(0.12)).interactive(), in: .rect(cornerRadius: 22))
+    }
+}
+
+struct ParakeySheet: View {
+    @Environment(AppModel.self) var m
+    @Environment(\.openURL) var openURL
+    let studioId: Int
+
+    var body: some View {
+        let name = m.studioName(studioId)
+        ScrollView {
+            VStack(spacing: 22) {
+                Image(systemName: "key.radiowaves.forward.fill").font(.system(size: 54, weight: .semibold))
+                    .foregroundStyle(.white).frame(width: 120, height: 120)
+                    .background(Theme.parakey, in: .circle).padding(.top, 24)
+                Text("\(name) is a Parakey connected studio. Parakey lets you use your phone as a key instead of key fobs and plastic cards.")
+                Text("When you check in with Bruce at a Parakey connected studio, an access key is created that you use to unlock doors and gates with the Parakey app. For classes the key is valid from ten minutes before the start.")
+                if let email = m.user?.parakeyEmail, !email.isEmpty {
+                    Label("Your Bruce account is linked with Parakey (\(email)).", systemImage: "checkmark.seal.fill")
+                        .font(.system(size: 16, weight: .semibold))
+                } else if m.isLoggedIn {
+                    Text("Log in to the Parakey app with the email of your Bruce account; your first check-in here links the two.")
+                        .foregroundStyle(Theme.secondary)
+                }
+            }
+            .font(.system(size: 16)).multilineTextAlignment(.center).padding(.horizontal, Theme.gutter)
+        }
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 10) {
+                Button {
+                    // Opens the app when installed, otherwise its App Store page.
+                    openURL(Parakey.appURL) { ok in if !ok { openURL(Parakey.storeURL) } }
+                } label: {
+                    Text("Open Parakey").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
+                }
+                .buttonStyle(.glassProminent).tint(Theme.parakey).controlSize(.large)
+                Link("Read more at help.parakey.co", destination: Parakey.helpURL).font(.system(size: 14)).foregroundStyle(Theme.secondary)
+            }
+            .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
+        }
+        .sheetChrome("Parakey")
+    }
+}
+
 // MARK: - Class detail
 
 struct ClassDetailView: View {
@@ -55,6 +125,7 @@ struct ClassDetailView: View {
                         if let r = BookingRules(c) {
                             if booking != nil { bookedBox(r) } else { rulesLines(c, r) }
                         }
+                        if let studio, studio.usesParakey { ParakeyRow(studio: studio, forClass: true) }
                         whoIsBooked.padding(.top, 4)
                     }
                     .padding(Theme.gutter)
@@ -536,6 +607,7 @@ struct StudioDetailView: View {
     var information: some View {
         VStack(alignment: .leading, spacing: 16) {
             notice
+            if let studio, studio.usesParakey { ParakeyRow(studio: studio, forClass: false) }
             if let b = m.todaysCheckIn(studioId: studioId) {
                 LimeButton(title: "Show ticket", systemImage: "ticket") { m.present(.ticket(b.id)) }
             } else if let price = ticketPrice {

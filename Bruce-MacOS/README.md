@@ -31,7 +31,7 @@ visits, Credits, Strikes, Payment methods) and Settings. Account/payment pages
 are display-only.
 
 - Offline preview with placeholder data (no network): `BRUCE_DEMO=1 swift run`,
-  optionally `BRUCE_SCREEN=explore|classes|detail|studio|friends|myclasses|notifications|menu|account|membership|wellness|credits|strikes|payment|settings|checkin|categories|filter|selectcity|newarea|area|similar|alerts|search|map|welcome|createaccount|login|reset|sneakpeek`.
+  optionally `BRUCE_SCREEN=explore|classes|detail|studio|friends|myclasses|notifications|menu|account|membership|wellness|credits|strikes|payment|settings|checkin|categories|filter|selectcity|newarea|area|similar|alerts|search|map|welcome|parakey|createaccount|login|reset|sneakpeek`.
 - Logged out: welcome screen (Create account, Log in, Sneak peek). Login calls `POST /v52/access/authenticate`; create account, reset password and Apple/Google sign-in are display-only.
 - Check in tab: camera QR scanning (AVFoundation + Vision; Info.plist embedded via a
   linker flag for the camera prompt). Home top bar: check-in list of booked classes and

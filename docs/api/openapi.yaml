@@ -767,7 +767,14 @@ components:
         has_address: { type: boolean }
         time_zone: { type: string, example: Europe/Stockholm }
         integration_type: { type: string, nullable: true }
-        integration_door_type: { type: string, example: brp }
+        integration_door_type: { type: string, example: brp, description: "Door system; \"parakey\" = doors open with the Parakey app (brp, wondr, zoezi, m3_fit, blx, ellions, tic_off also seen)" }
+        parakey_config:
+          type: object
+          nullable: true
+          description: "Studio detail only. Set for Parakey-connected studios; optional=true means the QR check-in works too."
+          properties:
+            id: { type: integer, example: 13 }
+            optional: { type: boolean }
         deleted: { type: boolean }
         requires_additional_cost: { type: boolean }
         alert: { type: string, nullable: true, description: "Studio-level notice string (null in all captures)" }

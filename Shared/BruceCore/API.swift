@@ -97,6 +97,8 @@ enum BruceAPI {
 
     // MARK: - Studios
 
+    struct ParakeyConfig: Codable, Hashable { let id: Int; let optional: Bool? }
+
     struct Studio: Codable, Identifiable, Hashable {
         let id: Int
         let name: String
@@ -121,8 +123,11 @@ enum BruceAPI {
         var label: String? = nil
         var studioPhotos: [StudioPhoto]? = nil
         var alerts: [StudioAlert]? = nil
+        /// Parakey door config (studio detail only); `optional` = the QR check-in works too.
+        var parakeyConfig: ParakeyConfig? = nil
 
         enum CodingKeys: String, CodingKey {
+            case parakeyConfig = "parakey_config"
             case tierLevel = "tier_level", hasOpenings = "has_openings", visitLimit = "visit_limit"
             case label, alerts, studioPhotos = "studio_photos"
             case id, name, status, vicinity, photo, rating, description, website
@@ -137,6 +142,8 @@ enum BruceAPI {
         }
 
         var isLive: Bool { status?.lowercased() == "live" }
+        /// Doors opened with the Parakey app (`integration_door_type` "parakey"; the list payload has no `parakey_config`).
+        var usesParakey: Bool { integrationDoorType?.lowercased() == "parakey" || parakeyConfig != nil }
         /// Door QR major if the studio's `qr_code_id` is "stc:<major>".
         var stcMajor: String? {
             guard let q = qrCodeId, q.hasPrefix("stc:") else { return nil }

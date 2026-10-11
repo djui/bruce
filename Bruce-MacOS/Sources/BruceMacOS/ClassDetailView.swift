@@ -100,6 +100,7 @@ struct ClassDetailView: View {
                             .font(.system(size: 17, weight: .light))
                             .foregroundStyle(a <= 0 ? Color(red: 0.86, green: 0.15, blue: 0.15) : Theme.secondary).padding(.top, 22)
                     }
+                    if let studio, studio.usesParakey { ParakeyRow(studio: studio, forClass: true).padding(.top, 22) }
                     whoIsBooked.padding(.top, 18).padding(.bottom, 24)
                 }
                 .padding(.horizontal, Theme.gutter)
@@ -372,6 +373,61 @@ struct MapSnippet: View {
         }
         .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))
 
+        }
+    }
+}
+
+/// Parakey-connected studio (`integration_door_type` "parakey"): the door opens with the Parakey app, using
+/// an access key Bruce creates at check-in. For a class the key is valid from ten minutes before the start.
+struct ParakeyRow: View {
+    @Environment(AppModel.self) var m
+    let studio: BruceAPI.Studio
+    let forClass: Bool
+    var body: some View {
+        Button { m.present(.parakey(studio.id)) } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "key.radiowaves.forward.fill").font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Theme.parakey).frame(width: 32)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Doors open with Parakey").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Text(forClass ? "Check in, then unlock with the Parakey app – from ten minutes before class."
+                                  : "Check in, then unlock the door with the Parakey app.")
+                        .font(.system(size: 14, weight: .light)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.tertiary)
+            }
+            .padding(14).contentShape(Rectangle())
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+struct ParakeySheet: View {
+    @Environment(AppModel.self) var m
+    let studioId: Int
+    var body: some View {
+        VStack(spacing: 0) {
+            NavBar(title: "Parakey", leading: m.sheets.count > 1 ? .back : .close) {
+                m.sheets.count > 1 ? m.popSheet() : m.dismissSheets()
+            }
+            ScrollView {
+                VStack(spacing: 20) {
+                    Image(systemName: "key.radiowaves.forward.fill").font(.system(size: 46, weight: .semibold))
+                        .foregroundStyle(.white).frame(width: 110, height: 110)
+                        .background(Theme.parakey, in: Circle()).padding(.top, 24)
+                    Text("\(m.studioName(studioId)) is a Parakey connected studio. Parakey lets you use your phone as a key instead of key fobs and plastic cards.")
+                    Text("When you check in with Bruce at a Parakey connected studio, an access key is created that you use to unlock doors and gates with the Parakey app on your phone. For classes the key is valid from ten minutes before the start.")
+                    if let email = m.user?.parakeyEmail, !email.isEmpty {
+                        Label("Your Bruce account is linked with Parakey (\(email)).", systemImage: "checkmark.seal.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                    }
+                    Link("Get Parakey for iPhone", destination: Parakey.storeURL).font(.system(size: 15, weight: .semibold))
+                    Link("Read more at help.parakey.co", destination: Parakey.helpURL).font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                }
+                .font(.system(size: 15, weight: .light)).multilineTextAlignment(.center).padding(.horizontal, Theme.gutter)
+            }
         }
     }
 }

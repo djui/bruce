@@ -15,6 +15,8 @@ enum Theme {
     static let creditsBeige = Color(red: 0xF9 / 255, green: 0xEC / 255, blue: 0xD9 / 255)
     static let strikeRed = Color(red: 0xE0 / 255, green: 0x10 / 255, blue: 0x10 / 255)
     static let waitlistOrange = Color(red: 0xF5 / 255, green: 0x8A / 255, blue: 0x1F / 255)
+    /// Parakey's teal (their app icon and buttons).
+    static let parakey = Color(red: 0x00 / 255, green: 0x8C / 255, blue: 0xB0 / 255)
     static let darkPanel = Color(red: 0x1A / 255, green: 0x1A / 255, blue: 0x1A / 255)
 
     static let windowSize = CGSize(width: 390, height: 780)
@@ -268,8 +270,9 @@ struct Avatar: View {
 }
 
 /// Class row used in Explore/Classes, Friends and Visits lists.
-/// `badge` (the user is on the waitlist) shows a bell above the time and an orange "On waitlist" line;
-/// otherwise `full` shows red "Fully booked". `wellness` adds a boxed tag under the duration.
+/// `badge` (the user is on the waitlist) shows an orange "On waitlist" line; otherwise `full` shows red
+/// "Fully booked". `wellness` adds a boxed tag under the duration. With `classId`, friends booked on the
+/// class show as small faces under the row.
 struct ClassRow: View {
     @Environment(AppModel.self) var m
     let time: String
@@ -288,13 +291,6 @@ struct ClassRow: View {
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(time).font(.system(size: 17, weight: .semibold))
-                        .overlay(alignment: .topTrailing) {
-                            if badge != nil {
-                                Image(systemName: "bell.fill").font(.system(size: 11, weight: .semibold))
-                                    .foregroundStyle(Theme.waitlistOrange).offset(y: -15)
-                                    .help("You are on the waitlist")
-                            }
-                        }
                     Text(duration).font(.system(size: 14, weight: .light)).foregroundStyle(Theme.secondary)
                     if wellness {
                         Text("Wellness").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.secondary)
@@ -318,6 +314,9 @@ struct ClassRow: View {
                     } else if full {
                         Text("Fully booked").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.strikeRed).padding(.top, 4)
                     }
+                    if let classId, case let friends = m.friendsBooked(classId), !friends.isEmpty {
+                        FriendFaces(users: friends).padding(.top, 6)
+                    }
                 }
                 Spacer(minLength: 0)
                 if showMenu {
@@ -333,6 +332,25 @@ struct ClassRow: View {
         }
         .padding(.leading, Theme.gutter - 4)
         .contentShape(Rectangle())
+    }
+}
+
+/// Overlapping faces of friends booked on a class (class rows), with a "+n" after five.
+struct FriendFaces: View {
+    let users: [BruceAPI.UserLite]
+    var size: CGFloat = 28
+    var body: some View {
+        HStack(spacing: -size * 0.3) {
+            ForEach(users.prefix(5), id: \.id) { u in
+                Avatar(fileId: u.photo, initials: u.initials, size: size)
+                    .overlay(Circle().stroke(Color.white, lineWidth: 2))
+            }
+            if users.count > 5 {
+                Text("+\(users.count - 5)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondary)
+                    .padding(.leading, size * 0.3 + 4)
+            }
+        }
+        .help("Booked by " + users.compactMap(\.firstName).formatted(.list(type: .and)))
     }
 }
 

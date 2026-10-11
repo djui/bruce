@@ -173,6 +173,14 @@ Capture 6 (about 347 files) covers creating and using custom areas ("New area" i
   `next_cursor` = base64 `id::<last id>`, ids descending), `GET /v52/class` (cursor `id:<n>`) and
   `GET /v52/category`.
 
+### Parakey doors (capture 6, Oct 2026 screenshots)
+- Studios with `integration_door_type:"parakey"` (214 of the studio rows in the captures; others: `brp`, `wondr`, `zoezi`, `m3_fit`, `blx`, `ellions`, `tic_off`) open their doors with the Parakey app. The studio detail adds `parakey_config:{id, optional}` (`null` elsewhere) [c6:631, 638]; the list payload only has the door type.
+- `GET /v52/user/<id>` carries `parakey_email` once the Bruce account is linked with Parakey [c6:451, 557]. No linking or key request was captured: the official app says checking in creates the access key, valid no earlier than ten minutes before class.
+- Both clients show a "Doors open with Parakey" row on the class and studio pages and a sheet that explains it, shows the linked email and opens the Parakey app (App Store id 1001574067).
+
+### Friends on class rows
+- Class rows show the faces of friends booked on the class, from the same `GET /v52/booking?friends=true` + `GET /v52/friend` join as the Friends tab (so at most the 30 upcoming friend bookings that call returns).
+
 ## Capture 7 additions (`c7:N`)
 Capture 7 (about 25 requests) opens two fully booked classes and their "Similar classes" sheet.
 - **Class alert.** `GET /v52/class/<id>?...&include_studio_alerts=true&exclude_studio_expired_alerts=true` [c7:19, 30].
