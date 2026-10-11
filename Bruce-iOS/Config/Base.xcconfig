@@ -1,0 +1,19 @@
+// Bruce-iOS build settings. Personal values (your Apple team) go in Config/Local.xcconfig, which is
+// git-ignored. Copy Config/Local.xcconfig.example to get started, e.g.
+//   DEVELOPMENT_TEAM = ABCDE12345
+//   APP_DISPLAY_NAME = Something Else
+
+// Home-screen name (CFBundleDisplayName). Unofficial client: never "Bruce Studios".
+APP_DISPLAY_NAME = Brüce
+
+PRODUCT_BUNDLE_IDENTIFIER = net.dauernheim.bruce
+// Set DEVELOPMENT_TEAM in Config/Local.xcconfig (simulator builds need none).
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
+
+MARKETING_VERSION = 1.0
+CURRENT_PROJECT_VERSION = 1
+
+IPHONEOS_DEPLOYMENT_TARGET = 26.0
+
+#include? "Local.xcconfig"

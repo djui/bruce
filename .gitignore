@@ -1,0 +1,52 @@
+# --- Private data: never publish -------------------------------------------------------------
+# Raw Charles/proxy captures of a real account (tokens, personal data, other members' data).
+captures/
+*.chls
+*.chlz
+*.har
+*.saz
+# Local secrets and personal signing config (templates: *.example).
+.env
+.env.*
+!.env.example
+Config/Local.xcconfig
+**/Config/Local.xcconfig
+*.p8
+*.p12
+*.cer
+*.mobileprovision
+*.provisionprofile
+AuthKey*
+ExportOptions.local.plist
+*.local.plist
+
+# --- Build output -----------------------------------------------------------------------------
+.build/
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM
+*.dSYM.zip
+.swiftpm/
+Package.resolved
+
+# --- Xcode user state -------------------------------------------------------------------------
+xcuserdata/
+*.xcuserstate
+*.xcscmblueprint
+*.moved-aside
+timeline.xctimeline
+playground.xcworkspace
+
+# --- macOS / editors / logs -------------------------------------------------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+*.swp
+*~
+.vscode/
+.idea/
+*.log
+logs/

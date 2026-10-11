@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleIdentifier</key><string>net.dauernheim.BruceMacOS</string>
+  <key>CFBundleName</key><string>Bruce Studios</string>
+  <key>NSLocationUsageDescription</key><string>Used to suggest the gym you're at for check-in and to show nearby studios.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Used to suggest the gym you're at for check-in and to show nearby studios.</string>
+  <key>NSCameraUsageDescription</key><string>The camera is used to scan the QR code at the studio door to check in.</string>
+</dict>
+</plist>

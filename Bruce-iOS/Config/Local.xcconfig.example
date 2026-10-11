@@ -1,0 +1,12 @@
+// Copy to Config/Local.xcconfig (git-ignored) and fill in your own values.
+// Included at the end of Config/Base.xcconfig, so anything here overrides it.
+
+// Your Apple Developer team ID (Xcode > Settings > Accounts, or developer.apple.com > Membership).
+// Not needed for simulator builds.
+DEVELOPMENT_TEAM =
+
+// Optional: use your own bundle ID if you sign the app with your own team.
+// PRODUCT_BUNDLE_IDENTIFIER = com.example.bruce
+
+// Optional: home-screen name.
+// APP_DISPLAY_NAME = Brüce
