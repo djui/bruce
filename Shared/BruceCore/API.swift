@@ -190,8 +190,13 @@ enum BruceAPI {
         let endTime: String?
         let spots: Int?
         let availableSpots: Int?
-        let instructor: String?
+        /// Raw `instructor`; use `instructor` for display.
+        let rawInstructor: String?
         let canceled: Bool?
+        /// Soft-deleted classes still come back from `GET /v52/class` (about 14% of a city day, with
+        /// `deleted_at`) unless `deleted=false` is sent; the official app does not list them.
+        var deleted: Bool? = nil
+        var deletedAt: String? = nil
         var description: String? = nil
         var photo: String? = nil
         var bookableLatestTime: String? = nil
@@ -204,7 +209,8 @@ enum BruceAPI {
         /// Class-level notice shown in red under the description (e.g. "Women only") [c7:30]. No dates.
         var alert: String? = nil
         enum CodingKeys: String, CodingKey {
-            case id, title, spots, instructor, canceled, description, photo, studio, alert
+            case id, title, spots, canceled, description, photo, studio, alert, deleted
+            case rawInstructor = "instructor", deletedAt = "deleted_at"
             case studioId = "studio_id", startTime = "start_time", endTime = "end_time"
             case availableSpots = "available_spots"
             case bookableLatestTime = "bookable_latest_time", unbookableLatestTime = "unbookable_latest_time"
@@ -214,6 +220,15 @@ enum BruceAPI {
         }
         var start: Date? { BruceDate.parse(startTime) }
         var end: Date? { endTime.flatMap(BruceDate.parse) }
+        /// Instructor for display. Some studios' booking systems (all Energii classes) send Markdown bold
+        /// markers, e.g. "**Millie Jabol - English speaking"; they are stripped here.
+        var instructor: String? {
+            guard let r = rawInstructor else { return nil }
+            let s = r.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return s.isEmpty ? nil : s
+        }
+        /// False for deleted or canceled classes, which lists never show.
+        var isListed: Bool { deleted != true && deletedAt == nil && canceled != true }
         var durationMinutes: Int? {
             guard let s = start, let e = end else { return nil }
             return Int(e.timeIntervalSince(s) / 60)
@@ -238,7 +253,7 @@ enum BruceAPI {
                 ("limit", "30"), ("locale", "en"),
                 ("is_recurring_base", "false"), ("is_master", "false"),
                 ("dedicated", "false"), ("opening", "false"),
-                ("studio_status", "live"), ("include_absolute_times", "true"),
+                ("studio_status", "live"), ("deleted", "false"), ("include_absolute_times", "true"),
                 ("include_class_categories", "true"), ("include_booking_credit_costs", "true"),
                 ("include_dynamic_prices", "true"),
             ]
@@ -250,7 +265,7 @@ enum BruceAPI {
             }
             if let cursor { q.append(("next_cursor", cursor)) }
             let r = try decode(R.self, try await send(makeRequest("GET", "v52/class", query: q, token: token)))
-            out += r.classes
+            out += r.classes.filter(\.isListed)
             guard let next = r.metadata?.pagination?.nextCursor, !next.isEmpty, !r.classes.isEmpty else { break }
             cursor = next
         }

@@ -93,7 +93,8 @@ struct StudioDetailView: View {
                         Button { m.push(.classDetail(c.id)) } label: {
                             ClassRow(time: BruceDate.time(c.start), duration: c.durationMinutes.map { "\($0) min" } ?? "",
                                      title: c.title, studio: studio?.name ?? "", meta: c.instructor ?? "",
-                                     badge: m.standby(forClass: c.id) != nil ? "Waitlist" : nil, classId: c.id)
+                                     badge: m.isOnWaitlist(c.id) ? "On waitlist" : nil, full: (c.availableSpots ?? 1) <= 0,
+                                     wellness: m.isWellness(studioId: c.studioId), classId: c.id)
                         }
                         .buttonStyle(.plain)
                     }

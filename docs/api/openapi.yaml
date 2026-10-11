@@ -160,6 +160,7 @@ paths:
         - { name: start_time_before, in: query, schema: { type: string, example: "2026-10-12T00:00:00" } }
         - { name: opening, in: query, schema: { type: boolean }, description: "true = opening-hour slots instead of classes" }
         - { name: studio_status, in: query, schema: { type: string, example: live } }
+        - { name: deleted, in: query, schema: { type: boolean, example: false }, description: "Not sent by the official app; without it soft-deleted classes (deleted:true) are included" }
         - { name: include_booking_credit_costs, in: query, schema: { type: boolean } }
         - { name: include_class_categories, in: query, schema: { type: boolean } }
         - { name: include_absolute_times, in: query, schema: { type: boolean } }
@@ -839,7 +840,9 @@ components:
         spots: { type: integer }
         available_spots: { type: integer }
         canceled: { type: boolean }
-        instructor: { type: object, nullable: true }
+        instructor: { type: string, nullable: true, example: "**Millie Jabol - English speaking", description: "Free text; some booking systems prefix Markdown bold markers" }
+        deleted: { type: boolean, description: "Soft-deleted; still returned by list calls unless deleted=false" }
+        deleted_at: { type: string, format: date-time, nullable: true }
         bookable_earliest: { type: string, format: date-time }
         bookable_latest: { type: string, format: date-time }
         unbookable_latest: { type: string, format: date-time }

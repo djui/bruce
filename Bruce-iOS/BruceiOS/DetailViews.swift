@@ -592,7 +592,7 @@ struct StudioDetailView: View {
                 SectionHeaderBar(text: BruceDate.dayHeader(day)).padding(.top, 10)
                 ForEach(list) { c in
                     NavigationLink(value: Route.classDetail(c.id)) {
-                        ClassRow(c: c, meta: c.instructor ?? "", badge: m.standby(forClass: c.id) != nil ? "Waitlist" : nil)
+                        ClassRow(c: c, meta: c.instructor ?? "")
                     }
                     .buttonStyle(.plain)
                 }

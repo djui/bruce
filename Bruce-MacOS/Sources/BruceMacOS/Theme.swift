@@ -268,6 +268,8 @@ struct Avatar: View {
 }
 
 /// Class row used in Explore/Classes, Friends and Visits lists.
+/// `badge` (the user is on the waitlist) shows a bell above the time and an orange "On waitlist" line;
+/// otherwise `full` shows red "Fully booked". `wellness` adds a boxed tag under the duration.
 struct ClassRow: View {
     @Environment(AppModel.self) var m
     let time: String
@@ -277,6 +279,8 @@ struct ClassRow: View {
     let meta: String
     var showMenu = true
     var badge: String?
+    var full = false
+    var wellness = false
     /// When set, the ⋮ button opens the class action sheet.
     var classId: Int? = nil
     var body: some View {
@@ -284,7 +288,21 @@ struct ClassRow: View {
             HStack(alignment: .top, spacing: 14) {
                 VStack(alignment: .trailing, spacing: 4) {
                     Text(time).font(.system(size: 17, weight: .semibold))
+                        .overlay(alignment: .topTrailing) {
+                            if badge != nil {
+                                Image(systemName: "bell.fill").font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(Theme.waitlistOrange).offset(y: -15)
+                                    .help("You are on the waitlist")
+                            }
+                        }
                     Text(duration).font(.system(size: 14, weight: .light)).foregroundStyle(Theme.secondary)
+                    if wellness {
+                        Text("Wellness").font(.system(size: 10, weight: .medium)).foregroundStyle(Theme.secondary)
+                            .lineLimit(1).fixedSize()
+                            .padding(.horizontal, 4).padding(.vertical, 2)
+                            .overlay(RoundedRectangle(cornerRadius: 2).stroke(Theme.cardBorder))
+                            .padding(.top, 2)
+                    }
                 }
                 .frame(width: 62, alignment: .trailing)
                 VStack(alignment: .leading, spacing: 3) {
@@ -292,11 +310,13 @@ struct ClassRow: View {
                     Text(studio).font(.system(size: 16, weight: .light)).lineLimit(1)
                     if !meta.isEmpty { Text(meta).font(.system(size: 16, weight: .light)).foregroundStyle(Theme.secondary).lineLimit(1) }
                     if let badge {
-                        HStack(spacing: 10) {
-                            Circle().fill(Theme.waitlistOrange).frame(width: 8, height: 8).offset(x: -24)
-                            Text(badge).font(.system(size: 16, weight: .light)).foregroundStyle(Theme.secondary).offset(x: -18)
+                        HStack(spacing: 6) {
+                            Image(systemName: "bell.fill").font(.system(size: 11)).foregroundStyle(Theme.waitlistOrange)
+                            Text(badge).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.waitlistOrange)
                         }
-                        .padding(.top, 8)
+                        .padding(.top, 6)
+                    } else if full {
+                        Text("Fully booked").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.strikeRed).padding(.top, 4)
                     }
                 }
                 Spacer(minLength: 0)
@@ -313,6 +333,18 @@ struct ClassRow: View {
         }
         .padding(.leading, Theme.gutter - 4)
         .contentShape(Rectangle())
+    }
+}
+
+/// "Filter active" note at the end of a filtered Explore list; clicking it opens the filter panel.
+struct FilterActiveFooter: View {
+    @Environment(AppModel.self) var m
+    var body: some View {
+        Button { m.filterOpen = true } label: {
+            Text("Filter active").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                .frame(maxWidth: .infinity).padding(.vertical, 16).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

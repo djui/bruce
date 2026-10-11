@@ -639,6 +639,11 @@ final class AppModel {
 
     // MARK: Waitlist (POST/DELETE /v52/standby [c3:65, 69])
     func standby(forClass id: Int) -> BruceAPI.ClassHolder? { standbys.first { $0.class?.id == id } }
+    /// The user is on this class's waitlist (from GET /v52/standby; the class payload has no such flag).
+    func isOnWaitlist(_ classId: Int) -> Bool { standby(forClass: classId) != nil }
+    /// Wellness class = class at a studio labelled `WELLNESS` (the class payload carries no wellness flag;
+    /// the same label drives the Wellness filter and the WELLNESS_MONTHLY visit limit).
+    func isWellness(studioId: Int) -> Bool { studio(studioId)?.label?.uppercased() == "WELLNESS" }
     func joinWaitlist(_ classId: Int) async {
         if AppModel.demo {
             standbys.append(BruceAPI.ClassHolder(id: -classId, class: findClass(classId)))

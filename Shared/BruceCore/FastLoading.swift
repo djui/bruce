@@ -94,15 +94,17 @@ extension BruceAPI {
             var q: [(String, String)] = [
                 ("start_time_after", windowFormatter.string(from: from)), ("start_time_before", windowFormatter.string(from: to)),
                 ("limit", "30"), ("locale", "en"), ("is_recurring_base", "false"), ("is_master", "false"),
-                ("dedicated", "false"), ("opening", "false"), ("studio_status", "live"),
+                ("dedicated", "false"), ("opening", "false"), ("studio_status", "live"), ("deleted", "false"),
                 ("include_absolute_times", "true"), ("include_class_categories", "true"),
             ]
             if let studioId { q += [("studio_id", String(studioId)), ("presentation_studio_id", String(studioId))] }
             else { q.append(("studio_city_id", String(cityId))) }
             if let cursor { q.append(("next_cursor", cursor)) }
             let r = try decode(R.self, try await send(makeRequest("GET", "v52/class", query: q, token: token)))
-            out += r.classes
-            if let onPage { await onPage(r.classes) }
+            // `deleted=false` already drops soft-deleted classes server-side; filter again in case it is ignored.
+            let page = r.classes.filter(\.isListed)
+            out += page
+            if let onPage { await onPage(page) }
             guard let n = r.metadata?.pagination?.nextCursor, !n.isEmpty, !r.classes.isEmpty else { break }
             cursor = n
         }

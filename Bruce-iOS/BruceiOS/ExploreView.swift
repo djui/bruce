@@ -153,6 +153,11 @@ struct ExploreView: View {
                     ForEach(m.chipCategories) { c in
                         GlassChip(c.title ?? "", selected: m.exploreCategories.contains(c.id)) { withAnimation { m.toggleCategory(c.id) } }
                     }
+                    // "···" at the end of the row: the remaining categories and filters live in the filter sheet.
+                    GlassChip(selected: false, action: { m.filterOpen = true }) {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel("More filters")
                 }
                 .padding(.vertical, 4)
             }
@@ -192,6 +197,7 @@ struct ExploreView: View {
                 }
                     .buttonStyle(.plain)
             }
+            if !studios.isEmpty && m.activeFilterCount > 0 { FilterActiveFooter() }
             if m.studios.isEmpty {
                 ProgressView("Loading studios…").frame(maxWidth: .infinity, minHeight: 300)
             } else if studios.isEmpty {
@@ -206,11 +212,12 @@ struct ExploreView: View {
             SectionHeaderBar(text: BruceDate.dayHeader(selectedDay))
             ForEach(upcomingClasses) { c in
                 NavigationLink(value: Route.classDetail(c.id)) {
-                    ClassRow(c: c, badge: m.standby(forClass: c.id) != nil ? "Waitlist" : nil)
+                    ClassRow(c: c)
                 }
                 .buttonStyle(.plain)
                 Divider().padding(.leading, 86)
             }
+            if !upcomingClasses.isEmpty && (m.activeFilterCount > 0 || fromHour > 0 || toHour < 24) { FilterActiveFooter() }
             if classes.count > upcomingClasses.count {
                 Text("\(classes.count - upcomingClasses.count) earlier classes today are not shown")
                     .font(.system(size: 13)).foregroundStyle(Theme.secondary).padding(.vertical, 16)
@@ -286,6 +293,18 @@ struct StudioCard: View, Equatable {
         case "climbing": return "figure.climbing"
         default: return "dumbbell"
         }
+    }
+}
+
+/// "Filter active" note at the end of a filtered list; tapping it opens the filter sheet.
+struct FilterActiveFooter: View {
+    @Environment(AppModel.self) var m
+    var body: some View {
+        Button { m.filterOpen = true } label: {
+            Text("Filter active").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                .frame(maxWidth: .infinity).padding(.vertical, 16).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 
@@ -832,7 +851,7 @@ struct CategoryView: View {
                         SectionHeaderBar(text: BruceDate.dayHeader(day))
                         ForEach(list) { c in
                             NavigationLink(value: Route.classDetail(c.id)) {
-                                ClassRow(c: c, badge: m.standby(forClass: c.id) != nil ? "Waitlist" : nil)
+                                ClassRow(c: c)
                             }
                             .buttonStyle(.plain)
                         }

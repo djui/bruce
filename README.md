@@ -51,6 +51,8 @@ My classes tabs, with class and studio pages and account sheets.
   tier, Wellness and favourite filters, search, a map, and **custom areas**: draw an outline on the map and
   filter studios and classes to it. Long-press (iOS) or right-click (macOS) an area to show it on the map,
   rename it or delete it. As in the official app, areas stay on the device.
+  Class rows mark Wellness classes, show a bell when you are on the waitlist and "Fully booked" otherwise;
+  lists say "Filter active" at the end while filters apply. Deleted classes are hidden, as in the official app.
 - **Book, cancel and join waitlists** through a booking-rules sheet that shows the "book until",
   "cancel until" and check-in windows. A fully booked class also offers **Similar classes**: nearby classes
   around the same time, as swipeable cards.

@@ -67,12 +67,16 @@ extension AppModel {
           "instructor":"Instructor F","alert":"Placeholder notice: this class is held in the outdoor area.","description":"A placeholder functional class for the offline demo.","bookable_latest_time":"\(at(0, 23, 15))","unbookable_latest_time":"\(at(0, 11, 25))","early_check_in_minutes":60,"late_check_in_minutes":10,
           "class_categories":[{"category_id":12,"main":true}]},
          {"id":9006,"studio_id":1489,"title":"Morning Flow","start_time":"\(at(1, 7, 0))","end_time":"\(at(1, 8, 0))","instructor":"Instructor D","available_spots":6,"class_categories":[{"category_id":2,"main":true}]},
+         {"id":9009,"studio_id":9520,"title":"Salt Cave","start_time":"\(at(0, 22, 30))","end_time":"\(at(0, 23, 15))","instructor":"**Instructor G - English speaking","spots":6,"available_spots":4},
+         {"id":9010,"studio_id":1489,"title":"Deleted Placeholder","start_time":"\(at(0, 22, 45))","end_time":"\(at(0, 23, 30))","instructor":"Instructor H","available_spots":5,"deleted":true,"deleted_at":"\(at(0, 8, 0))"},
          {"id":9007,"studio_id":1489,"title":"Morning Meditation","start_time":"\(at(1, 9, 0))","end_time":"\(at(1, 9, 45))","instructor":"Instructor E","available_spots":9,"class_categories":[{"category_id":2,"main":true}]}]
         """)
-        for c in classes {
+        // Soft-deleted classes are dropped like in the live fetches (9010 must not show up).
+        for c in classes where c.isListed {
             classDetails[c.id] = c
             classesByDay[cal.startOfDay(for: c.start!), default: []].append(c)
         }
+        for k in classesByDay.keys { classesByDay[k]?.sort { $0.startTime < $1.startTime } }
         // Demo check-in today at the demo gym (drives "Show ticket").
         pastBookings = [BruceAPI.Booking(id: 5001, classId: nil, studioId: 1724, checkedInAt: at(0, 7, 51), class: nil)]
         schedules[1724] = (0..<7).map { i in
@@ -183,6 +187,7 @@ extension AppModel {
         switch AppModel.setting("BRUCE_SCREEN") ?? "" {
         case "explore": tab = .explore
         case "classes": tab = .explore; demoExploreTab = 1
+        case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
         case "detail": push(.classDetail(9001))
         case "studio": push(.studio(1724))
         case "studiohours": push(.studio(1724)); demoHoursOpen = true

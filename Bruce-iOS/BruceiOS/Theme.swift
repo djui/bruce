@@ -250,20 +250,33 @@ struct Avatar: View {
 }
 
 /// Class row used in Explore/Classes, Friends, My classes and Visits lists.
+/// States under the row: "On waitlist" (orange, with a bell next to the time) when the user is on the
+/// class's waitlist, otherwise red "Fully booked" when no spots are left. Wellness classes get a boxed tag.
 struct ClassRow: View {
     @Environment(AppModel.self) var m
     let c: BruceAPI.BruceClass
     var meta: String? = nil
+    /// Overrides the waitlist label (e.g. a list that is all waitlist entries).
     var badge: String? = nil
     var showMenu = true
     var trailing: AnyView? = nil
 
     var body: some View {
         let st = m.studio(c.studioId)
+        let waitlisted = badge != nil || m.isOnWaitlist(c.id)
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .trailing, spacing: 3) {
                 Text(BruceDate.time(c.start)).font(.system(size: 17, weight: .semibold)).monospacedDigit()
+                    // Bell above the time (in the row's top padding, so times stay aligned with titles).
+                    .overlay(alignment: .topTrailing) {
+                        if waitlisted {
+                            Image(systemName: "bell.fill").font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Theme.waitlistOrange).offset(y: -13)
+                                .accessibilityLabel("On waitlist")
+                        }
+                    }
                 Text(c.durationMinutes.map { "\($0) min" } ?? "").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                if m.isWellness(studioId: c.studioId) { WellnessTag().padding(.top, 3) }
             }
             .frame(width: 58, alignment: .trailing)
             VStack(alignment: .leading, spacing: 3) {
@@ -271,10 +284,10 @@ struct ClassRow: View {
                 Text(st?.name ?? c.studio?.name ?? "").font(.system(size: 15)).lineLimit(1)
                 let line = meta ?? [st?.vicinity ?? c.studio?.vicinity, c.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | ")
                 if !line.isEmpty { Text(line).font(.system(size: 15)).foregroundStyle(Theme.secondary).lineLimit(1) }
-                if let badge {
-                    HStack(spacing: 6) {
-                        Circle().fill(Theme.waitlistOrange).frame(width: 7, height: 7)
-                        Text(badge).font(.system(size: 13, weight: .semibold))
+                if waitlisted {
+                    HStack(spacing: 5) {
+                        Image(systemName: "bell.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.waitlistOrange)
+                        Text(badge ?? "On waitlist").font(.system(size: 13, weight: .semibold))
                     }
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(Theme.waitlistOrange.opacity(0.18), in: Capsule())
@@ -290,6 +303,16 @@ struct ClassRow: View {
         }
         .padding(.vertical, 14).padding(.horizontal, Theme.gutter)
         .contentShape(Rectangle())
+    }
+}
+
+/// Small boxed "Wellness" tag (class rows; the studio's `label` is WELLNESS).
+struct WellnessTag: View {
+    var body: some View {
+        Text("Wellness").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.secondary)
+            .lineLimit(1).fixedSize()
+            .padding(.horizontal, 4).padding(.vertical, 2)
+            .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.secondary.opacity(0.6), lineWidth: 0.75))
     }
 }
 
