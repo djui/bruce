@@ -180,6 +180,8 @@ struct SheetHost: View {
         case .push: PushSettingsView()
         case .pushInfo: TextInfoSheet(title: "Push settings", paragraphs: Copy.pushInfo)
         case .quickCheckIn: QuickCheckInSheet()
+        case .similarClasses(let id): SimilarClassesSheet(classId: id)
+        case .area(let id): AreaMapSheet(areaId: id)
         }
     }
 }

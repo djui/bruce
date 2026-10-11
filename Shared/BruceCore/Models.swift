@@ -112,7 +112,9 @@ extension BruceAPI {
         let photo: String?
         let vicinity: String?
         let cityId: Int?
-        enum CodingKeys: String, CodingKey { case id, name, photo, vicinity, cityId = "city_id" }
+        /// Studio alerts embedded in a class (`include_studio_alerts=true`) [c7:30].
+        var alerts: [StudioAlert]? = nil
+        enum CodingKeys: String, CodingKey { case id, name, photo, vicinity, alerts, cityId = "city_id" }
     }
 
     // MARK: Home
@@ -161,7 +163,8 @@ extension BruceAPI {
     static func fetchClass(token: String, id: Int) async throws -> BruceClass {
         struct R: Decodable { let `class`: BruceClass }
         let q = [("include_studio", "true"), ("include_info", "true"), ("include_class_categories", "true"), ("include_absolute_times", "true"),
-                 ("include_booking_credit_costs", "true"), ("locale", "en")]
+                 ("include_booking_credit_costs", "true"), ("include_studio_alerts", "true"), ("exclude_studio_expired_alerts", "true"),
+                 ("locale", "en")]
         return try decode(R.self, try await send(makeRequest("GET", "v52/class/\(id)", query: q, token: token))).class
     }
 

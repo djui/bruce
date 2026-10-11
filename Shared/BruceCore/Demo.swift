@@ -22,7 +22,7 @@ extension AppModel {
           "studio_categories":[{"category_id":1,"main":true,"order":0,"category":{"id":1,"title":"Gym"}}],
           "studio_addresses":[{"main":true,"address":{"address":"Example street 1","zip_code":"118 00","city":"Stockholm","latitude":59.3165,"longitude":18.0600}}],
           "has_openings":true,"visit_limit":{"items":[{"label":"BASE","limit":0},{"label":"BLACK","limit":0},{"label":"EPIC","limit":0}]},
-          "description":"A placeholder gym used for the offline demo. Strength and cardio areas, open early to late.",
+          "description":"A placeholder gym used for the offline demo. Strength and cardio areas, open early to late.\\n\\n**Good to know**\\n\\n* Showers in every changing room.\\n* Towels for rent at the desk.\\n* Indoor shoes only in the training hall.",
           "studio_facilities":[{"facility":{"code":"changing","title":"Changing room"}},{"facility":{"code":"shower","title":"Shower"}}]},
          {"id":1489,"name":"Example Yoga Studio","status":"LIVE","vicinity":"Stockholm","city_id":1,"qr_code_id":"930",
           "photo":"mfrnofbzeqyucdflpasg","rating":{"total":120,"average":482},
@@ -58,13 +58,13 @@ extension AppModel {
         """)
         let classes = dec([BruceAPI.BruceClass].self, """
         [{"id":9001,"studio_id":1489,"title":"High Intensity","start_time":"\(at(1, 11, 30))","end_time":"\(at(1, 12, 15))","spots":20,"available_spots":2,
-          "instructor":"Instructor A","description":"A slow-paced yoga class (placeholder description).",
+          "instructor":"Instructor A","description":"A placeholder interval class for the offline demo.\\n\\nShort, *hard* intervals with **active rest**:\\n\\n1. Warm-up\\n2. Four rounds of intervals\\n3. Stretch",
           "bookable_latest_time":"\(at(1, 11, 20))","unbookable_latest_time":"\(at(0, 23, 30))","unbookable_latest":43200,"early_check_in_minutes":30,"late_check_in_minutes":5,
           "class_categories":[{"category_id":12,"main":true}]},
          {"id":9004,"studio_id":1724,"title":"Full Body Strength","start_time":"\(at(0, 21, 0))","end_time":"\(at(0, 21, 45))","instructor":"Instructor B","available_spots":3},
          {"id":9005,"studio_id":1489,"title":"Hatha Flow","start_time":"\(at(0, 22, 0))","end_time":"\(at(0, 23, 30))","instructor":"Instructor C","available_spots":8,"class_categories":[{"category_id":2,"main":true}]},
          {"id":9008,"studio_id":1724,"title":"Functional","start_time":"\(at(0, 23, 25))","end_time":"\(at(0, 23, 59))","spots":12,"available_spots":0,
-          "instructor":"Instructor F","bookable_latest_time":"\(at(0, 23, 15))","unbookable_latest_time":"\(at(0, 11, 25))","early_check_in_minutes":60,"late_check_in_minutes":10,
+          "instructor":"Instructor F","alert":"Placeholder notice: this class is held in the outdoor area.","description":"A placeholder functional class for the offline demo.","bookable_latest_time":"\(at(0, 23, 15))","unbookable_latest_time":"\(at(0, 11, 25))","early_check_in_minutes":60,"late_check_in_minutes":10,
           "class_categories":[{"category_id":12,"main":true}]},
          {"id":9006,"studio_id":1489,"title":"Morning Flow","start_time":"\(at(1, 7, 0))","end_time":"\(at(1, 8, 0))","instructor":"Instructor D","available_spots":6,"class_categories":[{"category_id":2,"main":true}]},
          {"id":9007,"studio_id":1489,"title":"Morning Meditation","start_time":"\(at(1, 9, 0))","end_time":"\(at(1, 9, 45))","instructor":"Instructor E","available_spots":9,"class_categories":[{"category_id":2,"main":true}]}]
@@ -120,7 +120,8 @@ extension AppModel {
         let club = dec(BruceAPI.Studio.self, """
         {"id":9700,"name":"Example City Club","status":"LIVE","vicinity":"Norrmalm","city_id":1,"qr_code_id":"stc:99999","has_openings":true,"has_classes":true,
          "rating":{"total":500,"average":480},
-         "alerts":[{"message":"Scan the QR code at the entrance. Collect class tickets at the desk at least ten minutes before start.","type":"INFO","order":0}],
+         "alerts":[{"id":1,"message":"Scan the QR code at the entrance. Collect class tickets at the desk at least ten minutes before start.","type":"INFO","order":0,"start_date":"2026-01-01T00:00:00Z","end_date":null},
+                   {"id":2,"message":"Expired placeholder notice (not shown).","type":"INFO","order":1,"start_date":"2025-01-01T00:00:00Z","end_date":"2025-02-01T00:00:00Z"}],
          "studio_categories":[{"category_id":21,"order":0,"category":{"id":21,"title":"Group training"}},{"category_id":1,"order":1,"category":{"id":1,"title":"Gym"}}],
          "studio_photos":[{"order":0,"photo":{"file_id":"a"}},{"order":1,"photo":{"file_id":"b"}},{"order":2,"photo":{"file_id":"c"}},{"order":3,"photo":{"file_id":"d"}}],
          "studio_facilities":[{"facility":{"code":"changing","title":"Changing room"}},{"facility":{"code":"shower","title":"Shower"}}]}
@@ -171,6 +172,13 @@ extension AppModel {
         standbys = [BruceAPI.ClassHolder(id: 1, class: classes.first { $0.id == 9004 })]
         paymentMethods = dec([BruceAPI.PaymentMethod].self, #"[{"id":1,"name":"VISA","type":"APPLE_PAY","expiration":129,"default":true}]"#)
 
+        // "Similar classes" for the full class 9008 (cards point at other demo classes).
+        similarClasses[9008] = dec([BruceAPI.ClassCard].self, """
+        [{"id":9005,"title":"Hatha Flow","photo":"mfrnofbzeqyucdflpasg","distance":2400,"start_time":"\(at(0, 22, 0))","end_time":"\(at(0, 23, 30))","studio":{"id":1489,"name":"Example Yoga Studio"}},
+         {"id":9001,"title":"High Intensity","photo":"k5pxisc2ienijh72umlm","distance":2400,"start_time":"\(at(1, 11, 30))","end_time":"\(at(1, 12, 15))","studio":{"id":1489,"name":"Example Yoga Studio"}},
+         {"id":9006,"title":"Morning Flow","photo":"xdz9eqgslqobguwuiqn8","distance":2400,"start_time":"\(at(1, 7, 0))","end_time":"\(at(1, 8, 0))","studio":{"id":1489,"name":"Example Yoga Studio"}}]
+        """)
+
         // BRUCE_SCREEN=<name> opens a screen directly (for screenshots).
         switch AppModel.setting("BRUCE_SCREEN") ?? "" {
         case "explore": tab = .explore
@@ -199,6 +207,9 @@ extension AppModel {
         case "category": push(.category(2)); demoCategoryTab = 1
         case "actions": push(.category(2)); demoCategoryTab = 1; classActions = 9006
         case "full": push(.classDetail(9008))
+        case "similar": push(.classDetail(9008)); present(.similarClasses(9008))
+        case "alerts": push(.classDetail(9008)); demoScrollBottom = true
+        case "area": tab = .explore; if let a = areas.first { present(.area(a.id)) }
         case "waitlisted": standbys.append(BruceAPI.ClassHolder(id: 77, class: classDetails[9008])); push(.classDetail(9008))
         case "leave": standbys.append(BruceAPI.ClassHolder(id: 77, class: classDetails[9008])); push(.classDetail(9008)); askLeaveWaitlist(9008)
         case "joined": push(.classDetail(9008)); infoAlert = Copy.waitlistJoined

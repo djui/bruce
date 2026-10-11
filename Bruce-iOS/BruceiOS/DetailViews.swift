@@ -58,7 +58,7 @@ struct ClassDetailView: View {
                         whoIsBooked.padding(.top, 4)
                     }
                     .padding(Theme.gutter)
-                    StudioInfoBlock(studio: studio, description: c.description)
+                    StudioInfoBlock(studio: studio, description: c.description, alerts: Alerts.forClass(c, studio: studio))
                     Color.clear.frame(height: 1).id("bottom")
                 }
             }
@@ -77,17 +77,32 @@ struct ClassDetailView: View {
             if booking != nil {
                 RedButton(title: "Cancel booking") { m.present(.bookingRules(c.id)) }
             } else if m.standby(forClass: c.id) != nil {
-                RedButton(title: "Leave waitlist") { m.askLeaveWaitlist(c.id) }
-            } else if (c.availableSpots ?? 1) <= 0 {
-                Button { Task { await m.joinWaitlist(c.id) } } label: {
-                    Text("Join waitlist").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
+                HStack(spacing: 10) {
+                    RedButton(title: "Leave waitlist") { m.askLeaveWaitlist(c.id) }
+                    if (c.availableSpots ?? 1) <= 0 { similarButton(c) }
                 }
-                .buttonStyle(.glassProminent).tint(Theme.waitlistOrange).controlSize(.large)
+            } else if (c.availableSpots ?? 1) <= 0 {
+                // Fully booked: waitlist plus "Similar classes", as in the official app.
+                HStack(spacing: 10) {
+                    Button { Task { await m.joinWaitlist(c.id) } } label: {
+                        Text("Join waitlist").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
+                    }
+                    .buttonStyle(.glassProminent).tint(Theme.waitlistOrange).controlSize(.large)
+                    similarButton(c)
+                }
             } else {
                 LimeButton(title: "Book") { m.present(.bookingRules(c.id)) }
             }
         }
         .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
+    }
+
+    func similarButton(_ c: BruceAPI.BruceClass) -> some View {
+        Button { m.present(.similarClasses(c.id)) } label: {
+            Text("Similar classes").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                .frame(maxWidth: .infinity).frame(height: 40)
+        }
+        .buttonStyle(.glass).controlSize(.large)
     }
 
     func rulesLines(_ c: BruceAPI.BruceClass, _ r: BookingRules) -> some View {
@@ -242,6 +257,8 @@ struct StudioInfoBlock: View {
     @Environment(AppModel.self) var m
     let studio: BruceAPI.Studio?
     var description: String?
+    /// Alerts shown in red under the description (class pages; the studio page shows them at the top).
+    var alerts: [String] = []
     var showMoreAbout = true
     @Environment(\.openURL) var openURL
 
@@ -261,9 +278,8 @@ struct StudioInfoBlock: View {
                 .padding(18)
                 .glassEffect(.regular, in: .rect(cornerRadius: 24))
             }
-            if let d = description ?? studio?.description, !d.isEmpty {
-                Text(d).font(.system(size: 16)).lineSpacing(5)
-            }
+            RichDescription(description: description ?? studio?.description, alerts: alerts,
+                            size: 16, lineSpacing: 5, alertColor: Theme.red, buttonColor: Theme.secondary)
             if let a = address, let lat = a.latitude, let lon = a.longitude {
                 VStack(alignment: .leading, spacing: 0) {
                     MapSnippet(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)).frame(height: 220)
@@ -502,11 +518,18 @@ struct StudioDetailView: View {
         return p / 100
     }
 
+    /// Active studio alerts (start date passed, end date missing or still ahead), in red as in the official app.
     @ViewBuilder var notice: some View {
-        if let msg = (studio?.alerts ?? []).sorted(by: { ($0.order ?? 0) < ($1.order ?? 0) }).compactMap(\.message).first, !msg.isEmpty {
-            Label(msg, systemImage: "info.circle.fill").font(.system(size: 14))
-                .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                .glassEffect(.regular.tint(Theme.lime.opacity(0.15)), in: .rect(cornerRadius: 20))
+        let msgs = Alerts.active(studio?.alerts)
+        if !msgs.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(Array(msgs.enumerated()), id: \.offset) { _, msg in
+                    Label(msg, systemImage: "exclamationmark.circle.fill").font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular.tint(Theme.red.opacity(0.10)), in: .rect(cornerRadius: 20))
         }
     }
 

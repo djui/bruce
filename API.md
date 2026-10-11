@@ -1,11 +1,11 @@
-# Bruce API map (Charles captures 1–6 of the iOS app 14.4.2 build 538)
+# Bruce API map (Charles captures 1–7 of the iOS app 14.4.2 build 538)
 
 > Unofficial, reverse-engineered by observing the author's own account traffic. Not affiliated with or
 > endorsed by Bruce Studios AB. The raw captures contain personal data and are **not** part of this
 > repository; the bracketed evidence numbers below refer to them for the author's own reference.
 > Machine-readable version: [`openapi.yaml`](openapi.yaml) (browse it with [`swagger.html`](swagger.html)).
 
-Evidence numbers without a prefix refer to capture 1; `c2:N` refers to capture 2, `c3:N` to capture 3, `c4:N` to capture 4, `c5:N` to capture 5, `c6:N` to capture 6.
+Evidence numbers without a prefix refer to capture 1; `c2:N` refers to capture 2, `c3:N` to capture 3, `c4:N` to capture 4, `c5:N` to capture 5, `c6:N` to capture 6, `c7:N` to capture 7.
 
 Base: `https://api.bruce.app/v52/` (older `/v1/studios` is a separate, unauthenticated public list).
 Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-res.*`).
@@ -43,7 +43,7 @@ Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-
 ### Studio detail
 - `GET /v52/studio/<id>?include_addresses=true&include_addresses_address=true&include_categories=true&include_facilities=true&include_studio_photos=true&include_studio_photos_photo=true&include_user_booking_limit=true&include_alerts=true&exclude_expired_alerts=true&locale=en` [c2:51, 212, 1015] -> `{"studio":{id,name,description,integration_type,integration_door_type,integration_door_config,qr_code_id,geofencing_enabled,schedule_type,studio_facilities,...}}`.
 - `GET /v52/studio/<id>/opening_hour/schedule` [c2:215, 1018] -> `{"schedule":[{id,start,end,is_all_day,opening_hour{start_hour,end_hour,recurring_rule,unmanned},studio_user_attendance_info{admission_access,booking_credit_access,price,trial,visit_limit_reached,...}}]}`.
-- `GET /v52/studio/class/alternative_recommendation?class_id=<id>&locale=en` [c2:53].
+- `GET /v52/studio/class/alternative_recommendation?class_id=<id>&locale=en` [c2:53, c7:24, c7:41]: "Similar classes" (see capture 7).
 - `GET /v52/favorite` [c2:152, 213], `GET /v52/bookmark` [c2:52], `GET /v52/standby` [c2:474], `GET /v52/admission` [c2:423], `GET /v52/membership/info` [c2:426] (context only).
 
 ### Class list - capture 2
@@ -141,7 +141,7 @@ All write calls take a JSON body containing at least `{"locale":"en"}` and the `
 - c4 has no new write endpoints. The only request body is `POST /v52/booking/offline/done` `{"locale":"en"}` [c4:15].
 
 ### Studio page rules (from app screenshots, Oct 2026)
-- Notice banner = studio `alerts[].message` (type `INFO`, sorted by `order`; request `include_alerts=true&exclude_expired_alerts=true`) [c2:212]. The `alert` string field was null in all captures.
+- Notice banner = studio `alerts[].message` (type `INFO`, sorted by `order`; request `include_alerts=true&exclude_expired_alerts=true`) [c2:212]. Only active alerts are shown: see capture 7 for `start_date`/`end_date`. The studio's `alert` string field was null in all captures; classes have their own `alert` (c7).
 - Hours line: teal "Solo training until HH:MM" (open), orange "Solo training ends at HH:MM" (closing within ~60 min; orange seen at 29-38 min, teal at 2 h 38 min), red "Currently closed for solo training".
 - Lime button only for "Show ticket" (checked in today) or "Buy ticket for SEK n" (paid access); none otherwise.
 - Studios with classes get a "Classes" tab and a "Show classes / N classes" row, filled from `GET /v52/class?studio_id=<id>&presentation_studio_id=<id>` per day.
@@ -168,6 +168,30 @@ Capture 6 (about 347 files) covers creating and using custom areas ("New area" i
 - Public (no token) endpoints, verified unauthenticated: `GET /v52/studio/filter` (`limit` capped at 30;
   `next_cursor` = base64 `id::<last id>`, ids descending), `GET /v52/class` (cursor `id:<n>`) and
   `GET /v52/category`.
+
+## Capture 7 additions (`c7:N`)
+Capture 7 (about 25 requests) opens two fully booked classes and their "Similar classes" sheet.
+- **Class alert.** `GET /v52/class/<id>?...&include_studio_alerts=true&exclude_studio_expired_alerts=true` [c7:19, 30].
+  The class object has an `alert` string, e.g. `"Only women are welcome here. Please respect this."` [c7:30]
+  (null for most classes [c7:19]). The official app shows it in red under the description, with a translate
+  button. It has no dates.
+- **Studio alerts with dates.** The embedded `class.studio.alerts[]` [c7:30] (and the studio's `alerts[]`)
+  are `{id, studio_id, message_string_id, type:"INFO", order, show_on_web, start_date, end_date, start_day,
+  end_day, message, created_at, updated_at, deleted_at}`. `end_date` may be `null` (open-ended; `end_day` is
+  then `0`), so an alert has a start and an optional end. `exclude_studio_expired_alerts=true` did **not**
+  remove an alert whose `end_date` was 2023-08-23, so clients must filter: active = `start_date <= now` and
+  (`end_date` null or `now < end_date`). Both apps show the class `alert` if present, otherwise the studio's
+  active alerts, in red.
+- **Similar classes.** `GET /v52/studio/class/alternative_recommendation?class_id=<id>&locale=en`
+  [c7:24, 41] -> `{"class_cards":[{id, title, photo, time_zone, distance, start_time, end_time, created_at,
+  studio:{id, name}}], "metadata":null}`. About ten cards: classes nearby (`distance` in metres from the
+  original class's studio; `0` = same studio) around the same time, the same day. `id` is a class id
+  (open it with `GET /v52/class/<id>`). The app requests it when a full class opens and shows the cards in
+  a bottom sheet ("Similar classes to <title>, <HH:MM> nearby <studio>") from the "Similar classes" button
+  next to "Join waitlist".
+- **Descriptions are Markdown**: studio and class `description` use `**bold**`, `* item` lists and
+  `[links](https://...)` [c7:19, 30]. Both apps render them as Markdown.
+- No new write calls: the only POST is `POST /v52/booking/offline/done` [c7:26].
 
 ### Still not captured
 Token refresh; check-in other than the STC door QR (`POST /v52/studio/check_in` appears only in capture 1); membership upgrade, pause and cancel (prices: `GET /v52/membership/info`, c2:426); profile photo upload; review submission; notification mark-read; ticket (no endpoint; the app renders it from the checked-in booking).

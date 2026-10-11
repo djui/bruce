@@ -24,6 +24,7 @@ enum SheetRoute: Hashable {
     case search, selectCity, newArea, createAccount, resetPassword
     case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts
     case bookingRules(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
+    case similarClasses(Int), area(UUID)
 }
 
 @MainActor
@@ -724,6 +725,14 @@ final class AppModel {
             classDetails[id] = c
             await loadStudioDetail(c.studioId)
         }
+    }
+
+    /// "Similar classes" for a class (GET /v52/studio/class/alternative_recommendation [c7:24, 41]).
+    var similarClasses: [Int: [BruceAPI.ClassCard]] = [:]
+    func loadSimilarClasses(_ classId: Int) async {
+        guard tokenUsable, similarClasses[classId] == nil else { return }
+        do { similarClasses[classId] = try await BruceAPI.fetchSimilarClasses(token: token, classId: classId) }
+        catch { similarClasses[classId] = []; handleLoadError(error, "Similar classes") }
     }
 
     func loadStudioDetail(_ id: Int) async {

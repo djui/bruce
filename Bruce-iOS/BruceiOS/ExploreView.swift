@@ -594,23 +594,34 @@ struct SelectCitySheet: View {
 
 // MARK: - Areas
 
-/// "Entire <city>" + saved areas (long-press → delete confirmation) + "New area".
+/// "Entire <city>" + saved areas (long-press → Show on map, Rename, Delete) + "New area".
 struct AreaChips: View {
     @Environment(AppModel.self) var m
     @State private var pendingDelete: SavedArea?
+    @State private var actions: SavedArea?
+    @State private var longPressed = false
+    @State private var shown: SavedArea?
+    @State private var renaming: SavedArea?
+    @State private var newName = ""
     var body: some View {
         GlassEffectContainer(spacing: 8) {
             FlowLayout {
                 GlassChip("Entire \(m.cityName)", selected: m.selectedAreaId == nil) { m.selectedAreaId = nil }
                 ForEach(m.cityAreas) { a in
-                    GlassChip(selected: m.selectedAreaId == a.id, action: { m.selectedAreaId = m.selectedAreaId == a.id ? nil : a.id }) {
+                    GlassChip(selected: m.selectedAreaId == a.id, action: {
+                        // The tap that ends a long-press must not toggle the selection.
+                        if longPressed { longPressed = false; return }
+                        m.selectedAreaId = m.selectedAreaId == a.id ? nil : a.id
+                    }) {
                         Label(a.name, systemImage: "skew")
                     }
-                    // Like the original app: long-press goes straight to the delete confirmation.
+                    // Long-press: actions sheet to see what the area covers, rename it, or delete it (confirmed).
+                    // (A gesture, not .contextMenu: the interactive glass chip swallows the context-menu press.)
                     .contentShape(.capsule)
                     .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in
                         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        pendingDelete = a
+                        longPressed = true
+                        actions = a
                     })
                 }
                 NavigationLink { NewAreaSheet() } label: {
@@ -626,10 +637,28 @@ struct AreaChips: View {
             Button("Delete", role: .destructive) { Task { await m.deleteArea(a.id) } }
             Button("Cancel", role: .cancel) {}
         } message: { _ in Text("The area is removed from your saved areas.") }
+        .confirmationDialog(actions?.name ?? "", isPresented: Binding(get: { actions != nil }, set: { if !$0 { actions = nil } }),
+                            titleVisibility: .visible, presenting: actions) { a in
+            // Presented after the dialog has gone; SwiftUI drops a presentation started while it dismisses.
+            Button("Show on map") { afterDialog { shown = a } }
+            Button("Rename") { newName = a.name; afterDialog { renaming = a } }
+            Button("Delete", role: .destructive) { afterDialog { pendingDelete = a } }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Rename area", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { a in
+            TextField("Name", text: $newName)
+            Button("Save") { Task { await m.renameArea(a.id, to: newName) } }
+            Button("Cancel", role: .cancel) {}
+        }
+        .navigationDestination(item: $shown) { a in AreaMapSheet(areaId: a.id) }
         .onAppear {
             if AppModel.demo, AppModel.setting("BRUCE_SCREEN") == "deletearea", let a = m.cityAreas.first { pendingDelete = a }
         }
     }
+}
+
+@MainActor private func afterDialog(_ f: @escaping @MainActor () -> Void) {
+    Task { @MainActor in try? await Task.sleep(for: .milliseconds(400)); f() }
 }
 
 /// New area: Save without drawing stores the visible map rectangle; Draw captures a freehand polygon

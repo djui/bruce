@@ -185,6 +185,8 @@ paths:
         - { name: classId, in: path, required: true, schema: { type: integer } }
         - { name: include_studio, in: query, schema: { type: boolean } }
         - { name: include_studio_user_attendance_info, in: query, schema: { type: boolean } }
+        - { name: include_studio_alerts, in: query, schema: { type: boolean }, description: "Embeds `studio.alerts[]`" }
+        - { name: exclude_studio_expired_alerts, in: query, schema: { type: boolean }, description: "Not reliable: c7:30 still returned an alert that ended in 2023; filter on start_date/end_date" }
         - $ref: "#/components/parameters/locale"
       responses:
         "200":
@@ -195,6 +197,24 @@ paths:
                 type: object
                 properties:
                   class: { $ref: "#/components/schemas/Class" }
+  /studio/class/alternative_recommendation:
+    get:
+      tags: [Classes]
+      summary: Similar classes (nearby, around the same time), offered for a fully booked class
+      x-evidence: ["c2:53", "c7:24", "c7:41"]
+      parameters:
+        - { name: class_id, in: query, required: true, schema: { type: integer } }
+        - $ref: "#/components/parameters/locale"
+      responses:
+        "200":
+          description: Class cards
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  class_cards: { type: array, items: { $ref: "#/components/schemas/ClassCard" } }
+                  metadata: { type: object, nullable: true }
 
   /booking:
     get:
@@ -749,6 +769,11 @@ components:
         integration_door_type: { type: string, example: brp }
         deleted: { type: boolean }
         requires_additional_cost: { type: boolean }
+        alert: { type: string, nullable: true, description: "Studio-level notice string (null in all captures)" }
+        alerts:
+          type: array
+          description: "With include_alerts / include_studio_alerts. Active = start_date passed and end_date null or in the future."
+          items: { $ref: "#/components/schemas/StudioAlert" }
         studio_addresses:
           type: array
           items:
@@ -806,7 +831,8 @@ components:
         studio_id: { type: integer }
         presentation_studio_id: { type: integer }
         title: { type: string }
-        description: { type: string }
+        description: { type: string, description: "Markdown (bold, lists, links)" }
+        alert: { type: string, nullable: true, example: "Only women are welcome here. Please respect this.", description: "Class-level notice, shown in red under the description; no dates" }
         start_time: { type: string, format: date-time }
         end_time: { type: string, format: date-time }
         time_zone: { type: string }
@@ -828,6 +854,39 @@ components:
             BLACK: { type: integer }
             EPIC: { type: integer }
             FREE: { type: integer }
+    StudioAlert:
+      type: object
+      properties:
+        id: { type: integer }
+        studio_id: { type: integer }
+        message_string_id: { type: integer }
+        type: { type: string, example: INFO }
+        order: { type: integer }
+        show_on_web: { type: boolean }
+        start_date: { type: string, format: date-time }
+        end_date: { type: string, format: date-time, nullable: true, description: "null = open-ended" }
+        start_day: { type: integer, example: 20231204 }
+        end_day: { type: integer, example: 0, description: "0 when end_date is null" }
+        message: { type: string, example: "Women only here! Please respect this." }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+        deleted_at: { type: string, format: date-time, nullable: true }
+    ClassCard:
+      type: object
+      properties:
+        id: { type: integer, description: Class id }
+        title: { type: string, example: Strength }
+        photo: { type: string, description: Cloudinary file id }
+        time_zone: { type: string, example: Europe/Stockholm }
+        distance: { type: integer, description: "Metres from the original class's studio (0 = same studio)" }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        studio:
+          type: object
+          properties:
+            id: { type: integer }
+            name: { type: string }
     Booking:
       type: object
       properties:

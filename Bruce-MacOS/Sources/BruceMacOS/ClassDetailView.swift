@@ -73,9 +73,18 @@ struct ClassDetailView: View {
                     if booking != nil {
                         RedButton(title: "Cancel booking") { m.present(.bookingRules(c.id)) }.padding(.top, 24)
                     } else if m.standby(forClass: c.id) != nil {
-                        RedButton(title: "Leave waitlist") { m.askLeaveWaitlist(c.id) }.padding(.top, 24)
+                        HStack(spacing: 12) {
+                            RedButton(title: "Leave waitlist") { m.askLeaveWaitlist(c.id) }
+                            if (c.availableSpots ?? 1) <= 0 { similarButton(c) }
+                        }
+                        .padding(.top, 24)
                     } else if (c.availableSpots ?? 1) <= 0 {
-                        RedButton(title: "Join waitlist") { Task { await m.joinWaitlist(c.id) } }.padding(.top, 24)
+                        // Fully booked: waitlist plus "Similar classes", as in the official app.
+                        HStack(spacing: 12) {
+                            RedButton(title: "Join waitlist") { Task { await m.joinWaitlist(c.id) } }
+                            similarButton(c)
+                        }
+                        .padding(.top, 24)
                     } else {
                         LimeButton(title: "Book") { m.present(.bookingRules(c.id)) }.padding(.top, 24)
                     }
@@ -94,7 +103,7 @@ struct ClassDetailView: View {
                     whoIsBooked.padding(.top, 18).padding(.bottom, 24)
                 }
                 .padding(.horizontal, Theme.gutter)
-                StudioInfoBlock(studio: studio, description: c.description)
+                StudioInfoBlock(studio: studio, description: c.description, alerts: Alerts.forClass(c, studio: studio))
                 Color.clear.frame(height: 1).id("bottom")
             }
         }
@@ -103,6 +112,16 @@ struct ClassDetailView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { proxy.scrollTo("bottom", anchor: .bottom) } }
         }
         }
+    }
+
+    func similarButton(_ c: BruceAPI.BruceClass) -> some View {
+        Button { m.present(.similarClasses(c.id)) } label: {
+            Text("Similar classes").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                .frame(maxWidth: .infinity).frame(height: 54)
+                .overlay(Capsule().stroke(Theme.ink, lineWidth: 1.5))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     func rulesLines(_ c: BruceAPI.BruceClass, _ r: BookingRules) -> some View {
@@ -260,6 +279,8 @@ struct StudioInfoBlock: View {
     @Environment(AppModel.self) var m
     let studio: BruceAPI.Studio?
     var description: String?
+    /// Alerts shown in red under the description (class pages; the studio page shows them at the top).
+    var alerts: [String] = []
     var showMoreAbout = true
 
     var address: BruceAPI.Address? {
@@ -281,8 +302,9 @@ struct StudioInfoBlock: View {
                 .padding(.horizontal, Theme.gutter + 12).padding(.vertical, 14)
                 .background(Theme.sectionGrey)
             }
-            if let d = description ?? studio?.description, !d.isEmpty {
-                Text(d).font(.system(size: 17, weight: .light)).lineSpacing(8)
+            if !(description ?? studio?.description ?? "").isEmpty || !alerts.isEmpty {
+                RichDescription(description: description ?? studio?.description, alerts: alerts, size: 17, weight: .light,
+                                lineSpacing: 8, alertColor: Theme.strikeRed, buttonColor: Theme.secondary)
                     .padding(.horizontal, Theme.gutter + 12).padding(.vertical, 24)
             }
             if let a = address, let lat = a.latitude, let lon = a.longitude {

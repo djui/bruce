@@ -201,8 +201,10 @@ enum BruceAPI {
         var lateCheckInMinutes: Int? = nil
         var classCategories: [ClassCategory]? = nil
         var studio: StudioLite? = nil
+        /// Class-level notice shown in red under the description (e.g. "Women only") [c7:30]. No dates.
+        var alert: String? = nil
         enum CodingKeys: String, CodingKey {
-            case id, title, spots, instructor, canceled, description, photo, studio
+            case id, title, spots, instructor, canceled, description, photo, studio, alert
             case studioId = "studio_id", startTime = "start_time", endTime = "end_time"
             case availableSpots = "available_spots"
             case bookableLatestTime = "bookable_latest_time", unbookableLatestTime = "unbookable_latest_time"

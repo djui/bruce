@@ -290,8 +290,13 @@ struct SettingsView: View {
                     simpleToggle("Push", isOn: marketing("marketing_push", \.marketingPush))
                     simpleToggle("Email", isOn: marketing("marketing_email", \.marketingEmail))
                     simpleToggle("SMS", isOn: marketing("marketing_sms", \.marketingSms))
-                    Text("BruceMacOS · unofficial client, not affiliated with Bruce Studios").font(.system(size: 14, weight: .light)).foregroundStyle(Theme.tertiary)
-                        .frame(maxWidth: .infinity).padding(.vertical, 40)
+                    VStack(spacing: 6) {
+                        Text("BruceMacOS · unofficial client, not affiliated with Bruce Studios").foregroundStyle(Theme.tertiary)
+                        Link("djui.github.io/bruce", destination: URL(string: "https://djui.github.io/bruce/")!)
+                            .foregroundStyle(Theme.secondary).underline()
+                    }
+                    .font(.system(size: 14, weight: .light))
+                    .frame(maxWidth: .infinity).padding(.vertical, 40)
                 }
             }
         }

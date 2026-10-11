@@ -49,13 +49,19 @@ struct StudioDetailView: View {
     var hasClasses: Bool { studio?.hasClasses == true || !(m.studioClasses[studioId] ?? []).isEmpty }
     var classes: [BruceAPI.BruceClass] { (m.studioClasses[studioId] ?? []).sorted { $0.startTime < $1.startTime } }
 
-    /// Notice banner from studio `alerts[].message` (e.g. door/kiosk instructions).
+    /// Active studio alerts (`alerts[]`: start date passed, end date missing or still ahead), in red.
     @ViewBuilder var notice: some View {
-        if let msg = (studio?.alerts ?? []).sorted(by: { ($0.order ?? 0) < ($1.order ?? 0) }).compactMap(\.message).first, !msg.isEmpty {
-            Text(msg).font(.system(size: 15, weight: .light)).multilineTextAlignment(.center)
-                .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.sectionGrey))
-                .padding(.horizontal, Theme.gutter).padding(.vertical, 16)
+        let msgs = Alerts.active(studio?.alerts)
+        if !msgs.isEmpty {
+            VStack(spacing: 8) {
+                ForEach(Array(msgs.enumerated()), id: \.offset) { _, msg in
+                    Text(msg).font(.system(size: 15)).foregroundStyle(Theme.strikeRed).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.sectionGrey))
+            .padding(.horizontal, Theme.gutter).padding(.vertical, 16)
         }
     }
 
