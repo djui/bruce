@@ -56,7 +56,7 @@ struct MenuSheet: View {
     let rows: [(String, String, SheetRoute?)] = [
         ("person.crop.circle", "Account", .account),
         ("gearshape", "Settings", .settings),
-        ("person.2", "Invite friends to free workouts", .invite),
+        ("person.2", "Invite friends", .invite),
         ("gift", "Redeem voucher", .voucher),
         ("bubble.left.and.bubble.right", "Chat with support", .support),
         ("questionmark.circle", "FAQ", .help),
@@ -133,7 +133,7 @@ struct AccountSheet: View {
                     }
                     Button { m.pushSheet(.visits) } label: {
                         InfoRow(title: "Total monthly visits", subtitle: "\(visits?.used ?? 0) / \(visits?.total ?? 0)",
-                                footnote: "Excludes studios with unlimited visits.")
+                                footnote: Copy.unlimitedExcluded)
                     }.buttonStyle(.plain)
                     Button { m.pushSheet(.credits) } label: {
                         InfoRow(title: "Credits", subtitle: "\(m.membership?.availableCredits ?? 0) credits")
@@ -188,19 +188,19 @@ struct MembershipView: View {
                     HStack(alignment: .top) {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("Renew annual subscription").font(.system(size: 18, weight: .medium))
-                            Text("Your plan will renew into a new annual subscription at your current price once your current contract period ends.")
+                            Text(Copy.renewal(ms))
                                 .font(.system(size: 15, weight: .light)).foregroundStyle(Theme.tertiary)
                         }
                         Spacer()
-                        Toggle("", isOn: .constant(true)).toggleStyle(.switch).tint(Theme.ink).disabled(true).labelsHidden()
+                        Toggle("", isOn: .constant(ms?.prolongCommitment ?? true)).toggleStyle(.switch).tint(Theme.ink).disabled(true).labelsHidden()
                     }
                     .padding(Theme.gutter)
                     Rectangle().fill(Theme.divider).frame(height: 0.5).padding(.leading, Theme.gutter)
-                    Button { m.pushSheet(.plans) } label: { InfoRow(title: "Change membership", subtitle: "Switch between membership levels") }.buttonStyle(.plain)
+                    Button { m.pushSheet(.plans) } label: { InfoRow(title: "Change membership", subtitle: "Move to another level") }.buttonStyle(.plain)
                     Button { m.pushSheet(.pause) } label: { InfoRow(title: "Pause membership", subtitle: "\(ms?.remainingPauseDays ?? 0) unused days") }.buttonStyle(.plain)
                     readOnly("Cancel membership", "Cancel your membership")
-                    readOnly("Withdraw from contract", "Use your right of withdrawal within 14 days of purchase.")
-                    Text("Membership changes are disabled in this app. Use the Bruce iOS app.")
+                    readOnly("Withdraw from contract", Copy.withdrawal)
+                    Text("Membership changes are display-only in this unofficial client.")
                         .font(.system(size: 12)).foregroundStyle(Theme.tertiary).padding(Theme.gutter)
                 }
             }
@@ -227,7 +227,7 @@ struct VisitsView: View {
     var body: some View {
         VStack(spacing: 0) {
             NavBar(title: "Total monthly visits") { m.popSheet() }
-            Text("Excludes studios with unlimited visits.").italic().font(.system(size: 16, weight: .light))
+            Text(Copy.unlimitedExcluded).italic().font(.system(size: 16, weight: .light))
                 .foregroundStyle(Theme.secondary).padding(.vertical, 18)
             let groups = Dictionary(grouping: m.pastBookings) { BruceDate.calendar.startOfDay(for: $0.class?.start ?? .distantPast) }
             ScrollView {
@@ -262,7 +262,7 @@ struct CreditsView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(spacing: 12) {
                         Text("Credits").font(.system(size: 44, weight: .bold))
-                        Text("Pay per training session.\nNo monthly cost.").font(.system(size: 19, weight: .light)).multilineTextAlignment(.center)
+                        Text("Pay as you go.\nNo monthly fee.").font(.system(size: 19, weight: .light)).multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity).frame(height: 300)
                     .background(RoundedRectangle(cornerRadius: 14).fill(Theme.creditsBeige))
@@ -271,7 +271,7 @@ struct CreditsView: View {
                     Button { m.flash("Not available here") } label: { InfoRow(title: "History", subtitle: "See previous purchases") }.buttonStyle(.plain)
                     Button { m.flash("Purchases are disabled in this app") } label: { InfoRow(title: "Buy credits", subtitle: "Choose amount") }.buttonStyle(.plain)
                     Text("Credits").font(.system(size: 26, weight: .bold)).padding(.horizontal, Theme.gutter).padding(.top, 30).padding(.bottom, 14)
-                    ForEach(["Train without membership", "Works as one off tickets", "Valid for 12 months"], id: \.self) { t in
+                    ForEach(["No membership needed", "Use them like single tickets", "Expire after 12 months"], id: \.self) { t in
                         HStack(spacing: 18) {
                             Image(systemName: "checkmark.seal.fill").font(.system(size: 24))
                             Text(t).font(.system(size: 18, weight: .medium))
@@ -297,7 +297,7 @@ struct StrikesView: View {
                     VStack(alignment: .leading, spacing: 0) {
                         NavBar(title: "Strikes", leading: .back) { m.popSheet() }.padding(.horizontal, -Theme.gutter)
                         HStack(spacing: 0) {
-                            ForEach(0..<3, id: \.self) { i in
+                            ForEach(0..<Policy.strikesToBlock, id: \.self) { i in
                                 if i > 0 { Rectangle().fill(Color(white: 0.6)).frame(width: 26, height: 2) }
                                 Circle().fill(i < count ? Theme.ink : Color.white)
                                     .overlay(Circle().stroke(Color(white: 0.65), lineWidth: i < count ? 0 : 2))
@@ -308,27 +308,18 @@ struct StrikesView: View {
                         .padding(.top, 30)
                         Text("\(count) strike\(count == 1 ? "" : "s")").font(.system(size: 42, weight: .bold))
                             .foregroundStyle(count > 0 ? Theme.strikeRed : Color(red: 0.05, green: 0.5, blue: 0.2)).padding(.top, 28)
-                        Text("3 strikes and your class bookings are blocked for 14 days. You have \(m.blockInfo?.freeUnlocksRemaining ?? 0) free unlock\(m.blockInfo?.freeUnlocksRemaining == 1 ? "" : "s") remaining.")
+                        Text(Copy.strikeSummary(m.blockInfo, unlockPrice: m.unblockPriceKr))
                             .font(.system(size: 18, weight: .semibold)).lineSpacing(5).padding(.top, 14).padding(.bottom, 36)
                     }
                     .padding(.horizontal, Theme.gutter + 12)
                     .background(Color(white: 0.91))
                     VStack(alignment: .leading, spacing: 0) {
                         Text("Strike policy").font(.system(size: 30, weight: .bold)).padding(.top, 36)
-                        policy("No strikes", Color(red: 0.05, green: 0.5, blue: 0.2), [
-                            (nil, "Cancel more than 12 hours before class."),
-                            (nil, "Check in on time (time varies by studio)."),
-                        ])
+                        policy("No strikes", Color(red: 0.05, green: 0.5, blue: 0.2), Copy.strikeFree.map { (nil, $0) })
                         Divider()
-                        policy("1 strike", Color(white: 0.45), [
-                            ("Late cancellation", " (12–3 hrs before class start): 1 strike"),
-                            ("Late check-in", " (time varies by studio): 1 strike"),
-                        ])
+                        policy("1 strike", Color(white: 0.45), Copy.strikeOne)
                         Divider()
-                        policy("2 strikes", Color(red: 0.62, green: 0.45, blue: 0.0), [
-                            ("Very late cancellation", " (less than 3 hrs before class start): 2 strikes"),
-                            ("No-show", ": 2 strikes"),
-                        ])
+                        policy("2 strikes", Color(red: 0.62, green: 0.45, blue: 0.0), Copy.strikeTwo)
                     }
                     .padding(.horizontal, Theme.gutter + 12).padding(.bottom, 30)
                 }

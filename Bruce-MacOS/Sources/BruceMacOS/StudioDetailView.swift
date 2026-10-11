@@ -203,7 +203,7 @@ struct StudioDetailView: View {
             return closingSoon ? "Solo training ends at \(BruceDate.time(e.endDate))" : "Solo training until \(BruceDate.time(e.endDate))"
         }
         _ = today
-        return "Currently closed for solo training"
+        return "Closed for solo training right now"
     }
 
     enum HoursState { case open, closingSoon, closed, unknown }
@@ -438,7 +438,7 @@ struct CheckoutSheet: View {
                             .padding(.vertical, 8)
                         Divider().overlay(Color.white.opacity(0.15))
                         Text("• \(BruceDate.format(today?.startDate, "EEEE, MMMM d")), \(BruceDate.time(today?.startDate)) - \(BruceDate.time(today?.endDate))")
-                        Text("• This class will only be refunded if it is cancelled in time")
+                        Text(Copy.refundRule)
                         Divider().overlay(Color.white.opacity(0.15))
                         HStack { Text("Total").fontWeight(.bold); Spacer(); Text("SEK \(price)").fontWeight(.bold) }
                     }
@@ -467,7 +467,7 @@ struct CheckoutSheet: View {
                         }
                         .buttonStyle(.plain).frame(maxWidth: .infinity)
                     }
-                    Text("The first time you use Bruce Studios, you can cancel your membership during the first month without any notice period. After that, a **one-month notice period** applies. This means you will be charged one more time after cancellation. Read more in our terms and conditions.")
+                    Text(Copy.noticePeriod(m.membership))
                         .font(.system(size: 14, weight: .light)).foregroundStyle(Color.white.opacity(0.8)).padding(.top, 8)
                 }
                 .font(.system(size: 16, weight: .light))
@@ -481,7 +481,7 @@ struct CheckoutSheet: View {
         }
     }
 
-    let noPayments = "Payments aren't available here — use the Bruce app."
+    let noPayments = "Payments aren't available in this unofficial client."
 
     func card<C: View>(@ViewBuilder _ c: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 10) { c() }

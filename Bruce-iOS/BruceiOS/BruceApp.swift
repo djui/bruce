@@ -218,12 +218,12 @@ struct SheetScreen: View {
         case .statistics: StatisticsView()
         case .receipts: ReceiptsView()
         case .invite: InviteSheet()
-        case .howItWorks: TextInfoSheet(title: "How it works", paragraphs: howItWorksText)
+        case .howItWorks: TextInfoSheet(title: "How it works", paragraphs: Copy.howItWorks(open: m.openInvites))
         case .voucher: VoucherSheet()
         case .support: SupportSheet()
         case .help: HelpSheet()
         case .push: PushSettingsView()
-        case .pushInfo: TextInfoSheet(title: "Push settings", paragraphs: pushInfoText)
+        case .pushInfo: TextInfoSheet(title: "Push settings", paragraphs: Copy.pushInfo)
         case .quickCheckIn: QuickCheckInSheet()
         }
     }

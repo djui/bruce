@@ -8,7 +8,7 @@ struct MenuSheet: View {
     let rows: [(String, String, SheetRoute)] = [
         ("person.crop.circle", "Account", .account),
         ("gearshape", "Settings", .settings),
-        ("person.2", "Invite friends to free workouts", .invite),
+        ("person.2", "Invite friends", .invite),
         ("gift", "Redeem voucher", .voucher),
         ("bubble.left.and.bubble.right", "Support", .support),
     ]
@@ -68,10 +68,10 @@ struct AccountSheet: View {
                 }
                 NavigationLink(value: SheetRoute.visits) {
                     InfoRow(title: "Total monthly visits", subtitle: visits.map { "\($0.used ?? 0) / \($0.total ?? 0)" } ?? "—",
-                            footnote: "Excludes studios with unlimited visits.", chevron: false)
+                            footnote: Copy.unlimitedExcluded, chevron: false)
                 }
                 NavigationLink(value: SheetRoute.credits) { InfoRow(title: "Credits", subtitle: m.membership?.availableCredits.map { "\($0) credits" } ?? "—", chevron: false) }
-                NavigationLink(value: SheetRoute.strikes) { InfoRow(title: "Strikes", subtitle: m.blockInfo?.strikeCount.map { "\($0) of 3" } ?? "—", chevron: false) }
+                NavigationLink(value: SheetRoute.strikes) { InfoRow(title: "Strikes", subtitle: m.blockInfo?.strikeCount.map { "\($0) of \(Policy.strikesToBlock)" } ?? "—", chevron: false) }
             }
             Section {
                 NavigationLink(value: SheetRoute.payment) { InfoRow(title: "Payment methods", subtitle: "Your payment methods", chevron: false) }
@@ -122,10 +122,10 @@ struct MembershipView: View {
                 kv("Access until", ms?.admissionAccessUntil.map { String($0.prefix(10)) } ?? "—")
             }
             Section {
-                NavigationLink(value: SheetRoute.plans) { InfoRow(title: "Change membership", subtitle: "Switch between membership levels", chevron: false) }
+                NavigationLink(value: SheetRoute.plans) { InfoRow(title: "Change membership", subtitle: "Move to another level", chevron: false) }
                 NavigationLink(value: SheetRoute.pause) { InfoRow(title: "Pause membership", subtitle: "\(ms?.remainingPauseDays ?? 0) unused days", chevron: false) }
                 Button { m.flash("Membership changes are display-only in this client") } label: { InfoRow(title: "Cancel membership", subtitle: "Cancel your membership") }
-                Button { m.flash("Membership changes are display-only in this client") } label: { InfoRow(title: "Withdraw from contract", subtitle: "Use your right of withdrawal within 14 days of purchase.") }
+                Button { m.flash("Membership changes are display-only in this client") } label: { InfoRow(title: "Withdraw from contract", subtitle: Copy.withdrawal) }
             } footer: {
                 Text("Membership changes are display-only in this unofficial client.")
             }
@@ -149,7 +149,7 @@ struct VisitsView: View {
     var body: some View {
         ScrollView {
             LazyVStack(spacing: 0) {
-                Text("Excludes studios with unlimited visits.").italic().font(.system(size: 14)).foregroundStyle(Theme.secondary).padding(.vertical, 12)
+                Text(Copy.unlimitedExcluded).italic().font(.system(size: 14)).foregroundStyle(Theme.secondary).padding(.vertical, 12)
                 ForEach(groupedByDay(m.pastBookings, date: { $0.class?.start }).reversed(), id: \.0) { day, list in
                     SectionHeaderBar(text: BruceDate.dayHeader(day))
                     ForEach(list) { b in
@@ -173,7 +173,7 @@ struct CreditsView: View {
             Section {
                 VStack(spacing: 10) {
                     Text("CREDITS").font(Theme.screenTitle(36))
-                    Text("Pay per training session.\nNo monthly cost.").font(.system(size: 17)).multilineTextAlignment(.center)
+                    Text("Pay as you go.\nNo monthly fee.").font(.system(size: 17)).multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity).frame(height: 200)
                 .background(RoundedRectangle(cornerRadius: 26).fill(Theme.creditsBeige))
@@ -184,7 +184,7 @@ struct CreditsView: View {
                 Button { m.flash("Purchases are disabled in this app") } label: { InfoRow(title: "Buy credits", subtitle: "Choose amount") }
             }
             Section("Credits") {
-                ForEach(["Train without membership", "Works as one off tickets", "Valid for 12 months"], id: \.self) { t in
+                ForEach(["No membership needed", "Use them like single tickets", "Expire after 12 months"], id: \.self) { t in
                     Label(t, systemImage: "checkmark.seal.fill")
                 }
             }
@@ -203,7 +203,7 @@ struct StrikesView: View {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 16) {
                     HStack(spacing: 0) {
-                        ForEach(0..<3, id: \.self) { i in
+                        ForEach(0..<Policy.strikesToBlock, id: \.self) { i in
                             if i > 0 { Rectangle().fill(Theme.tertiary).frame(width: 24, height: 2) }
                             Image(systemName: "xmark").font(.system(size: 24, weight: .semibold))
                                 .foregroundStyle(i < count ? .white : .clear)
@@ -214,15 +214,15 @@ struct StrikesView: View {
                     }
                     Text("\(count) strike\(count == 1 ? "" : "s")").font(.system(size: 38, weight: .black).width(.expanded))
                         .foregroundStyle(count > 0 ? Theme.strikeRed : Theme.teal)
-                    Text("3 strikes and your class bookings are blocked for 14 days. You have \(m.blockInfo?.freeUnlocksRemaining ?? 0) free unlock\(m.blockInfo?.freeUnlocksRemaining == 1 ? "" : "s") remaining.")
+                    Text(Copy.strikeSummary(m.blockInfo, unlockPrice: m.unblockPriceKr))
                         .font(.system(size: 16, weight: .semibold))
                 }
                 .padding(20)
                 .glassEffect(.regular, in: .rect(cornerRadius: 28))
                 Text("STRIKE POLICY").font(Theme.heading(20)).padding(.top, 6)
-                policy("No strikes", Theme.teal, [(nil, "Cancel more than 12 hours before class."), (nil, "Check in on time (time varies by studio).")])
-                policy("1 strike", Theme.secondary, [("Late cancellation", " (12–3 hrs before class start): 1 strike"), ("Late check-in", " (time varies by studio): 1 strike")])
-                policy("2 strikes", Theme.hoursOrange, [("Very late cancellation", " (less than 3 hrs before class start): 2 strikes"), ("No-show", ": 2 strikes")])
+                policy("No strikes", Theme.teal, Copy.strikeFree.map { (nil, $0) })
+                policy("1 strike", Theme.secondary, Copy.strikeOne)
+                policy("2 strikes", Theme.hoursOrange, Copy.strikeTwo)
             }
             .padding(Theme.gutter)
         }
@@ -369,7 +369,7 @@ struct EditProfileView: View {
                 field("Home address", $home)
                 Text("Secondary address").font(.system(size: 18, weight: .bold)).padding(.top, 10)
                 field("Secondary address", $secondary)
-                Label("We'll use your location to recommend workouts close to where you are.", systemImage: "info.circle")
+                Label(Copy.locationUse, systemImage: "info.circle")
                     .font(.system(size: 14)).foregroundStyle(.white.opacity(0.55)).padding(.top, 6)
             }
             .padding(Theme.gutter)
@@ -399,7 +399,7 @@ struct PauseMembershipView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 22) {
-            Text("You can pause your membership up to 60 days per calendar year, distributed over 2 pause periods. You choose how to distribute your pause days over the pause periods.")
+            Text(Copy.pauseRules(m.membership))
                 .font(.system(size: 16))
             GlassEffectContainer {
                 HStack(spacing: 16) {
@@ -588,6 +588,9 @@ struct MembershipPlansView: View {
                     .font(.system(size: 17, weight: .bold)).foregroundStyle(.black).frame(maxWidth: .infinity).frame(height: 40)
             }
             .buttonStyle(.glassProminent).tint(isCurrent ? Theme.olive : Theme.neonLime).controlSize(.large)
+            if let n = m.planStudioCount(plan.code) {
+                Label("\(n) studios in \(m.cityName)", systemImage: "checkmark.circle.fill").font(.system(size: 15, weight: .semibold))
+            }
             if isCurrent, let s = m.simultaneousLimit {
                 Label("\(s) bookings at a time", systemImage: "checkmark.circle.fill").font(.system(size: 15, weight: .semibold))
             }

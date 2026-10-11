@@ -14,7 +14,7 @@ struct WelcomeView: View {
                 VStack(spacing: 14) {
                     Text(appDisplayName.uppercased()).font(.system(size: 54, weight: .black).width(.expanded))
                         .minimumScaleFactor(0.6).lineLimit(1)
-                    Text("ALL TRAINING. ONE MEMBERSHIP").font(.system(size: 14, weight: .heavy).width(.expanded)).kerning(1)
+                    Text(Copy.tagline).font(.system(size: 14, weight: .heavy).width(.expanded)).kerning(1)
                 }
                 .foregroundStyle(.white)
                 Spacer()
@@ -118,8 +118,8 @@ struct CreateAccountView: View {
                 SecureField("Password (at least 8 characters)", text: $password)
             }
             Section {
-                Toggle("I agree to the Bruce Studios Terms of Service and Privacy Policy", isOn: $tos)
-                Toggle("Marketing emails from Bruce Studios", isOn: $marketing)
+                Toggle("I accept Bruce Studios' terms and privacy policy", isOn: $tos)
+                Toggle("Email offers from Bruce Studios", isOn: $marketing)
             }
             Section {
                 LimeButton(title: "Create account") { m.flash("Creating an account is not available here. Use the official app.") }
@@ -140,7 +140,7 @@ struct ResetPasswordView: View {
             Section {
                 TextField("name@email.com", text: $email).keyboardType(.emailAddress).textInputAutocapitalization(.never)
             } footer: {
-                Text("Enter the email you registered with and we will send a link to change your password.")
+                Text(Copy.resetPassword)
             }
             Section {
                 LimeButton(title: "Reset password") { m.flash("Password reset is not available here") }
@@ -160,10 +160,10 @@ struct SettingsView: View {
             Section {
                 NavigationLink(value: SheetRoute.selectCity) { InfoRow(title: "Change city", subtitle: m.cityName, chevron: false) }
                 Toggle(isOn: Binding(get: { m.social ?? true }, set: { m.setSocial($0) })) {
-                    InfoRow(title: "Social", subtitle: (m.social ?? true) ? "You're visible to all users" : "You're only visible to friends", chevron: false)
+                    InfoRow(title: "Social", subtitle: (m.social ?? true) ? "Everyone can see your profile" : "Only friends can see your profile", chevron: false)
                 }
                 LocationSettingsRow()
-                Button { copyCalendarURL() } label: { InfoRow(title: "Calendar subscription", subtitle: "Show bookings in your calendar") }
+                Button { copyCalendarURL() } label: { InfoRow(title: "Calendar subscription", subtitle: "Subscribe to your bookings in Calendar") }
                 NavigationLink(value: SheetRoute.push) {
                     InfoRow(title: "Push notifications", subtitle: "Reminders and studio news", chevron: false)
                 }
@@ -175,10 +175,10 @@ struct SettingsView: View {
                 Button("Clear cached images") { URLCache.shared.removeAllCachedResponses(); m.flash("Image cache cleared") }
             }
             Section {
-                Toggle("Push notifications in the app", isOn: marketing("marketing_push", \.marketingPush))
+                Toggle("Push", isOn: marketing("marketing_push", \.marketingPush))
                 Toggle("Email", isOn: marketing("marketing_email", \.marketingEmail))
                 Toggle("SMS", isOn: marketing("marketing_sms", \.marketingSms))
-            } header: { Text("Marketing") } footer: { Text("Bruce Studios may occasionally send you offers, news and inspiration.") }
+            } header: { Text("Marketing") } footer: { Text(Copy.marketing) }
             Section {
                 VStack(spacing: 4) {
                     Text("\(appDisplayName) \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
@@ -208,9 +208,9 @@ struct PushSettingsView: View {
     @Environment(AppModel.self) var m
     var body: some View {
         Form {
-            row("Booking reminders", "Be reminded of upcoming bookings", "booking_reminder")
-            row("Check in", "A reminder for when it is time to check in", "check_in_reminder")
-            row("New studios", "A new studio has been added", "new_studio")
+            row("Booking reminders", "booking_reminder")
+            row("Check in", "check_in_reminder")
+            row("New studios", "new_studio")
         }
         .sheetChrome("Push notifications")
         .toolbar {
@@ -220,9 +220,11 @@ struct PushSettingsView: View {
         }
         .task { if m.notificationSetting == nil { await m.loadSettings() } }
     }
-    func row(_ t: String, _ s: String, _ k: String) -> some View {
-        Toggle(isOn: Binding(get: { m.notificationSetting?.types?.first { $0.key == k }?.enabled ?? true }, set: { m.setPushType(k, $0) })) {
-            InfoRow(title: t, subtitle: s, chevron: false)
+    /// Subtitle from the API's notification type description, else our own fallback.
+    func row(_ t: String, _ k: String) -> some View {
+        let type = m.notificationSetting?.types?.first { $0.key == k }
+        return Toggle(isOn: Binding(get: { type?.enabled ?? true }, set: { m.setPushType(k, $0) })) {
+            InfoRow(title: t, subtitle: type?.description ?? Copy.pushSubtitle(k), chevron: false)
         }
     }
 }
@@ -253,7 +255,7 @@ struct InviteSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("INVITE A FRIEND").font(Theme.screenTitle(30))
-                Text("Get 200 SEK/NOK/DKK off your next payment when a friend becomes a member within 30 days. They also get 30% off their first 3 months.\n\nAs a member you can share invite codes for a free workout at your membership level. Each code can be used once by someone who is not yet a member.")
+                Text(Copy.inviteIntro(open: m.openInvites))
                     .font(.system(size: 15)).foregroundStyle(Theme.secondary)
                 Text("INVITES").font(Theme.heading(16)).padding(.top, 10)
                 if open.isEmpty {
@@ -266,7 +268,7 @@ struct InviteSheet: View {
                                 Image(systemName: "gift.fill").foregroundStyle(Theme.limeInk)
                                 Text(v.code.uppercased()).font(.system(size: 18, weight: .bold, design: .monospaced))
                                 Spacer()
-                                ShareLink(item: "Train for free at Bruce Studios with my invite code: \(v.code)") {
+                                ShareLink(item: Copy.shareInvite(v.code)) {
                                     Label("Share", systemImage: "square.and.arrow.up").font(.system(size: 14, weight: .bold)).foregroundStyle(.black)
                                 }
                                 .buttonStyle(.glassProminent).tint(Theme.lime)

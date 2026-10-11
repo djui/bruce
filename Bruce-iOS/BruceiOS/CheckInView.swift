@@ -119,7 +119,7 @@ struct CheckInScanner: View {
                     Spacer()
                     if inSheet { Button(role: .close) { scanner.stop(); m.dismissSheets() }.buttonStyle(.glass) }
                 }
-                Label("Aim at the QR code at the studio door and hold still until it has been read", systemImage: "qrcode.viewfinder")
+                Label("Hold the camera steady over the QR code on the studio door", systemImage: "qrcode.viewfinder")
                     .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)

@@ -23,7 +23,7 @@ struct WelcomeView: View {
                 .padding(.horizontal, Theme.gutter).padding(.top, 14)
                 Spacer()
                 Wordmark()
-                Text("ALL TRAINING. ONE MEMBERSHIP").font(.system(size: 15, weight: .heavy).width(.expanded))
+                Text(Copy.tagline).font(.system(size: 15, weight: .heavy).width(.expanded))
                     .padding(.top, 24)
                 Spacer()
                 LimeButton(title: "Create account") { m.present(.createAccount) }
@@ -206,12 +206,12 @@ struct CreateAccountView: View {
                     FormField(label: "Email", placeholder: "name@email.com", text: $email)
                     FormField(label: "Password", placeholder: "at least 8 characters", text: $password, secure: true)
                     CheckRow(on: $tos) {
-                        Text("I agree to the Bruce Studios ") + Text("Terms of Service").fontWeight(.bold).underline()
-                            + Text(" and ") + Text("Privacy Policy").fontWeight(.bold).underline()
+                        Text("I accept Bruce Studios' ") + Text("terms").fontWeight(.bold).underline()
+                            + Text(" and ") + Text("privacy policy").fontWeight(.bold).underline()
                     }
                     .padding(.top, 24)
                     CheckRow(on: $marketing) {
-                        Text("I agree to receive marketing emails from Bruce Studios. ") + Text("More info").fontWeight(.bold).underline()
+                        Text("Email me offers from Bruce Studios. ") + Text("More info").fontWeight(.bold).underline()
                     }
                     Button { m.flash("Creating an account is not available here") } label: {
                         Text("Create account").font(.system(size: 17, weight: .bold))
@@ -240,7 +240,7 @@ struct ResetPasswordView: View {
                 m.sheets.count > 1 ? m.popSheet() : m.dismissSheets()
             }
             VStack(alignment: .leading, spacing: 22) {
-                Text("Enter the email you used when you registered and we will send an email with a link to help you change your password.")
+                Text(Copy.resetPassword)
                     .font(.system(size: 17, weight: .light)).multilineTextAlignment(.center).frame(maxWidth: .infinity)
                 FormField(label: "Email", placeholder: "name@email.com", text: $email, focused: $focused)
                 LimeButton(title: "Reset password") { m.flash("Password reset is not available here") }

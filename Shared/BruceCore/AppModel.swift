@@ -238,6 +238,19 @@ final class AppModel {
         guard tokenUsable, let uid = userId, studioLimits[studioId] == nil else { return }
         if let l = try? await BruceAPI.fetchStudioLimits(token: token, userId: uid, studioId: studioId) { studioLimits[studioId] = l }
     }
+    /// Studios in the selected city a tier can visit, counted from each studio's `visit_limit` items
+    /// (-1 = not included). nil until studios with limits have loaded.
+    func planStudioCount(_ tier: String) -> Int? {
+        let l = cityStudios.compactMap { $0.visitLimit?.items?.first { $0.label?.uppercased() == tier.uppercased() }?.limit }
+        return l.isEmpty ? nil : l.filter { $0 != -1 }.count
+    }
+    /// Studios in the selected city with unlimited visits (limit 0) for a tier.
+    func planUnlimitedCount(_ tier: String) -> Int? {
+        let l = cityStudios.compactMap { $0.visitLimit?.items?.first { $0.label?.uppercased() == tier.uppercased() }?.limit }
+        return l.isEmpty ? nil : l.filter { $0 == 0 }.count
+    }
+    /// Unused invite codes from GET /v52/booking/voucher (nil when logged out).
+    var openInvites: Int? { isLoggedIn ? invites.filter { !$0.accepted }.count : nil }
     /// SIMULTANEOUS limit ("bookings at a time", My classes pill) from user_visit_limit [c3:56].
     var simultaneousLimit: Int? { studioLimits.values.joined().first { $0.type == "SIMULTANEOUS" }?.total
         ?? visitLimits.first { $0.type == "SIMULTANEOUS" }?.total }
@@ -628,15 +641,15 @@ final class AppModel {
     func joinWaitlist(_ classId: Int) async {
         if AppModel.demo {
             standbys.append(BruceAPI.ClassHolder(id: -classId, class: findClass(classId)))
-            infoAlert = "A notification is sent if a spot becomes available."; return
+            infoAlert = Copy.waitlistJoined; return
         }
         guard let req = try? BruceAPI.joinWaitlistRequest(token: token, classId: classId) else { return }
-        if await send(req, label: "Join waitlist") { infoAlert = "A notification is sent if a spot becomes available." }
+        if await send(req, label: "Join waitlist") { infoAlert = Copy.waitlistJoined }
         await loadMine()
     }
     func askLeaveWaitlist(_ classId: Int) {
         guard let s = standby(forClass: classId) else { return }
-        confirm = PendingAction(title: "Are you sure you want to leave the waitlist?", message: "", button: "Yes") { [weak self] in
+        confirm = PendingAction(title: Copy.leaveWaitlist, message: "", button: "Leave waitlist") { [weak self] in
             guard let self else { return }
             if AppModel.demo { self.standbys.removeAll { $0.id == s.id }; return }
             guard let req = try? BruceAPI.leaveWaitlistRequest(token: self.token, standbyId: s.id) else { return }

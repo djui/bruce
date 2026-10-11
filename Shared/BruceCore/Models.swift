@@ -247,8 +247,21 @@ extension BruceAPI {
         let admissionAccessUntil: String?
         let remainingPauseDays: Int?
         var remainingPausePeriods: Int? = nil
+        /// Yearly pause allowance (`pause_days_total`, `total_pause_periods`).
+        var pauseDaysTotal: Int? = nil
+        var totalPausePeriods: Int? = nil
+        /// Cancellation terms (`has_notice_period`, `cancel_without_notice_until`).
+        var hasNoticePeriod: Bool? = nil
+        var cancelWithoutNoticeUntil: String? = nil
+        /// Commitment (`commitment_months`, `committed_until`, `prolong_commitment`).
+        var commitmentMonths: Int? = nil
+        var committedUntil: String? = nil
+        var prolongCommitment: Bool? = nil
         enum CodingKeys: String, CodingKey {
             case membership, paused, currency
+            case pauseDaysTotal = "pause_days_total", totalPausePeriods = "total_pause_periods"
+            case hasNoticePeriod = "has_notice_period", cancelWithoutNoticeUntil = "cancel_without_notice_until"
+            case commitmentMonths = "commitment_months", committedUntil = "committed_until", prolongCommitment = "prolong_commitment"
             case membershipTier = "membership_tier", admissionTier = "admission_tier"
             case currentMembershipPrice = "current_membership_price"
             case availableCredits = "available_credits", nextPayment = "next_payment"
@@ -283,8 +296,11 @@ extension BruceAPI {
         let strikeCount: Int?
         let blocked: Bool?
         let freeUnlocksRemaining: Int?
+        var totalFreeUnlocks: Int? = nil
+        var blockEndDate: String? = nil
         enum CodingKeys: String, CodingKey {
             case blocked, strikeCount = "strike_count", freeUnlocksRemaining = "free_unlocks_remaining"
+            case totalFreeUnlocks = "total_free_unlocks", blockEndDate = "block_end_date"
         }
     }
 

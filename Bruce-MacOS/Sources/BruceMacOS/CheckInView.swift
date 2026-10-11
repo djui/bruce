@@ -32,7 +32,7 @@ struct CheckInView: View {
                 }
                 ScanCorners().stroke(Color.white, style: StrokeStyle(lineWidth: 9, lineCap: .round, lineJoin: .round))
                     .frame(width: 210, height: 210).frame(maxWidth: .infinity, maxHeight: .infinity)
-                Text("Aim at the QR code and hold still until it has been read")
+                Text("Hold the camera steady over the door QR code")
                     .font(.system(size: 16)).foregroundStyle(.white).multilineTextAlignment(.center)
                     .padding(.horizontal, 24).padding(.vertical, 12).frame(maxWidth: .infinity)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.25).opacity(0.92)))

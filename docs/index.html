@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brüce · Unofficial Bruce Studios clients for iPhone and Mac</title>
+<meta name="description" content="Brüce is an open-source, unofficial SwiftUI client for your Bruce Studios membership on iPhone (iOS 26 Liquid Glass) and Mac, with a documented map of the app's HTTP API. Not affiliated with Bruce Studios AB.">
+<meta name="color-scheme" content="dark light">
+<meta name="theme-color" content="#07090a" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f4f6ee" media="(prefers-color-scheme: light)">
+<link rel="canonical" href="https://djui.github.io/bruce/">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Brüce">
+<meta property="og:title" content="Brüce · Unofficial Bruce Studios clients for iPhone and Mac">
+<meta property="og:description" content="Native SwiftUI apps with Liquid Glass, quick check-in, custom map areas and an open API map. Open source, MIT. Not affiliated with Bruce Studios AB.">
+<meta property="og:url" content="https://djui.github.io/bruce/">
+<meta property="og:image" content="https://djui.github.io/bruce/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="The Brüce wordmark next to two iPhone screenshots of the app in demo mode.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Brüce · Unofficial Bruce Studios clients for iPhone and Mac">
+<meta name="twitter:description" content="Native SwiftUI apps with Liquid Glass, quick check-in, custom map areas and an open API map. Not affiliated with Bruce Studios AB.">
+<meta name="twitter:image" content="https://djui.github.io/bruce/og.jpg">
+<meta name="twitter:image:alt" content="The Brüce wordmark next to two iPhone screenshots of the app in demo mode.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;900&amp;family=Inter:wght@400;500;600;700&amp;display=swap">
+<link rel="stylesheet" href="assets/site.css">
+<script>
+  document.documentElement.classList.replace('no-js', 'js');
+  try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<div class="aurora" aria-hidden="true"><span></span><span></span><span></span></div>
+
+<header class="nav" id="top">
+  <div class="wrap nav-inner">
+    <a class="brand" href="#top" aria-label="Brüce, back to top">
+      <img src="favicon.svg" width="30" height="30" alt="">
+      <span>BRÜCE</span>
+    </a>
+    <nav aria-label="Sections">
+      <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#api">API</a></li>
+        <li><a href="#build">Build</a></li>
+      </ul>
+    </nav>
+    <div class="nav-actions">
+      <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch colour theme">
+        <svg class="i-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2.5M12 19.5V22M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2 12h2.5M19.5 12H22M4.2 19.8 6 18M18 6l1.8-1.8"/></svg>
+        <svg class="i-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+      </button>
+      <a class="btn btn-small" href="https://github.com/djui/bruce">
+        <svg viewBox="0 0 24 24" aria-hidden="true" class="gh"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.77 2.7 1.26 3.36.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.25 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg>
+        <span>GitHub</span>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- Hero -->
+  <section class="hero wrap" aria-labelledby="hero-title">
+    <div class="hero-copy reveal">
+      <p class="eyebrow"><span class="dot" aria-hidden="true"></span> Open source · iPhone + Mac · MIT</p>
+      <h1 id="hero-title">Your studios.<br><span class="accent">Natively.</span></h1>
+      <p class="lede">
+        Brüce is a hobby-built, native SwiftUI client for your own Bruce Studios membership: iOS&nbsp;26 Liquid Glass on
+        the iPhone, a phone-sized window on the Mac, and a documented map of the HTTP API underneath.
+      </p>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/djui/bruce">View the source</a>
+        <a class="btn btn-glass" href="#api">Explore the API map</a>
+      </div>
+      <p class="hero-note" role="note">
+        <strong>Unofficial.</strong> Not affiliated with or endorsed by Bruce Studios AB.
+        Not on the App Store; build it yourself. <a href="#disclaimer">Read the notice</a>.
+      </p>
+    </div>
+
+    <div class="hero-device reveal" data-delay="1">
+      <section class="carousel" aria-roledescription="carousel" aria-label="App screenshots (demo data)">
+        <div class="phone">
+          <div class="phone-screen" id="slides" aria-live="off">
+            <!-- Slides are populated with dark or light screenshots by assets/site.js; the first is in the HTML for no-JS. -->
+            <figure class="slide is-active" role="group" aria-roledescription="slide" aria-label="1 of 8">
+              <picture>
+                <source media="(prefers-color-scheme: light)" srcset="screenshots/iphone-home-light.webp">
+                <img src="screenshots/iphone-home-dark.webp" width="1179" height="2563" alt="Home screen with a spotlight class, category tiles and nearby gyms, in demo mode.">
+              </picture>
+            </figure>
+          </div>
+          <span class="island" aria-hidden="true"></span>
+        </div>
+        <div class="carousel-ui">
+          <button class="icon-btn" type="button" id="prev" aria-label="Previous screenshot">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
+          </button>
+          <div class="dots" id="dots" role="tablist" aria-label="Choose a screenshot"></div>
+          <button class="icon-btn" type="button" id="next" aria-label="Next screenshot">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+          </button>
+          <button class="icon-btn" type="button" id="play" aria-label="Pause slideshow" aria-pressed="false">
+            <svg class="i-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14M16 5v14"/></svg>
+            <svg class="i-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12-7.5Z"/></svg>
+          </button>
+        </div>
+        <p class="caption" id="caption">Home</p>
+      </section>
+    </div>
+  </section>
+
+  <!-- Stat strip -->
+  <section class="wrap strip reveal" aria-label="At a glance">
+    <ul>
+      <li><strong>0</strong><span>third-party SDKs or trackers</span></li>
+      <li><strong>2</strong><span>apps from one shared core</span></li>
+      <li><strong>~700</strong><span>studios streamed in parallel</span></li>
+      <li><strong>iOS 26</strong><span>Liquid Glass throughout</span></li>
+    </ul>
+  </section>
+
+  <!-- Features -->
+  <section class="wrap section" id="features" aria-labelledby="features-title">
+    <header class="section-head reveal">
+      <p class="kicker">Features</p>
+      <h2 id="features-title">Everything you do at the studio door, faster.</h2>
+    </header>
+    <div class="grid features">
+      <article class="card glass reveal">
+        <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="6"/><path d="M3 10c4-3 14-3 18 0"/></svg></div>
+        <h3>Liquid Glass, all the way</h3>
+        <p>Built for iOS 26: a glass tab bar that shrinks as you scroll, glass toolbars and sheets, lime prominent buttons and a full-screen camera check-in. Light and dark.</p>
+      </article>
+      <article class="card glass reveal">
+        <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4z"/><path d="M14 14h2v2h-2zM18 18h2v2h-2zM14 18h2M18 14h2"/></svg></div>
+        <h3>Quick check-in</h3>
+        <p>Scan the door QR code, or check in with one tap from a suggestion: a booked class with an open window, the nearest studio, or your last visit. Always confirmed first.</p>
+      </article>
+      <article class="card glass reveal">
+        <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 4 3 6v14l6-2 6 2 6-2V4l-6 2-6-2Z"/><path d="M9 4v14M15 6v14"/></svg></div>
+        <h3>Explore, map and custom areas</h3>
+        <p>Every live studio and the city-wide class schedule, with filters and search. Draw your own outline on the map and filter studios and classes to it. Areas stay on your device.</p>
+      </article>
+      <article class="card glass reveal">
+        <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4M9 15l2 2 4-4"/></svg></div>
+        <h3>Book, waitlist, bookmark</h3>
+        <p>A booking-rules sheet shows the book, cancel and check-in windows for each class before you commit. Join waitlists, bookmark classes and see friends' upcoming classes.</p>
+      </article>
+      <article class="card glass reveal">
+        <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9Z"/></svg></div>
+        <h3>Reviews and tickets</h3>
+        <p>Studio pages bring ratings and reviews, opening hours, notices, facilities and per-studio visit limits. After a check-in, your ticket is one tap away.</p>
+      </article>
+      <article class="card glass reveal">
+        <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="14" height="10" rx="2"/><path d="M6 18h6"/><rect x="16" y="8" width="6" height="12" rx="1.5"/></svg></div>
+        <h3>iPhone and Mac, one core</h3>
+        <p>Both apps share <code>BruceCore</code>: API client, models, Keychain session, app state, booking rules and demo data. Only the views differ.</p>
+      </article>
+      <article class="card glass reveal">
+        <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M8 6 2 12l6 6M16 6l6 6-6 6M14 4l-4 16"/></svg></div>
+        <h3>An open API map</h3>
+        <p>Every endpoint the apps use, with parameters, response shapes and the booking, check-in and visit-limit rules, as Markdown and OpenAPI 3.0.</p>
+      </article>
+      <article class="card glass reveal">
+        <div class="ico" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6Z"/><path d="m9 12 2 2 4-4"/></svg></div>
+        <h3>Private by design</h3>
+        <p>Talks only to Bruce Studios' servers and Apple Maps. Your password is used once to log in; only session tokens are kept, in the Keychain. No analytics.</p>
+      </article>
+    </div>
+  </section>
+
+  <!-- Gallery -->
+  <section class="section gallery-section" id="gallery" aria-labelledby="gallery-title">
+    <div class="wrap">
+      <header class="section-head reveal">
+        <p class="kicker">Screens</p>
+        <h2 id="gallery-title">A closer look.</h2>
+        <p class="sub">Captured in demo mode with fictional data. No real members, no personal data.</p>
+        <div class="seg" role="group" aria-label="Screenshot appearance">
+          <button type="button" data-shots="dark" aria-pressed="true">Dark</button>
+          <button type="button" data-shots="light" aria-pressed="false">Light</button>
+        </div>
+      </header>
+    </div>
+    <div class="gallery" id="gallery-track" tabindex="0" aria-label="Screenshot gallery, scroll sideways">
+      <!-- Filled by assets/site.js; a static fallback follows for no-JS. -->
+      <noscript>
+        <figure><img src="screenshots/iphone-explore-dark.webp" alt="Explore list of studios." width="1179" height="2563" loading="lazy"></figure>
+        <figure><img src="screenshots/iphone-detail-dark.webp" alt="Class page with booking windows and a Book button." width="1179" height="2563" loading="lazy"></figure>
+      </noscript>
+    </div>
+    <div class="wrap mac reveal">
+      <div class="mac-copy">
+        <h3>And on the Mac.</h3>
+        <p>A 390×780 phone-sized window that brings the same screens to macOS 14+, including camera QR scanning with AVFoundation and Vision, and freehand area drawing with the mouse. <code>swift run</code> and go.</p>
+      </div>
+      <div class="mac-shots">
+        <img src="screenshots/mac-explore.webp" width="780" height="1612" loading="lazy" alt="The macOS app window showing the Explore list of studios.">
+        <img src="screenshots/mac-studio.webp" width="780" height="1612" loading="lazy" alt="The macOS app window showing a studio page with a Show ticket button.">
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="wrap section" id="how" aria-labelledby="how-title">
+    <header class="section-head reveal">
+      <p class="kicker">How it works</p>
+      <h2 id="how-title">Built from your own traffic.</h2>
+      <p class="sub">The API was mapped by watching the author's own account, nothing more.</p>
+    </header>
+    <ol class="steps">
+      <li class="glass reveal">
+        <span class="num" aria-hidden="true">01</span>
+        <h3>Use the official app</h3>
+        <p>Normally, on the author's own phone and membership: browse, book, cancel, check in.</p>
+      </li>
+      <li class="glass reveal">
+        <span class="num" aria-hidden="true">02</span>
+        <h3>Record the requests</h3>
+        <p>HTTPS traffic was recorded with Charles Proxy on the author's own device and account.</p>
+      </li>
+      <li class="glass reveal">
+        <span class="num" aria-hidden="true">03</span>
+        <h3>Write down what was seen</h3>
+        <p>Endpoints, parameters and response shapes, with evidence references. Anything not observed is marked as such.</p>
+      </li>
+      <li class="glass reveal">
+        <span class="num" aria-hidden="true">04</span>
+        <h3>Build a native client</h3>
+        <p>SwiftUI apps that make the same kinds of requests at a similar rate as the official app.</p>
+      </li>
+    </ol>
+    <ul class="principles reveal">
+      <li>No binary was decrypted, disassembled or modified.</li>
+      <li>No certificate pinning or other protection was bypassed.</li>
+      <li>No other member's account was accessed.</li>
+      <li>Raw captures contain personal data and are never published.</li>
+    </ul>
+  </section>
+
+  <!-- API -->
+  <section class="wrap section" id="api" aria-labelledby="api-title">
+    <header class="section-head reveal">
+      <p class="kicker">API map</p>
+      <h2 id="api-title">Read the map, not the wire.</h2>
+      <p class="sub">Base URL <code>https://api.bruce.app/v52/</code>, one <code>X-Access-Token</code> header. Examples use placeholders or public studio data.</p>
+    </header>
+    <div class="grid api-cards">
+      <a class="card glass link-card reveal" href="https://github.com/djui/bruce/blob/main/API.md">
+        <span class="tag">Markdown</span>
+        <h3>API.md</h3>
+        <p>Every observed endpoint with request and response shapes, booking and check-in rules, visit limits, and what has not been observed.</p>
+        <span class="go" aria-hidden="true">→</span>
+      </a>
+      <a class="card glass link-card reveal" href="api/">
+        <span class="tag">Swagger UI</span>
+        <h3>Interactive viewer</h3>
+        <p>Browse the OpenAPI description in Swagger UI. Read-only: the "try it out" buttons are switched off.</p>
+        <span class="go" aria-hidden="true">→</span>
+      </a>
+      <a class="card glass link-card reveal" href="api/openapi.yaml">
+        <span class="tag">OpenAPI 3.0</span>
+        <h3>openapi.yaml</h3>
+        <p>The raw spec, for your own tooling: code generators, linters or another viewer.</p>
+        <span class="go" aria-hidden="true">→</span>
+      </a>
+    </div>
+    <div class="code-block glass reveal">
+      <div class="code-head"><span>Public endpoint, no token needed</span><button class="copy" type="button" data-copy="c-curl">Copy</button></div>
+<pre id="c-curl"><code>curl -s 'https://api.bruce.app/v52/studio/filter?filter[status][in]=live&amp;filter[country_code][eq]=SE&amp;limit=3&amp;locale=en' \
+  | jq '.studios[] | {id, name, vicinity}'</code></pre>
+    </div>
+  </section>
+
+  <!-- Build -->
+  <section class="wrap section" id="build" aria-labelledby="build-title">
+    <header class="section-head reveal">
+      <p class="kicker">Build it yourself</p>
+      <h2 id="build-title">Clone. Build. Train.</h2>
+      <p class="sub">No third-party dependencies, only Apple frameworks. There is no App Store build; you run your own.</p>
+    </header>
+    <div class="tabs reveal">
+      <div class="tablist" role="tablist" aria-label="Build target">
+        <button type="button" role="tab" id="t-mac" aria-controls="p-mac" aria-selected="true" tabindex="0">macOS</button>
+        <button type="button" role="tab" id="t-ios" aria-controls="p-ios" aria-selected="false" tabindex="-1">iOS</button>
+        <button type="button" role="tab" id="t-demo" aria-controls="p-demo" aria-selected="false" tabindex="-1">Demo mode</button>
+      </div>
+      <div class="code-block glass" role="tabpanel" id="p-mac" aria-labelledby="t-mac">
+        <div class="code-head"><span>macOS 14+, Xcode 16+</span><button class="copy" type="button" data-copy="c-mac">Copy</button></div>
+<pre id="c-mac"><code>git clone https://github.com/djui/bruce.git
+cd bruce/Bruce-MacOS
+swift build
+swift run BruceMacOS</code></pre>
+      </div>
+      <div class="code-block glass" role="tabpanel" id="p-ios" aria-labelledby="t-ios" hidden>
+        <div class="code-head"><span>Xcode 27, iOS 26+ (iPhone)</span><button class="copy" type="button" data-copy="c-ios">Copy</button></div>
+<pre id="c-ios"><code>cd bruce/Bruce-iOS
+open BruceiOS.xcodeproj
+# or from the command line:
+xcodebuild -project BruceiOS.xcodeproj -scheme BruceiOS \
+  -destination 'platform=iOS Simulator,name=iPhone 18 Pro' build
+# devices: copy Config/Local.xcconfig.example to Config/Local.xcconfig
+# and set your own DEVELOPMENT_TEAM and bundle ID</code></pre>
+      </div>
+      <div class="code-block glass" role="tabpanel" id="p-demo" aria-labelledby="t-demo" hidden>
+        <div class="code-head"><span>Offline, fictional data, nothing sent</span><button class="copy" type="button" data-copy="c-demo">Copy</button></div>
+<pre id="c-demo"><code># macOS
+BRUCE_DEMO=1 BRUCE_SCREEN=studio swift run BruceMacOS
+# iOS simulator (after building and installing)
+SIMCTL_CHILD_BRUCE_DEMO=1 SIMCTL_CHILD_BRUCE_SCREEN=studio \
+  xcrun simctl launch booted net.dauernheim.bruce</code></pre>
+      </div>
+    </div>
+    <p class="warn reveal" role="note"><strong>Heads-up:</strong> outside demo mode there is no dry run. Book, Cancel and Check in send real requests for your account, with the same consequences as in the official app.</p>
+  </section>
+
+  <!-- Disclaimer -->
+  <section class="wrap section" id="disclaimer" aria-labelledby="disclaimer-title">
+    <div class="notice reveal">
+      <div class="notice-badge" aria-hidden="true">!</div>
+      <div>
+        <h2 id="disclaimer-title">Unofficial. Not affiliated.</h2>
+        <p>
+          Brüce is a personal hobby project. It is <strong>not</strong> the Bruce Studios app, and it is not affiliated with,
+          endorsed by or supported by Bruce Studios AB. It may stop working whenever their API changes. You need your own
+          Bruce Studios membership to use it.
+        </p>
+        <h3>Trademarks</h3>
+        <p>
+          "Bruce Studios", "Bruce", their logos and the look of the official app are trademarks or property of Bruce
+          Studios AB; no rights to them are granted. Studio names, photos, schedules and reviews are loaded at runtime from
+          Bruce Studios' servers and are not redistributed here. The Ü mark on this page is an original design. The MIT
+          license covers only the code and documentation written for this project.
+        </p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Responsible use + credits -->
+  <section class="wrap section two-col" aria-label="Responsible use and credits">
+    <div class="glass card reveal" id="responsible">
+      <h2>Responsible use</h2>
+      <ul class="checks">
+        <li>Use it only with your own account.</li>
+        <li>Follow Bruce Studios' terms and membership rules. Bookings and check-ins are real; only check in where you are.</li>
+        <li>No bulk or scripted booking, scraping, spot sniping, load testing, or getting around limits, strikes or payments.</li>
+        <li>If Bruce Studios asks for this project to change or be taken down, the author will comply.</li>
+      </ul>
+    </div>
+    <div class="glass card reveal" id="credits">
+      <h2>Credits</h2>
+      <ul class="credits">
+        <li><a href="https://www.brucestudios.com">Bruce Studios</a> for the service, the studios and the original app.</li>
+        <li>Apple for SwiftUI, Liquid Glass, SF Symbols, MapKit, AVFoundation and Vision.</li>
+        <li><a href="https://www.charlesproxy.com">Charles Proxy</a> by Karl von Randow, used to observe the traffic.</li>
+        <li><a href="https://github.com/swagger-api/swagger-ui">Swagger UI</a> (Apache 2.0) for the API viewer.</li>
+        <li>Built by <a href="https://github.com/djui">Uwe Dauernheim</a> with <a href="https://claude.com/claude-code">Claude Code</a>.</li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <a class="brand" href="#top"><img src="favicon.svg" width="26" height="26" alt=""><span>BRÜCE</span></a>
+    <p>
+      Code and docs under the <a href="https://github.com/djui/bruce/blob/main/LICENSE">MIT license</a> © 2026 Uwe Dauernheim.
+      Not affiliated with Bruce Studios AB.
+    </p>
+    <a class="btn btn-small" href="https://github.com/djui/bruce">github.com/djui/bruce</a>
+  </div>
+</footer>
+
+<script src="assets/site.js" defer></script>
+</body>
+</html>

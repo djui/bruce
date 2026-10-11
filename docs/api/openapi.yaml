@@ -1,0 +1,873 @@
+openapi: 3.0.3
+info:
+  title: Bruce API (reverse-engineered)
+  version: "v52"
+  description: |
+    Reconstructed from Charles captures of the Bruce Studios iOS app 14.4.2 (build 538).
+    Evidence: capture 1 = `captures/1`, capture 2 = `captures/2`, capture 3 = `captures/3`, capture 4 = `captures/4`, capture 5 = `captures/5`, capture 6 = `captures/6` (file numbers in `x-evidence`).
+    Unofficial; shapes are abbreviated to the fields observed. See API.md.
+servers:
+  - url: https://api.bruce.app/v52
+security:
+  - accessToken: []
+tags:
+  - name: Auth
+  - name: Studios
+  - name: Classes
+  - name: Booking
+  - name: Check-in
+  - name: Explore
+  - name: User
+  - name: Media
+  - name: Social
+  - name: Settings
+  - name: Payments
+
+paths:
+  /access/authenticate:
+    post:
+      tags: [Auth]
+      summary: Log in with email + password
+      security: []
+      x-evidence: ["c2:461"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AuthenticateRequest" }
+      responses:
+        "200":
+          description: Tokens (access ~3h, refresh ~3 months)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthenticateResponse" }
+  /access/logout:
+    delete:
+      tags: [Auth]
+      summary: Log out (invalidates the access token)
+      x-evidence: ["c2:442"]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LocaleBody" }
+      responses:
+        "200": { description: Empty body }
+
+  /studio/filter:
+    get:
+      tags: [Studios]
+      summary: Paged studio list (Explore / map)
+      description: 30 per page; follow `metadata.pagination.next_cursor`. Capture 2 paged 39 pages = 691 SE studios.
+      x-evidence: ["c2:153", "c2:162", "c2:1133"]
+      parameters:
+        - { name: "filter[status][in]", in: query, schema: { type: string, example: live } }
+        - { name: "filter[country_code][eq]", in: query, schema: { type: string, example: SE } }
+        - name: fields
+          in: query
+          schema: { type: string, example: "id,name,photo,status,city_id,vicinity,rating,qr_code_id,has_classes,has_openings,integration_door_type,time_zone,visit_limit_id" }
+        - name: include
+          in: query
+          schema: { type: string, example: "addresses,addresses_address,categories,categories_category,visit_limit,photos,photos_photo" }
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/nextCursor"
+        - $ref: "#/components/parameters/locale"
+      responses:
+        "200":
+          description: Studios page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  studios: { type: array, items: { $ref: "#/components/schemas/Studio" } }
+                  metadata: { $ref: "#/components/schemas/Metadata" }
+  /studio/{studioId}:
+    get:
+      tags: [Studios]
+      summary: Studio detail
+      x-evidence: ["c2:51", "c2:212", "c2:1015"]
+      parameters:
+        - $ref: "#/components/parameters/studioId"
+        - { name: include_addresses, in: query, schema: { type: boolean } }
+        - { name: include_categories, in: query, schema: { type: boolean } }
+        - { name: include_facilities, in: query, schema: { type: boolean } }
+        - { name: include_studio_photos, in: query, schema: { type: boolean } }
+        - { name: include_user_booking_limit, in: query, schema: { type: boolean } }
+        - { name: include_alerts, in: query, schema: { type: boolean } }
+        - $ref: "#/components/parameters/locale"
+      responses:
+        "200":
+          description: Studio
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  studio: { $ref: "#/components/schemas/Studio" }
+  /studio/{studioId}/opening_hour/schedule:
+    get:
+      tags: [Studios]
+      summary: Opening-hour occurrences with attendance info
+      x-evidence: ["c2:215", "c2:1018"]
+      parameters: [{ $ref: "#/components/parameters/studioId" }]
+      responses:
+        "200":
+          description: Schedule
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  schedule:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        start: { type: string, format: date-time }
+                        end: { type: string, format: date-time }
+                        is_all_day: { type: boolean }
+                        opening_hour: { type: object }
+                        studio_user_attendance_info: { type: object }
+  /studio/user_visit_limit:
+    # c3:56, c4:34/73/85: with studio_id + month, limits include type STUDIO (pill), MONTHLY, WELLNESS_MONTHLY, SIMULTANEOUS.
+    get:
+      tags: [Studios]
+      summary: Remaining visits per visit-limit
+      x-evidence: ["62"]
+      parameters: [{ $ref: "#/components/parameters/userId" }]
+      responses:
+        "200": { description: "`{limits:[{total,used,remaining,within_limit,resets_at,type,items}]}`" }
+  /studios:
+    get:
+      tags: [Studios]
+      summary: Legacy public studio list (v1, unauthenticated, ~101 studios)
+      security: []
+      servers: [{ url: https://api.bruce.app/v1 }]
+      responses:
+        "200": { description: "`{studios:[...]}`" }
+
+  /class:
+    get:
+      tags: [Classes]
+      summary: Class schedule (per city/day or per studio), paged
+      x-evidence: ["c2:20", "c2:214", "c2:1144"]
+      parameters:
+        - { name: studio_city_id, in: query, schema: { type: integer, example: 1 }, description: "1 = Stockholm" }
+        - { name: studio_id, in: query, schema: { type: integer } }
+        - { name: presentation_studio_id, in: query, schema: { type: integer } }
+        - { name: start_time_after, in: query, schema: { type: string, example: "2026-10-11T00:00:00" } }
+        - { name: start_time_before, in: query, schema: { type: string, example: "2026-10-12T00:00:00" } }
+        - { name: opening, in: query, schema: { type: boolean }, description: "true = opening-hour slots instead of classes" }
+        - { name: studio_status, in: query, schema: { type: string, example: live } }
+        - { name: include_booking_credit_costs, in: query, schema: { type: boolean } }
+        - { name: include_class_categories, in: query, schema: { type: boolean } }
+        - { name: include_absolute_times, in: query, schema: { type: boolean } }
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/nextCursor"
+        - $ref: "#/components/parameters/locale"
+      responses:
+        "200":
+          description: Classes page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  classes: { type: array, items: { $ref: "#/components/schemas/Class" } }
+                  metadata: { $ref: "#/components/schemas/Metadata" }
+  /class/{classId}:
+    get:
+      tags: [Classes]
+      summary: Class detail (shown before booking)
+      x-evidence: ["c2:50", "c2:58"]
+      parameters:
+        - { name: classId, in: path, required: true, schema: { type: integer } }
+        - { name: include_studio, in: query, schema: { type: boolean } }
+        - { name: include_studio_user_attendance_info, in: query, schema: { type: boolean } }
+        - $ref: "#/components/parameters/locale"
+      responses:
+        "200":
+          description: Class
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  class: { $ref: "#/components/schemas/Class" }
+
+  /booking:
+    get:
+      tags: [Booking]
+      summary: My bookings, paged
+      x-evidence: ["75", "86"]
+      parameters:
+        - $ref: "#/components/parameters/userId"
+        - { name: deleted, in: query, schema: { type: boolean, example: false } }
+        - { name: include_class, in: query, schema: { type: boolean } }
+        - { name: include_class_studio, in: query, schema: { type: boolean } }
+        - { name: reviewable, in: query, schema: { type: boolean } }
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/nextCursor"
+      responses:
+        "200":
+          description: Bookings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  bookings: { type: array, items: { $ref: "#/components/schemas/Booking" } }
+                  metadata: { $ref: "#/components/schemas/Metadata" }
+    post:
+      tags: [Booking]
+      summary: Book a class
+      x-evidence: ["c2:84"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateBookingRequest" }
+      responses:
+        "200":
+          description: Created booking
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  booking: { $ref: "#/components/schemas/Booking" }
+  /booking/{bookingId}:
+    delete:
+      tags: [Booking]
+      summary: Cancel a booking (soft delete)
+      x-evidence: ["c2:120"]
+      parameters:
+        - { name: bookingId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locale: { type: string, example: en }
+                include_user: { type: boolean }
+      responses:
+        "200":
+          description: Booking with `deleted:true`
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  booking: { $ref: "#/components/schemas/Booking" }
+  /booking/aggregate:
+    get:
+      tags: [Booking]
+      summary: Booking counts per day
+      x-evidence: ["70"]
+      parameters: [{ $ref: "#/components/parameters/userId" }]
+      responses:
+        "200": { description: "`{booking_aggregates:[{day,count}]}`" }
+  /booking/voucher:
+    get:
+      tags: [Booking]
+      summary: Booking vouchers
+      x-evidence: ["33"]
+      parameters: [{ name: owner_id, in: query, schema: { type: integer } }]
+      responses:
+        "200": { description: "`{booking_vouchers:[...]}`" }
+  /booking/offline/done:
+    post:
+      tags: [Booking]
+      summary: Sync offline check-ins (sent at app start)
+      description: |
+        Also the only write in capture 6 (areas session). Custom areas have no endpoint: the original app
+        keeps them on the device and filters client-side (c6 shows no area/zone/polygon request).
+      x-evidence: ["13", "47", "160", "c6:458", "c6:459", "c6:569"]
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/LocaleBody" }
+      responses:
+        "200": { description: Empty body }
+
+  /studio/check_in:
+    post:
+      tags: [Check-in]
+      summary: Check in at a studio door (from the door QR / beacon)
+      description: |
+        Door QR format: `stc://open-door?major=<MAJOR>&minor=<DOOR_ID>`.
+        `major` identifies the gym (matches studio `qr_code_id` = `stc:<MAJOR>`), `minor` the door.
+        For a drop-in gym the check-in creates the booking itself.
+      x-evidence: ["163"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CheckInRequest" }
+      responses:
+        "200":
+          description: Resulting booking(s)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CheckInResponse" }
+
+  /home_screen:
+    get:
+      tags: [Explore]
+      summary: Home sections (categories, spotlight, nearby gyms, new studios)
+      x-evidence: ["46"]
+      parameters:
+        - { name: coordinates, in: query, schema: { type: string, example: "59.31,18.06" } }
+        - $ref: "#/components/parameters/locale"
+      responses:
+        "200": { description: "`{sections:[{title,type,items}]}`" }
+  /category:
+    get:
+      tags: [Explore]
+      summary: Categories
+      x-evidence: ["19"]
+      parameters: [{ name: "filter[main][eq]", in: query, schema: { type: boolean } }]
+      responses:
+        "200": { description: "`{categories:[{id,code,icon,title,main,parent_id}]}`" }
+  /location/city:
+    get:
+      tags: [Explore]
+      summary: Cities
+      x-evidence: ["43"]
+      parameters:
+        - { name: code, in: query, schema: { type: string, example: STO } }
+        - { name: include_country, in: query, schema: { type: boolean } }
+      responses:
+        "200": { description: "`{cities:[{id,name,time_zone,coordinates,credit_price,booking_methods,country}]}`" }
+  /config:
+    get:
+      tags: [Explore]
+      summary: App config (minimum versions)
+      x-evidence: ["7"]
+      responses:
+        "200": { description: Config }
+
+  /user/{userId}:
+    get:
+      tags: [User]
+      summary: User profile
+      x-evidence: ["15"]
+      parameters: [{ $ref: "#/components/parameters/userIdPath" }]
+      responses:
+        "200": { description: "`{user:{id,email,first_name,last_name,...}}`" }
+    put:
+      tags: [User]
+      summary: Update profile
+      x-evidence: ["55", "c2:337"]
+      parameters: [{ $ref: "#/components/parameters/userIdPath" }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+      responses:
+        "200": { description: Updated user }
+  /membership/user_info:
+    get:
+      tags: [User]
+      summary: Membership, tier, available credits
+      x-evidence: ["14"]
+      parameters: [{ $ref: "#/components/parameters/userId" }]
+      responses:
+        "200": { description: Membership info }
+
+  /image/{transform}/{fileId}.jpg:
+    get:
+      tags: [Media]
+      summary: Image proxy (302 to Cloudinary)
+      description: |
+        Redirects to `https://res.cloudinary.com/dbo5hzaqa/image/upload/{transform}/{fileId}.jpg` (public, no auth).
+        `fileId` is a studio's `photo` / `studio_photos[].photo.file_id`.
+      security: []
+      x-evidence: ["58", "c2:1006"]
+      parameters:
+        - { name: transform, in: path, required: true, schema: { type: string, example: "c_fill,dpr_3,h_252,q_60,w_402" } }
+        - { name: fileId, in: path, required: true, schema: { type: string, example: z63qkfnoqry2dz7uzrkf } }
+      responses:
+        "302": { description: "Location: Cloudinary URL" }
+
+  /bookmark:
+    post:
+      tags: [Booking]
+      summary: Bookmark a class
+      x-evidence: ["c3:73"]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                class_id: { type: integer }
+                locale: { type: string }
+      responses:
+        "200": { description: "{bookmark:{id,user_id,class_id,created_at}}" }
+  /bookmark/{bookmarkId}:
+    delete:
+      tags: [Booking]
+      summary: Remove a bookmark (bookmark id)
+      x-evidence: ["c3:77"]
+      parameters:
+        - { name: bookmarkId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locale: { type: string }
+      responses:
+        "200": { description: "empty" }
+  /favorite:
+    get:
+      tags: [Studios]
+      summary: Favourites (all of them without studio_id [c5:39], or the state for one studio)
+      x-evidence: ["c3:88", "c3:117", "c5:39"]
+      parameters:
+        - { name: studio_id, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200": { description: "{favorites:[...]}" }
+    post:
+      tags: [Studios]
+      summary: Favourite a studio
+      x-evidence: ["c3:93"]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                studio_id: { type: integer }
+                locale: { type: string }
+      responses:
+        "200": { description: "{favorite:{id,studio_id,place_id,order}}" }
+  /favorite/{favoriteId}:
+    delete:
+      tags: [Studios]
+      summary: Unfavourite (favorite id)
+      x-evidence: ["c3:96"]
+      parameters:
+        - { name: favoriteId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locale: { type: string }
+      responses:
+        "200": { description: "empty" }
+  /standby:
+    get:
+      tags: [Booking]
+      summary: My waitlist entries
+      x-evidence: ["c2:474", "c3:18"]
+      parameters:
+        - { name: user_id, in: query, required: false, schema: { type: integer } }
+        - { name: class_start_time_after, in: query, required: false, schema: { type: string } }
+        - { name: include_class, in: query, required: false, schema: { type: boolean } }
+      responses:
+        "200": { description: "{standbys:[{id,class_id,class}]}" }
+    post:
+      tags: [Booking]
+      summary: Join a class waitlist
+      x-evidence: ["c3:65"]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                class_id: { type: integer }
+                locale: { type: string }
+      responses:
+        "200": { description: "{standby:{id,class_id,user_id,created_at}}" }
+  /standby/{standbyId}:
+    delete:
+      tags: [Booking]
+      summary: Leave a waitlist
+      x-evidence: ["c3:69"]
+      parameters:
+        - { name: standbyId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                locale: { type: string }
+      responses:
+        "200": { description: "{waitlist:{deleted:true},standby:{deleted:true}}" }
+  /review:
+    get:
+      tags: [Studios]
+      summary: Studio reviews with comments
+      x-evidence: ["c3:101", "c3:121", "c3:592"]
+      parameters:
+        - { name: studio_id, in: query, required: false, schema: { type: integer } }
+        - { name: comment, in: query, required: false, schema: { type: boolean } }
+        - { name: hidden, in: query, required: false, schema: { type: boolean } }
+        - { name: order_by, in: query, required: false, schema: { type: string } }
+        - { name: limit, in: query, required: false, schema: { type: integer } }
+        - { name: include_booking, in: query, required: false, schema: { type: boolean } }
+        - { name: include_booking_class, in: query, required: false, schema: { type: boolean } }
+        - { name: include_booking_user, in: query, required: false, schema: { type: boolean } }
+      responses:
+        "200": { description: "{reviews:[{id,rating,comment,created_at,booking:{class:{opening,title,start_time},user:{first_name,photo}}}]}" }
+  /friend_request/{requestId}/respond:
+    post:
+      tags: [Social]
+      summary: Accept/decline a friend request
+      x-evidence: ["c3:245"]
+      parameters:
+        - { name: requestId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                accept: { type: boolean }
+                include_friend_user: { type: boolean }
+                locale: { type: string }
+      responses:
+        "200": { description: "{}" }
+  /user/{userId}/notification_setting:
+    get:
+      tags: [Settings]
+      summary: Notification settings
+      x-evidence: ["c3:279", "c3:326"]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: "{notification_settings:[{id,marketing_email,marketing_push,marketing_sms,types:[{key,name,description,enabled}]}]}" }
+  /user/{userId}/notification_setting/{settingId}:
+    put:
+      tags: [Settings]
+      summary: Update marketing flags or push types (send only changed fields, or the full types array)
+      x-evidence: ["c3:319", "c3:327"]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: integer } }
+        - { name: settingId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                marketing_push: { type: boolean }
+                marketing_email: { type: boolean }
+                marketing_sms: { type: boolean }
+                types: { type: array }
+                locale: { type: string }
+      responses:
+        "200": { description: "{notification_setting:{...}}" }
+  /user/{userId}/calendar/{secret}.ics:
+    get:
+      tags: [User]
+      summary: Calendar subscription feed (URL contains the user secret; treat as a credential)
+      x-evidence: ["c3:341", "c3:370"]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: integer } }
+        - { name: secret, in: path, required: true, schema: { type: string } }
+      responses:
+        "200": { description: "text/calendar" }
+  /payment:
+    get:
+      tags: [Payments]
+      summary: Payment history (amounts in öre)
+      x-evidence: ["c2:388", "c3:454"]
+      parameters:
+        - { name: user_id, in: query, required: false, schema: { type: integer } }
+        - { name: next_cursor, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: "{payments:[{id,created_at,amount,original_amount,currency,type,status,admission}]}" }
+  /payment/{paymentId}/receipt.pdf:
+    get:
+      tags: [Payments]
+      summary: Receipt PDF
+      x-evidence: ["c3:536", "c3:549"]
+      parameters:
+        - { name: paymentId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: "application/pdf" }
+  /payment/collective/invoice.pdf:
+    get:
+      tags: [Payments]
+      summary: Collective invoice PDF
+      x-evidence: ["c3:543"]
+      parameters:
+        - { name: payment_ids, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: "application/pdf" }
+  /faq:
+    get:
+      tags: [User]
+      summary: FAQ entries
+      x-evidence: ["c3:407"]
+      responses:
+        "200": { description: "{faqs:[{id,section_id,question,answer}]}" }
+  /faq/section:
+    get:
+      tags: [User]
+      summary: FAQ sections
+      x-evidence: ["c3:410"]
+      responses:
+        "200": { description: "{sections:[{id,title,tags}]}" }
+  /search:
+    get:
+      tags: [Explore]
+      summary: Indexed search (studios/classes); hits are {id,index,type:STUDIO,fields:{id,name,city,distance,photo,qr_code_id,status}}
+      x-evidence: ["c3:603", "c3:605", "c5:423", "c5:424"]
+      parameters:
+        - { name: query, in: query, required: false, schema: { type: string } }
+        - { name: type, in: query, required: false, schema: { type: string } }
+        - { name: latitude, in: query, required: false, schema: { type: number } }
+        - { name: longitude, in: query, required: false, schema: { type: number } }
+        - { name: city_code, in: query, required: false, schema: { type: string } }
+        - { name: search_mode, in: query, required: false, schema: { type: string } }
+      responses:
+        "200": { description: "{result:[]}" }
+  /voucher/redeem:
+    post:
+      tags: [User]
+      summary: Redeem a voucher code
+      x-evidence: ["c3:275"]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string }
+                user_id: { type: integer }
+                locale: { type: string }
+      responses:
+        "200": { description: "voucher result or {errors:[...]}" }
+  /membership/info:
+    get:
+      tags: [User]
+      summary: Plan price for a tier/commitment (öre)
+      x-evidence: ["c2:426"]
+      parameters:
+        - { name: city_code, in: query, required: false, schema: { type: string } }
+        - { name: tier_code, in: query, required: false, schema: { type: string, enum: [BASE, BLACK, EPIC] } }
+        - { name: commitment_months, in: query, required: false, schema: { type: integer } }
+      responses:
+        "200": { description: "{membership_info:{original_price,original_flex_price,pre_pay_price,discounts,...}}" }
+  /user/{userId}/address:
+    get:
+      tags: [User]
+      summary: User addresses (primary/secondary)
+      x-evidence: ["c2:279", "c5:215", "c5:223"]
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: integer } }
+        - { name: include, in: query, required: false, schema: { type: string, example: address } }
+      responses:
+        "200": { description: "{user_addresses:[{id,address_id,primary,address:{address,city,zip_code,latitude,longitude,...}}]}" }
+components:
+  securitySchemes:
+    accessToken:
+      type: apiKey
+      in: header
+      name: X-Access-Token
+  parameters:
+    locale: { name: locale, in: query, schema: { type: string, example: en } }
+    limit: { name: limit, in: query, schema: { type: integer, example: 30 } }
+    nextCursor: { name: next_cursor, in: query, schema: { type: string }, description: "base64 cursor, e.g. `id::<n>`" }
+    userId: { name: user_id, in: query, schema: { type: integer } }
+    userIdPath: { name: userId, in: path, required: true, schema: { type: integer } }
+    studioId: { name: studioId, in: path, required: true, schema: { type: integer, example: 1724 } }
+  schemas:
+    LocaleBody:
+      type: object
+      properties:
+        locale: { type: string, example: en }
+    AuthenticateRequest:
+      type: object
+      required: [authenticator, email, password]
+      properties:
+        authenticator: { type: string, example: PASSWORD }
+        email: { type: string, example: "<EMAIL>" }
+        password: { type: string, example: "<PASSWORD>" }
+        locale: { type: string, example: en }
+    AuthenticateResponse:
+      type: object
+      properties:
+        user_id: { type: integer }
+        user_created: { type: boolean }
+        access_token: { type: string, description: 64 chars }
+        refresh_token: { type: string, description: 64 chars }
+        access_token_expires_at: { type: string, format: date-time }
+        refresh_token_expires_at: { type: string, format: date-time }
+        user_agent: { type: string }
+    Metadata:
+      type: object
+      properties:
+        pagination:
+          type: object
+          properties:
+            count: { type: integer }
+            limit: { type: integer }
+            offset: { type: integer }
+            next_offset: { type: integer }
+            next_cursor: { type: string, nullable: true }
+            prev_cursor: { type: string, nullable: true }
+        cache_expire_seconds: { type: integer }
+    Studio:
+      type: object
+      properties:
+        id: { type: integer, example: 1724 }
+        name: { type: string, example: STC Rosenlundsparken }
+        photo: { type: string, example: z63qkfnoqry2dz7uzrkf }
+        status: { type: string, example: LIVE }
+        city_id: { type: integer, example: 1 }
+        vicinity: { type: string, example: Södermalm }
+        rating:
+          type: object
+          properties:
+            total: { type: integer, example: 270 }
+            average: { type: integer, example: 470, description: "rating × 100" }
+            distribution: { type: object, additionalProperties: { type: integer } }
+        remote: { type: boolean }
+        tier_level: { type: integer }
+        qr_code_id: { type: string, example: "stc:13994" }
+        has_classes: { type: boolean }
+        has_openings: { type: boolean }
+        has_address: { type: boolean }
+        time_zone: { type: string, example: Europe/Stockholm }
+        integration_type: { type: string, nullable: true }
+        integration_door_type: { type: string, example: brp }
+        deleted: { type: boolean }
+        requires_additional_cost: { type: boolean }
+        studio_addresses:
+          type: array
+          items:
+            type: object
+            properties:
+              main: { type: boolean }
+              address:
+                type: object
+                properties:
+                  address: { type: string, example: "Bjälbogatan 26, 118 66 Stockholm, Sweden" }
+                  city: { type: string }
+                  country_code: { type: string }
+                  latitude: { type: number }
+                  longitude: { type: number }
+        studio_categories:
+          type: array
+          items:
+            type: object
+            properties:
+              main: { type: boolean }
+              category:
+                type: object
+                properties:
+                  id: { type: integer }
+                  code: { type: string, example: gym }
+                  title: { type: string, example: Gym }
+        studio_photos:
+          type: array
+          items:
+            type: object
+            properties:
+              main: { type: boolean }
+              photo:
+                type: object
+                properties:
+                  file_id: { type: string }
+                  format: { type: string, example: JPG }
+        visit_limit:
+          type: object
+          properties:
+            description: { type: string, example: STC Unlimited }
+            type: { type: string, example: GENERAL }
+            items:
+              type: array
+              items:
+                type: object
+                properties:
+                  label: { type: string, example: BASE }
+                  limit: { type: integer, example: 0 }
+                  period: { type: string, example: MONTHLY }
+    Class:
+      type: object
+      properties:
+        id: { type: integer }
+        studio_id: { type: integer }
+        presentation_studio_id: { type: integer }
+        title: { type: string }
+        description: { type: string }
+        start_time: { type: string, format: date-time }
+        end_time: { type: string, format: date-time }
+        time_zone: { type: string }
+        spots: { type: integer }
+        available_spots: { type: integer }
+        canceled: { type: boolean }
+        instructor: { type: object, nullable: true }
+        bookable_earliest: { type: string, format: date-time }
+        bookable_latest: { type: string, format: date-time }
+        unbookable_latest: { type: string, format: date-time }
+        auto_check_in: { type: boolean }
+        early_check_in_minutes: { type: integer }
+        late_check_in_minutes: { type: integer }
+        booking_credit_costs:
+          type: object
+          description: Credits per tier
+          properties:
+            BASE: { type: integer }
+            BLACK: { type: integer }
+            EPIC: { type: integer }
+            FREE: { type: integer }
+    Booking:
+      type: object
+      properties:
+        id: { type: integer }
+        user_id: { type: integer }
+        studio_id: { type: integer }
+        class_id: { type: integer, nullable: true }
+        place_id: { type: integer, nullable: true }
+        opening_hour_occurrence_id: { type: integer, nullable: true }
+        checked_in_at: { type: string, format: date-time, nullable: true }
+        booking_credits: { type: integer }
+        integration_type: { type: string, nullable: true }
+        deleted: { type: boolean }
+        deleted_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+    CreateBookingRequest:
+      type: object
+      required: [class_id]
+      properties:
+        class_id: { type: integer }
+        booked_via: { type: string, example: HOMESCREEN_SPOTLIGHT, description: Analytics source tag }
+        include_user: { type: boolean }
+        locale: { type: string, example: en }
+    CheckInRequest:
+      type: object
+      required: [qr_code_id, meta]
+      properties:
+        locale: { type: string, example: en }
+        qr_code_id: { type: string, example: "stc:13994" }
+        meta:
+          type: object
+          properties:
+            major: { type: string, example: "13994" }
+            minor: { type: string, example: "118661" }
+            door_id: { type: string, example: "118661" }
+        include_class: { type: boolean, example: true }
+    CheckInResponse:
+      type: object
+      properties:
+        bookings: { type: array, items: { $ref: "#/components/schemas/Booking" } }
+        payable_openings: { type: array, items: { type: object } }
+        payable_opening_hours: { type: array, items: { type: object } }
+        integration_door_data: { type: object, nullable: true }

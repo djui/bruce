@@ -38,9 +38,9 @@ struct InviteSheet: View {
             }
             ScrollView {
                 VStack(spacing: 0) {
-                    Text("Invite a friend to Bruce Studios").font(.system(size: 36, weight: .bold)).multilineTextAlignment(.center)
+                    Text("Invite a friend").font(.system(size: 36, weight: .bold)).multilineTextAlignment(.center)
                         .padding(.top, 30).padding(.horizontal, 30)
-                    Text("Get 200 SEK/NOK/DKK off your next payment when a friend becomes a member within 30 days. They'll also get 30% off their first 3 months. The discounts are automatically activated when your friend uses your invite code.\n\nAs a member, you can share invite codes for a free workout at your membership level. Each code can be used once by someone who is not yet a member.")
+                    Text(Copy.inviteIntro(open: m.openInvites))
                         .font(.system(size: 16, weight: .light)).multilineTextAlignment(.center).lineSpacing(3)
                         .padding(.horizontal, 30).padding(.top, 22).padding(.bottom, 40)
                     SectionHeaderBar(text: "Invites")
@@ -54,7 +54,7 @@ struct InviteSheet: View {
                                 Image(systemName: "gift").font(.system(size: 20, weight: .light))
                                 Text(v.code).font(.system(size: 17, weight: .semibold))
                                 Spacer()
-                                ShareLink(item: "Train for free at Bruce Studios with my invite code: \(v.code)") {
+                                ShareLink(item: Copy.shareInvite(v.code)) {
                                     HStack(spacing: 10) {
                                         Image(systemName: "square.and.arrow.up").font(.system(size: 17))
                                         Text("Share").font(.system(size: 16, weight: .semibold))
@@ -151,8 +151,8 @@ struct SupportSheet: View {
                     Button { m.flash("Sending messages is not available here") } label: {
                         HStack {
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("Send us a message").font(.system(size: 17, weight: .semibold))
-                                Text("We typically reply within a day").font(.system(size: 16)).foregroundStyle(Theme.tertiary)
+                                Text("Contact Bruce Studios").font(.system(size: 17, weight: .semibold))
+                                Text("Through brucestudios.com or the official app").font(.system(size: 16)).foregroundStyle(Theme.tertiary)
                             }
                             Spacer()
                             Image(systemName: "paperplane.fill").font(.system(size: 18))
@@ -171,7 +171,7 @@ struct SupportSheet: View {
                             .padding(.horizontal, 14).frame(height: 54)
                             .background(RoundedRectangle(cornerRadius: 8).fill(Color(white: 0.96)))
                         }.buttonStyle(.plain)
-                        ForEach(helpArticles, id: \.self) { a in
+                        ForEach(Copy.helpTopics.prefix(4), id: \.self) { a in
                             row(a, icon: "chevron.right", weight: .regular) { m.pushSheet(.help) }
                         }
                     }
@@ -219,14 +219,14 @@ struct HelpSheet: View {
                 VStack(spacing: 0) {
                     Button { m.flash("Sending messages is not available here") } label: {
                         HStack {
-                            Text("Didn't find the answer to your question?\nWrite a message to us.").font(.system(size: 16, weight: .light))
+                            Text("Can't find what you need?\nContact Bruce Studios support.").font(.system(size: 16, weight: .light))
                                 .lineSpacing(4)
                             Spacer()
                             Image(systemName: "bubble.left.and.bubble.right").font(.system(size: 22, weight: .light))
                         }
                         .padding(.vertical, 18).padding(.leading, 6).padding(.trailing, 10).contentShape(Rectangle())
                     }.buttonStyle(.plain)
-                    ForEach(helpTopics, id: \.self) { t in
+                    ForEach(Copy.helpTopics, id: \.self) { t in
                         Divider()
                         Button { m.flash("Help articles are not available here") } label: {
                             HStack {
@@ -255,11 +255,11 @@ struct SettingsView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     Button { m.pushSheet(.selectCity) } label: { InfoRow(title: "Change city", subtitle: m.cityName) }.buttonStyle(.plain)
-                    toggleRow("Bruce Studios Social", (m.social ?? true) ? "You're visible to all users" : "You're only visible to friends",
+                    toggleRow("Social", (m.social ?? true) ? "Everyone can see your profile" : "Only friends can see your profile",
                               isOn: Binding(get: { m.social ?? true }, set: { m.setSocial($0) }), help: true)
-                    toggleRow("Location services", "To check in and see nearby studios", isOn: m.pref("location"))
+                    toggleRow("Location services", "Used for distances and check-in suggestions", isOn: m.pref("location"))
                     Button { copyCalendarURL() } label: {
-                        InfoRow(title: "Calendar Subscription", subtitle: "Show bookings in your calendar")
+                        InfoRow(title: "Calendar Subscription", subtitle: "Subscribe to your bookings in Calendar")
                     }.buttonStyle(.plain)
                     Button { m.prefs["pushSetupDone"] = true; m.pushSheet(.push) } label: {
                         InfoRow(title: "Push notifications", subtitle: m.prefs["pushSetupDone"] == true ? "On" : "Setup needed") {
@@ -272,25 +272,25 @@ struct SettingsView: View {
                         }
                     }.buttonStyle(.plain)
                     Button { m.pushSheet(.info("Terms and conditions")) } label: {
-                        InfoRow(title: "Terms and conditions", subtitle: "Everything you need to know")
+                        InfoRow(title: "Terms and conditions", subtitle: "Bruce Studios' terms")
                     }.buttonStyle(.plain)
                     Button { m.pushSheet(.info("Privacy policy")) } label: {
-                        InfoRow(title: "Privacy policy", subtitle: "Our privacy policy")
+                        InfoRow(title: "Privacy policy", subtitle: "How Bruce Studios handles your data")
                     }.buttonStyle(.plain)
                     Button { m.pushSheet(.info("Open source licenses")) } label: {
-                        InfoRow(title: "Open source licenses", subtitle: "Software that helped us")
+                        InfoRow(title: "Open source licenses", subtitle: "Third-party notices")
                     }.buttonStyle(.plain)
                     Button { m.flash("Clear data is not available here") } label: {
-                        InfoRow(title: "Clear data", subtitle: "May help to resolve some issues")
+                        InfoRow(title: "Clear data", subtitle: "Reset locally cached data")
                     }.buttonStyle(.plain)
                     Text("MARKETING").font(.system(size: 15, weight: .light)).foregroundStyle(Theme.tertiary)
                         .padding(.horizontal, Theme.gutter).padding(.top, 34)
-                    Text("Bruce Studios may occasionally send you offers, news and inspiration.")
+                    Text(Copy.marketing)
                         .font(.system(size: 16, weight: .light)).padding(.horizontal, Theme.gutter).padding(.top, 14).padding(.bottom, 8)
-                    simpleToggle("Push notifications in the app", isOn: marketing("marketing_push", \.marketingPush))
+                    simpleToggle("Push", isOn: marketing("marketing_push", \.marketingPush))
                     simpleToggle("Email", isOn: marketing("marketing_email", \.marketingEmail))
                     simpleToggle("SMS", isOn: marketing("marketing_sms", \.marketingSms))
-                    Text("Version 14.4.2 (538)").font(.system(size: 14, weight: .light)).foregroundStyle(Theme.tertiary)
+                    Text("BruceMacOS · unofficial client, not affiliated with Bruce Studios").font(.system(size: 14, weight: .light)).foregroundStyle(Theme.tertiary)
                         .frame(maxWidth: .infinity).padding(.vertical, 40)
                 }
             }
@@ -363,16 +363,18 @@ struct PushSettingsView: View {
             NavBar(title: "Push notifications", leading: .back, action: { m.popSheet() }) {
                 IconButton(system: "info.circle", size: 22) { m.pushSheet(.pushInfo) }
             }
-            row("Booking reminders", "Be reminded of upcoming bookings", "booking_reminder")
-            row("Check In", "A reminder for when it is time to check in", "check_in_reminder")
-            row("New studios", "A new studio has been added", "new_studio")
+            row("Booking reminders", "booking_reminder")
+            row("Check in", "check_in_reminder")
+            row("New studios", "new_studio")
             Spacer()
         }
         .task { if m.notificationSetting == nil { await m.loadSettings() } }
     }
     /// Push types from GET notification_setting; flipping one PUTs the whole `types` array (c3:327).
-    func row(_ t: String, _ s: String, _ k: String) -> some View {
-        VStack(spacing: 0) {
+    /// Subtitle from the API's notification type description, else our own fallback.
+    func row(_ t: String, _ k: String) -> some View {
+        let s = m.notificationSetting?.types?.first { $0.key == k }?.description ?? Copy.pushSubtitle(k)
+        return VStack(spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(t).font(.system(size: 17, weight: .medium))

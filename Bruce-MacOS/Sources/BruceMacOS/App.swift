@@ -21,7 +21,7 @@ struct BruceMacOSApp: App {
     @State private var model = AppModel()
     @StateObject private var location = LocationProvider()
     var body: some Scene {
-        WindowGroup("Bruce Studios") {
+        WindowGroup("Brüce (unofficial)") {
             RootView()
                 .environment(model)
                 .frame(width: Theme.windowSize.width, height: Theme.windowSize.height)

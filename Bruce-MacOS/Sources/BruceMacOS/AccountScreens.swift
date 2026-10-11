@@ -78,7 +78,7 @@ struct EditProfileView: View {
                     darkField("Secondary address", text: $secondary).padding(.top, 14)
                     HStack(alignment: .top, spacing: 18) {
                         Image(systemName: "info.circle").font(.system(size: 22, weight: .ultraLight))
-                        Text("We'll use your location to recommend workouts close to where you are.")
+                        Text(Copy.locationUse)
                             .font(.system(size: 16, weight: .light)).foregroundStyle(Color.white.opacity(0.45))
                     }
                     .padding(.top, 26)
@@ -124,7 +124,7 @@ struct PauseMembershipView: View {
                 DarkNavBar(title: "Pause membership") {
                     IconButton(system: "info.circle", size: 22) { m.flash("Pauses apply from your next billing period") }
                 }
-                Text("You can pause your membership up to 60 days per calendar year, distributed over 2 pause periods. You choose how to distribute your pause days over the pause periods.")
+                Text(Copy.pauseRules(m.membership))
                     .font(.system(size: 17, weight: .light)).lineSpacing(3).padding(.horizontal, 16).padding(.top, 20)
                 HStack(spacing: 20) {
                     box("Pause days", daysLeft)
@@ -340,13 +340,13 @@ struct MembershipPlansView: View {
             }
             .buttonStyle(.plain)
             VStack(alignment: .leading, spacing: 22) {
-                feature("\(plan.studios) studios in \(m.cityName)", "and 950+ studios in the Nordics.", info: true)
-                feature("Unlimited visits to STC", "270+ STC-gyms in Sweden")
-                feature("\(plan.bookings) bookings at a time", nil)
-                if plan.wellness > 0 { feature("Access to Wellness studios", "Up to \(plan.wellness) Wellness visits / month", info: true) }
+                feature("\(m.planStudioCount(plan.code) ?? plan.studios) studios in \(m.cityName)", m.studios.isEmpty ? nil : "\(m.studios.count) studios in the country", info: true)
+                feature("Unlimited visits at STC gyms", m.planUnlimitedCount(plan.code).map { "\($0) studios with unlimited visits in \(m.cityName)" })
+                feature("\(isCurrent ? (m.simultaneousLimit ?? plan.bookings) : plan.bookings) bookings at a time", nil)
+                if plan.wellness > 0 { feature("Access to Wellness studios", "Up to \(isCurrent ? (m.wellnessLimit?.total ?? plan.wellness) : plan.wellness) Wellness visits / month", info: true) }
             }
             .padding(.top, 10)
-            Text("No sign up fee").font(.system(size: 15, weight: .light)).padding(.top, 14)
+            Text("No joining fee").font(.system(size: 15, weight: .light)).padding(.top, 14)
         }
         .padding(24)
         .background(RoundedRectangle(cornerRadius: 6).fill(Theme.darkCard))

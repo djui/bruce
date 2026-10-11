@@ -678,7 +678,7 @@ struct NewAreaSheet: View {
         .ignoresSafeArea(edges: .bottom)
         .overlay(alignment: .top) {
             Text(drawing ? "Draw the outline of your area with one finger." :
-                    "Zoom in on the area you would like to limit to. Click save to select the entire area, or draw an area by hand.")
+                    Copy.areaHint)
                 .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center).foregroundStyle(.white)
                 .padding(14).frame(maxWidth: .infinity)
                 .background(Color.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 14))

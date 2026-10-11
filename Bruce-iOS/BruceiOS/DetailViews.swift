@@ -212,7 +212,7 @@ struct BookingRulesSheet: View {
                         RuleRow(icon: "calendar.badge.minus", title: "Late cancellation", text: "Cancel after \(BookingRules.long(r.lateCancel))")
                         RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation", text: "Cancel after \(BookingRules.long(r.shortNotice))")
                         RuleRow(icon: "calendar.badge.minus", title: "Last-minute cancellation", text: "Cancel after \(BookingRules.long(r.lastMinute))")
-                        RuleRow(icon: "calendar.badge.exclamationmark", title: "No-show", text: "Did not check-in at the studio.")
+                        RuleRow(icon: "calendar.badge.exclamationmark", title: "No-show", text: Copy.noShow)
                     }
                     .padding(18)
                     .glassEffect(.regular, in: .rect(cornerRadius: 26))
@@ -224,7 +224,7 @@ struct BookingRulesSheet: View {
                         }
                     }
                     .disabled(m.loading).padding(.top, 24)
-                    Label("3 strikes and your class bookings are blocked for 14 days." + (m.unblockPriceKr.map { " You can remove the block at any time for \($0) kr." } ?? ""),
+                    Label(Copy.strikeFooter(unlockPrice: m.unblockPriceKr),
                           systemImage: "info.circle")
                         .font(.system(size: 14)).foregroundStyle(Theme.secondary).padding(.top, 20)
                 }
@@ -352,7 +352,7 @@ struct StudioHours {
             if e.isAllDay == true { return "Solo training open all day" }
             return closingSoon ? "Solo training ends at \(BruceDate.time(e.endDate))" : "Solo training until \(BruceDate.time(e.endDate))"
         }
-        return "Currently closed for solo training"
+        return "Closed for solo training right now"
     }
     var color: Color {
         switch state {
@@ -755,7 +755,7 @@ struct CheckoutSheet: View {
                     Text(studio?.name ?? "").foregroundStyle(.white.opacity(0.7))
                     Divider().overlay(.white.opacity(0.2))
                     Text("• \(BruceDate.format(today?.startDate, "EEEE, MMMM d")), \(BruceDate.time(today?.startDate)) - \(BruceDate.time(today?.endDate))")
-                    Text("• This class will only be refunded if it is cancelled in time")
+                    Text(Copy.refundRule)
                     Divider().overlay(.white.opacity(0.2))
                     HStack { Text("Total").fontWeight(.bold); Spacer(); Text("SEK \(price)").fontWeight(.bold) }
                 }

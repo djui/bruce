@@ -173,7 +173,7 @@ struct SearchSheet: View {
             }
             .padding(.horizontal, Theme.gutter).padding(.vertical, 12)
             if query.isEmpty {
-                EmptyState(system: "magnifyingglass", text: "Find studios and classes by searching their names, instructors and categories.")
+                EmptyState(system: "magnifyingglass", text: Copy.searchHint)
             } else if studioHits.isEmpty && classHits.isEmpty {
                 EmptyState(system: "magnifyingglass", text: "No results for \u{201C}\(query)\u{201D}.")
             } else {
@@ -322,7 +322,7 @@ struct NewAreaSheet: View {
             }
             .overlay(alignment: .top) {
                 Text(drawing ? "Drag with the mouse to draw the outline of your area." :
-                        "Zoom in on the area you would like to limit to. Click save to select the entire area, or draw an area by hand.")
+                        Copy.areaHint)
                     .font(.system(size: 16)).foregroundStyle(.white).multilineTextAlignment(.center)
                     .padding(.horizontal, 22).padding(.vertical, 14).frame(maxWidth: .infinity)
                     .background(RoundedRectangle(cornerRadius: 10).fill(Color(white: 0.25).opacity(0.95)))

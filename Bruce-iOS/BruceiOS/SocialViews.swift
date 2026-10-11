@@ -72,10 +72,10 @@ struct MyClassesView: View {
                         if m.bookings.isEmpty { EmptyState(system: "calendar.badge.checkmark", text: "You have no bookings.") }
                         else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } }) }
                     case 1:
-                        if m.standbys.isEmpty { EmptyState(system: "bell", text: "You are not currently on any waitlist.") }
+                        if m.standbys.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
                         else { list(m.standbys.compactMap { s in s.class.map { (s.id, $0, nil) } }, badge: "Waitlist") }
                     default:
-                        if m.bookmarkedClasses.isEmpty { EmptyState(system: "bookmark", text: "You don't have any bookmarked classes.") }
+                        if m.bookmarkedClasses.isEmpty { EmptyState(system: "bookmark", text: "No bookmarked classes yet.") }
                         else { list(m.bookmarkedClasses.map { ($0.id, $0, nil) }) }
                     }
                 } header: {

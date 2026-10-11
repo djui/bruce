@@ -1,6 +1,6 @@
 import Foundation
 
-// Platform-neutral helpers shared by Bruce-MacOS and Bruce-iOS (booking rules, formatting, static copy).
+// Platform-neutral helpers shared by Bruce-MacOS and Bruce-iOS (booking rules, formatting). UI texts: Copy.swift.
 
 /// Booking-rule times derived from class fields (see API.md "Booking rules").
 struct BookingRules {
@@ -49,41 +49,21 @@ func wellnessQuota(_ tier: String) -> Int {
 
 struct PlanInfo {
     let code: String
-    let blurb: String
     let annual: Int      // SEK / month, 12-month commitment
     let monthly: Int     // SEK / month, no commitment
     let studios: Int
     let bookings: Int
     let wellness: Int
-    /// Fallbacks from the app screenshots (Oct 2026, Stockholm); live prices come from GET /v52/membership/info.
+    var blurb: String { Copy.planBlurb(code) }
+    /// Offline fallbacks (Stockholm, Oct 2026). Live prices come from GET /v52/membership/info, studio counts from
+    /// the studios' `visit_limit`, and the current plan's limits from GET /v52/studio/user_visit_limit.
     static let all: [PlanInfo] = [
-        PlanInfo(code: "BASE", blurb: "Best for those who want simple, reliable training and a consistent weekly routine.",
-                 annual: 599, monthly: 699, studios: 304, bookings: 3, wellness: 0),
-        PlanInfo(code: "BLACK", blurb: "Best for those who want more choice, greater flexibility, and the option to mix training with wellness.",
-                 annual: 999, monthly: 1099, studios: 375, bookings: 4, wellness: 4),
-        PlanInfo(code: "EPIC", blurb: "Best for those who want total freedom, maximum access, and a fully flexible fitness and wellness lifestyle.",
-                 annual: 1499, monthly: 1699, studios: 380, bookings: 5, wellness: 8),
+        PlanInfo(code: "BASE", annual: 599, monthly: 699, studios: 304, bookings: 3, wellness: 0),
+        PlanInfo(code: "BLACK", annual: 999, monthly: 1099, studios: 375, bookings: 4, wellness: 4),
+        PlanInfo(code: "EPIC", annual: 1499, monthly: 1699, studios: 380, bookings: 5, wellness: 8),
     ]
 }
 
 func isValidEmail(_ s: String) -> Bool {
     s.range(of: #"^[^@\s]+@[^@\s]+\.[^@\s]+$"#, options: .regularExpression) != nil
 }
-
-let howItWorksText = [
-    "As a Bruce Studios member, you can share invites for a free workout within your membership level. Users with credits but no membership can not send any invites.",
-    "Each invite code is unique and can only be used once by the person who is not yet a Bruce Studios member. The free workout can be an instructor-led class or an open training at, for example, a gym.",
-    "The free workout can be used no later than 30 days after the code has been registered. Anyone who is not yet a member can be invited to a free workout once every 3 months.",
-    "If a friend you invite gets a Bruce Studios membership, your invites will be filled up to 3 new ones.",
-    "(A few studios are exceptions to invite codes and can't be booked for free workouts within this program.)",
-]
-
-let helpArticles = ["Identification – BankID", "Cancellation rules - Membership", "Studentrabatt", "Pausa medlemskap"]
-let helpTopics = ["About us and our memberships", "Annual Membership", "Booking and checking in to classes", "Bruce Studios x STC",
-                  "Change, pause or cancel membership", "Invites, discounts and gift cards", "Occupational health",
-                  "Payments & receipts", "Trial", "Workout limits"]
-
-let pushInfoText = [
-    "By using these settings, you can decide what types of notifications you want to receive. Most of them are sent directly to your phone, but the most important ones are also sent to your email address.",
-    "Note: The settings do not affect the notification center on the home screen.",
-]

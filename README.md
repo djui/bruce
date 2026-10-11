@@ -3,11 +3,33 @@
 Native SwiftUI clients for the [Bruce Studios](https://www.brucestudios.com) fitness membership (Sweden, Norway,
 Denmark), plus a reverse-engineered map of the app's v52 HTTP API.
 
+**Project page: [djui.github.io/bruce](https://djui.github.io/bruce/)** · [API viewer](https://djui.github.io/bruce/api/)
+
 > [!IMPORTANT]
 > **Unofficial: not affiliated with or endorsed by Bruce Studios AB.** "Bruce Studios" and "Bruce" are
 > trademarks of Bruce Studios AB. This is a personal hobby project. It is not the Bruce Studios app, is not
 > supported by Bruce Studios, and may stop working whenever their API changes. You need your own Bruce
 > Studios membership to use it.
+
+## Screenshots
+
+Captured in [demo mode](#demo-mode-developer-switch) with fictional data. They follow your light or
+dark setting on GitHub; every screen is in [`docs/screenshots/`](docs/screenshots) in both appearances.
+
+<p align="center">
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-home-light.webp"><img src="docs/screenshots/iphone-home-dark.webp" width="200" alt="Home screen with spotlight, categories and nearby gyms"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-explore-light.webp"><img src="docs/screenshots/iphone-explore-dark.webp" width="200" alt="Explore tab listing studios with filter chips"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-studio-light.webp"><img src="docs/screenshots/iphone-studio-dark.webp" width="200" alt="Studio page with Show ticket, opening status and facilities"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-detail-light.webp"><img src="docs/screenshots/iphone-detail-dark.webp" width="200" alt="Class page with booking windows and a Book button"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-quickcheckin-light.webp"><img src="docs/screenshots/iphone-quickcheckin-dark.webp" width="200" alt="Quick check-in sheet suggesting the last visited studio"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-drawarea-light.webp"><img src="docs/screenshots/iphone-drawarea-dark.webp" width="200" alt="Map with a hand-drawn custom area"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-mybookings-light.webp"><img src="docs/screenshots/iphone-mybookings-dark.webp" width="200" alt="My classes with two bookings"></picture>
+</p>
+
+<p align="center">
+<img src="docs/screenshots/mac-explore.webp" width="240" alt="macOS window showing the Explore list">
+<img src="docs/screenshots/mac-studio.webp" width="240" alt="macOS window showing a studio page">
+</p>
 
 ## What's in here
 
@@ -65,6 +87,7 @@ A 390×780 phone-sized window that recreates the mobile app on the Mac, includin
 ├── API.md                  Human-readable API map, with evidence references
 ├── openapi.yaml            OpenAPI 3.0 description of the same endpoints
 ├── swagger.html            Offline-friendly Swagger UI viewer (spec embedded)
+├── docs/                   GitHub Pages site: landing page, screenshots, api/ (Swagger UI + openapi.yaml copy)
 ├── Shared/BruceCore/       Shared Swift code (API, models, AppModel, TokenStore, logic, demo data)
 ├── Bruce-MacOS/            SwiftPM package, executable target BruceMacOS
 │   ├── Package.swift
@@ -110,10 +133,10 @@ Simulator builds need no signing setup. To run on a device, copy `Config/Local.x
 
 ### Demo mode (developer switch)
 
-`BRUCE_DEMO=1` runs either app fully offline with fictional placeholder data: no API calls, no remote
-images, no map tiles. Book, cancel and check-in only change local state. `BRUCE_SCREEN=<name>` opens a
+`BRUCE_DEMO=1` runs either app with fictional placeholder data: no API calls, no remote images, and no
+map tiles except on the custom-area drawing map, which needs Apple Maps to draw on. Book, cancel and check-in only change local state. `BRUCE_SCREEN=<name>` opens a
 specific screen (`explore`, `classes`, `studio`, `detail`, `checkin`, `friends`, `myclasses`, `account`,
-`settings`, `welcome`, …; the full list is in [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)).
+`settings`, `welcome`, `mybookings`, …; the full list is in [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)).
 Demo mode is not reachable from the UI.
 
 ```sh
@@ -209,8 +232,11 @@ The [MIT license](LICENSE) covers **only the code and documentation written for 
 - The apps load studio names, descriptions, photos, schedules and reviews **at runtime** from Bruce
   Studios' servers. None of that content is redistributed here. The studio photo IDs, studio and door IDs
   and the public studio address used as examples identify public places, not people.
-- Some UI wording, such as rules and help texts, follows the official app so that the screens match. It
-  remains Bruce Studios' content.
+- All help, rule and policy texts are written for this project in its own words
+  ([`Shared/BruceCore/Copy.swift`](Shared/BruceCore/Copy.swift)). Where the API returns the facts (strike-unblock
+  price, pause allowance, free unlocks, plan prices and limits, invite codes, notification descriptions), the
+  texts are built from that live data. Short generic labels such as "Book" or "Check in" are kept.
+- The landing page and screenshots in [`docs/`](docs) show only demo-mode data and an original "Ü" mark.
 - **Trademark-sensitive asset:** the iOS app icon
   ([`Bruce-iOS/BruceiOS/Assets.xcassets/AppIcon.appiconset`](Bruce-iOS/BruceiOS/Assets.xcassets/AppIcon.appiconset))
   is an original rendering generated by [`scripts/make-icon.swift`](Bruce-iOS/scripts/make-icon.swift): a
@@ -226,7 +252,8 @@ The [MIT license](LICENSE) covers **only the code and documentation written for 
 - **Apple** for SwiftUI, Liquid Glass, SF Symbols (used for all icons, under Apple's SF Symbols license
   terms), MapKit, AVFoundation and Vision.
 - **[Charles Proxy](https://www.charlesproxy.com)** by Karl von Randow, used to observe the traffic.
-- **[Swagger UI](https://github.com/swagger-api/swagger-ui)** (Apache 2.0), loaded by `swagger.html`.
+- **[Swagger UI](https://github.com/swagger-api/swagger-ui)** (Apache 2.0), loaded by `swagger.html` and the
+  [online API viewer](https://djui.github.io/bruce/api/).
 - **Author:** Uwe Dauernheim ([@djui](https://github.com/djui)).
 - Built with **[Claude Code](https://claude.com/claude-code)**.
 

@@ -58,10 +58,10 @@ extension AppModel {
         """)
         let classes = dec([BruceAPI.BruceClass].self, """
         [{"id":9001,"studio_id":1489,"title":"High Intensity","start_time":"\(at(1, 11, 30))","end_time":"\(at(1, 12, 15))","spots":20,"available_spots":2,
-          "instructor":"Instructor A","description":"A calm and serene yoga class (placeholder description).",
+          "instructor":"Instructor A","description":"A slow-paced yoga class (placeholder description).",
           "bookable_latest_time":"\(at(1, 11, 20))","unbookable_latest_time":"\(at(0, 23, 30))","unbookable_latest":43200,"early_check_in_minutes":30,"late_check_in_minutes":5,
           "class_categories":[{"category_id":12,"main":true}]},
-         {"id":9004,"studio_id":1724,"title":"Power Up: Full Body","start_time":"\(at(0, 21, 0))","end_time":"\(at(0, 21, 45))","instructor":"Instructor B","available_spots":3},
+         {"id":9004,"studio_id":1724,"title":"Full Body Strength","start_time":"\(at(0, 21, 0))","end_time":"\(at(0, 21, 45))","instructor":"Instructor B","available_spots":3},
          {"id":9005,"studio_id":1489,"title":"Hatha Flow","start_time":"\(at(0, 22, 0))","end_time":"\(at(0, 23, 30))","instructor":"Instructor C","available_spots":8,"class_categories":[{"category_id":2,"main":true}]},
          {"id":9008,"studio_id":1724,"title":"Functional","start_time":"\(at(0, 23, 25))","end_time":"\(at(0, 23, 59))","spots":12,"available_spots":0,
           "instructor":"Instructor F","bookable_latest_time":"\(at(0, 23, 15))","unbookable_latest_time":"\(at(0, 11, 25))","early_check_in_minutes":60,"late_check_in_minutes":10,
@@ -81,6 +81,8 @@ extension AppModel {
         friendsBookings = dec([BruceAPI.FriendBooking].self, #"[{"id":1,"user_id":1,"class_id":9006},{"id":2,"user_id":2,"class_id":9001}]"#).map { b in
             BruceAPI.FriendBooking(id: b.id, userId: b.userId, classId: b.classId, class: classDetails[b.classId ?? 0])
         }
+        // Public city facts (centre, strike-unblock price) so the policy texts show their API-driven values.
+        cities = dec([BruceAPI.City].self, #"[{"id":1,"name":"Stockholm","code":"STO","coordinates":{"latitude":59.3293,"longitude":18.0686},"user_strike_block_un_lock_price":14000}]"#)
         invites = dec([BruceAPI.Voucher].self, #"[{"id":1,"code":"demo01"},{"id":2,"code":"demo02"},{"id":3,"code":"demo03"},{"id":4,"code":"demo04","user_id":1}]"#)
         notificationsSeenAt = Date().addingTimeInterval(-3600 * 30)
         notifications = dec([BruceAPI.BruceNotification].self, """
@@ -152,7 +154,7 @@ extension AppModel {
         [{"id":1,"rating":2,"comment":"Clean and quiet in the mornings.","created_at":"2026-03-05T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Alex"}}},
          {"id":2,"rating":5,"comment":"Good machines, friendly vibe.","created_at":"2026-03-03T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Sam"}}},
          {"id":3,"rating":4,"comment":"Busy after work, fine otherwise.","created_at":"2026-03-02T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Robin"}}},
-         {"id":4,"rating":3,"comment":"Placeholder review text for the demo.","created_at":"2026-02-08T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Alexandra Maria Josefine"}}}]
+         {"id":4,"rating":3,"comment":"Placeholder review text for the demo.","created_at":"2026-02-08T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Exampleina Placeholder-Longname"}}}]
         """)
         notificationSetting = dec(BruceAPI.NotificationSetting.self, """
         {"id":1,"marketing_email":true,"marketing_push":true,"marketing_sms":false,"types":[{"key":"booking_reminder","enabled":true},{"key":"check_in_reminder","enabled":true},{"key":"new_studio","enabled":false}]}
@@ -161,10 +163,11 @@ extension AppModel {
         aggregate = dec([BruceAPI.DayCount].self, #"[{"day":20261002,"count":1},{"day":20261005,"count":2},{"day":20260915,"count":1}]"#)
         membership = dec(BruceAPI.MembershipInfo.self, """
         {"membership":true,"paused":false,"membership_tier":"BASE","current_membership_price":549,"available_credits":0,
-         "next_payment":"2026-11-01T00:00:00Z","admission_access_until":"2026-11-01T23:59:59Z","remaining_pause_days":60,"remaining_pause_periods":1}
+         "next_payment":"2026-11-01T00:00:00Z","admission_access_until":"2026-11-01T23:59:59Z","remaining_pause_days":60,"remaining_pause_periods":1,
+         "pause_days_total":60,"total_pause_periods":2,"has_notice_period":false,"commitment_months":12,"committed_until":"2027-06-01T00:00:00Z","prolong_commitment":true}
         """)
         visitLimits = dec([BruceAPI.VisitLimit].self, #"[{"total":20,"used":3,"remaining":17,"type":"MONTHLY"}]"#)
-        blockInfo = dec(BruceAPI.BlockInfo.self, #"{"strike_count":1,"blocked":false,"free_unlocks_remaining":1}"#)
+        blockInfo = dec(BruceAPI.BlockInfo.self, #"{"strike_count":1,"blocked":false,"free_unlocks_remaining":1,"total_free_unlocks":3}"#)
         standbys = [BruceAPI.ClassHolder(id: 1, class: classes.first { $0.id == 9004 })]
         paymentMethods = dec([BruceAPI.PaymentMethod].self, #"[{"id":1,"name":"VISA","type":"APPLE_PAY","expiration":129,"default":true}]"#)
 
@@ -179,6 +182,9 @@ extension AppModel {
         case "ticket": push(.studio(1724)); present(.ticket(5001))
         case "friends": tab = .friends
         case "myclasses": tab = .myClasses
+        case "mybookings":
+            bookings = [9001, 9006].compactMap { id in classDetails[id].map { BruceAPI.Booking(id: id, classId: id, studioId: $0.studioId, checkedInAt: nil, class: $0) } }
+            tab = .myClasses
         case "notifications": present(.notifications)
         case "menu": present(.menu)
         case "account": present(.account)
@@ -195,7 +201,7 @@ extension AppModel {
         case "full": push(.classDetail(9008))
         case "waitlisted": standbys.append(BruceAPI.ClassHolder(id: 77, class: classDetails[9008])); push(.classDetail(9008))
         case "leave": standbys.append(BruceAPI.ClassHolder(id: 77, class: classDetails[9008])); push(.classDetail(9008)); askLeaveWaitlist(9008)
-        case "joined": push(.classDetail(9008)); infoAlert = "A notification is sent if a spot becomes available."
+        case "joined": push(.classDetail(9008)); infoAlert = Copy.waitlistJoined
         case "editprofile": sheets = [.account, .editProfile]
         case "pause": sheets = [.account, .membership, .pause]
         case "pausepicker": demoPausePicker = true; sheets = [.account, .membership, .pause]

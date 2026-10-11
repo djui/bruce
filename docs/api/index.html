@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bruce API map · Swagger viewer</title>
+<meta name="description" content="Interactive, read-only viewer for the reverse-engineered Bruce Studios v52 API map (OpenAPI 3.0). Unofficial.">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui.css">
+<style>
+  body { margin: 0; background: #fff; font-family: system-ui, -apple-system, sans-serif; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; justify-content: space-between;
+         padding: 12px 16px; background: #07090a; color: #e9efe3; font-size: 14px; }
+  .bar a { color: #ccf03a; }
+  .bar strong { letter-spacing: .04em; }
+</style>
+</head>
+<body>
+<div class="bar">
+  <span><strong>BRÜCE</strong> · API map (unofficial, not affiliated with Bruce Studios AB). Read-only: requests are disabled.</span>
+  <span><a href="../">Back to the project</a> · <a href="openapi.yaml">openapi.yaml</a></span>
+</div>
+<main id="ui"></main>
+<script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.17.14/swagger-ui-bundle.js"></script>
+<script>
+  SwaggerUIBundle({ url: 'openapi.yaml', dom_id: '#ui', docExpansion: 'list', defaultModelsExpandDepth: 0, supportedSubmitMethods: [] });
+</script>
+</body>
+</html>

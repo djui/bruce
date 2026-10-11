@@ -142,7 +142,7 @@ struct ClassDetailView: View {
             }
             .buttonStyle(.plain)
             if friendUsers.isEmpty {
-                Text("No one from Bruce Studios has booked this class").font(.system(size: 17, weight: .light))
+                Text("None of your friends have booked this class yet").font(.system(size: 17, weight: .light))
                     .foregroundStyle(Theme.secondary).padding(.top, 16)
             } else {
                 ForEach(friendUsers, id: \.id) { u in
@@ -211,7 +211,7 @@ struct BookingRulesSheet: View {
                         RuleRow(icon: "calendar.badge.minus", title: "Late cancellation", text: "Cancel after \(BookingRules.long(r.lateCancel))")
                         RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation", text: "Cancel after \(BookingRules.long(r.shortNotice))")
                         RuleRow(icon: "calendar.badge.minus", title: "Last-minute cancellation", text: "Cancel after \(BookingRules.long(r.lastMinute))")
-                        RuleRow(icon: "calendar.badge.exclamationmark", title: "No-show", text: "Did not check-in at the studio.")
+                        RuleRow(icon: "calendar.badge.exclamationmark", title: "No-show", text: Copy.noShow)
                     }
                     .padding(.top, 26)
                     Group {
@@ -228,7 +228,7 @@ struct BookingRulesSheet: View {
                     .disabled(m.loading).padding(.top, 28)
                     HStack(alignment: .top, spacing: 24) {
                         Image(systemName: "info.circle").font(.system(size: 18, weight: .light))
-                        Text("3 strikes and your class bookings are blocked for 14 days." + (m.unblockPriceKr.map { " You can remove the block at any time for \($0) kr." } ?? ""))
+                        Text(Copy.strikeFooter(unlockPrice: m.unblockPriceKr))
                             .font(.system(size: 17, weight: .light)).foregroundStyle(Theme.tertiary).lineSpacing(8)
                     }
                     .padding(.top, 28).padding(.bottom, 20)

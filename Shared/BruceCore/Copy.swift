@@ -1,0 +1,166 @@
+import Foundation
+
+// User-facing help and policy texts for both apps, written for this project in our own words.
+// Wherever the API returns the underlying facts (prices, pause allowance, unlocks, invite codes, plan
+// limits), the text is built from those values. `Policy` holds the few rules the API does not expose.
+
+/// Membership rules that no observed endpoint returns. Used only as wording, never to enforce anything.
+enum Policy {
+    /// Strikes that lead to a booking block (`user_block/info` only reports `strike_count`).
+    static let strikesToBlock = 3
+    /// Length of a booking block in days (the API gives `block_end_date` only while a block is active).
+    static let blockDays = 14
+    /// Fallback yearly pause allowance when `membership/user_info` has no `pause_days_total`/`total_pause_periods`.
+    static let pauseDays = 60
+    static let pausePeriods = 2
+}
+
+enum Copy {
+    // MARK: Welcome
+
+    static let tagline = "BOOK. TRAIN. CHECK IN."
+
+    // MARK: Strikes
+
+    private static func day(_ iso: String?) -> String? {
+        iso.flatMap(BruceDate.parse).map { BruceDate.format($0, "d MMMM") }
+    }
+
+    /// Footer under Book / Cancel. `unlockPrice` is the city's `user_strike_block_un_lock_price` in kr.
+    static func strikeFooter(unlockPrice: Int?) -> String {
+        var s = "Reaching \(Policy.strikesToBlock) strikes pauses class booking for \(Policy.blockDays) days."
+        if let p = unlockPrice { s += " You can lift a block early for \(p) kr." }
+        return s
+    }
+
+    /// Summary on the Strikes screen, from `user_block/info` and the city's unblock price.
+    static func strikeSummary(_ b: BruceAPI.BlockInfo?, unlockPrice: Int?) -> String {
+        var parts: [String] = []
+        if b?.blocked == true {
+            parts.append(day(b?.blockEndDate).map { "Class booking is blocked until \($0)." } ?? "Class booking is currently blocked.")
+        } else {
+            parts.append("At \(Policy.strikesToBlock) strikes, class booking pauses for \(Policy.blockDays) days.")
+        }
+        let left = b?.freeUnlocksRemaining ?? 0
+        if let total = b?.totalFreeUnlocks {
+            parts.append("Free unlocks left: \(left) of \(total).")
+        } else {
+            parts.append("Free unlocks left: \(left).")
+        }
+        if let p = unlockPrice { parts.append("After that, lifting a block costs \(p) kr.") }
+        return parts.joined(separator: " ")
+    }
+
+    static let strikeFree = ["Cancelling 12 hours or more before the class starts.",
+                             "Checking in within the studio's check-in window."]
+    static let strikeOne: [(String?, String)] = [("Late cancellation", ": 3 to 12 hours before start, 1 strike"),
+                                                ("Late check-in", ": after the check-in window, 1 strike")]
+    static let strikeTwo: [(String?, String)] = [("Very late cancellation", ": under 3 hours before start, 2 strikes"),
+                                                ("No-show", ": booked but never checked in, 2 strikes")]
+    static let noShow = "Booked, but never checked in."
+
+    // MARK: Pause
+
+    /// From `membership/user_info` (`pause_days_total`, `total_pause_periods`).
+    static func pauseRules(_ ms: BruceAPI.MembershipInfo?) -> String {
+        let days = ms?.pauseDaysTotal ?? Policy.pauseDays
+        let periods = ms?.totalPausePeriods ?? Policy.pausePeriods
+        return "Each calendar year you get \(days) pause days to split across up to \(periods) separate pauses, however you like."
+    }
+
+    // MARK: Membership
+
+    static let withdrawal = "Possible during the first 14 days after purchase."
+
+    /// From `membership/user_info` (`prolong_commitment`, `committed_until`).
+    static func renewal(_ ms: BruceAPI.MembershipInfo?) -> String {
+        let until = day(ms?.committedUntil)
+        if ms?.prolongCommitment == false {
+            return until.map { "Your commitment ends on \($0) and is not renewed." } ?? "Your commitment is not renewed."
+        }
+        return until.map { "On \($0) the plan continues as a new annual commitment at your current price." }
+            ?? "When the commitment ends, the plan continues as a new annual commitment at your current price."
+    }
+
+    /// Cancellation terms, from `has_notice_period` and `cancel_without_notice_until` when available.
+    static func noticePeriod(_ ms: BruceAPI.MembershipInfo?) -> String {
+        if let d = day(ms?.cancelWithoutNoticeUntil) { return "You can cancel without notice until \(d)." }
+        let base = "New members can cancel without notice during their first month. Later cancellations run for one more month, so one further payment is charged."
+        if ms?.hasNoticePeriod == true { return "A notice period currently applies to your membership. " + base }
+        return base
+    }
+
+    static let refundRule = "• Refunded only if you cancel before the cancellation deadline"
+
+    // MARK: Plans
+
+    static func planBlurb(_ code: String) -> String {
+        switch code.uppercased() {
+        case "BLACK": return "More studios and bookings, plus a few Wellness visits each month."
+        case "EPIC": return "The widest studio range, the most bookings and the most Wellness visits."
+        default: return "The core studio range for a steady weekly training routine."
+        }
+    }
+
+    // MARK: Invites
+
+    /// `open`/`total` come from `GET /v52/booking/voucher` (nil when logged out).
+    static func inviteIntro(open: Int?) -> String {
+        var s = "Give someone who isn't a member yet a free session within your own membership tier. Each code is good for a single use."
+        s += "\n\nIf they join as members within 30 days, your next payment is 200 kr lower and they pay 30 % less for their first three months."
+        if let open { s += "\n\nUnused codes right now: \(open)." }
+        return s
+    }
+
+    static func shareInvite(_ code: String) -> String { "Here's a free workout at Bruce Studios on me. Invite code: \(code)" }
+
+    static func howItWorks(open: Int?) -> [String] {
+        [
+            "Invites come with a membership. Accounts that only hold credits can't send them.",
+            "Every code is single-use and only works for someone who isn't a member yet. The free session can be a class or open training, for example at a gym.",
+            "After a code is registered, the workout has to happen within 30 days. A non-member can get a free invite workout at most once every three months.",
+            "When someone you invited becomes a member, your codes are topped up again." + (open.map { " You have \($0) unused right now." } ?? ""),
+            "A small number of studios don't accept invite workouts.",
+        ]
+    }
+
+    // MARK: Notifications
+
+    static let pushInfo = [
+        "Pick which notifications you want. Most arrive as push notifications, and key ones also go out by email.",
+        "These switches don't change the notification list inside the app.",
+    ]
+
+    /// Fallback subtitles when the API's notification type has no `description`.
+    static func pushSubtitle(_ key: String) -> String {
+        switch key {
+        case "booking_reminder": return "Before a booked class starts"
+        case "check_in_reminder": return "When your check-in window opens"
+        case "new_studio": return "When a studio joins"
+        default: return ""
+        }
+    }
+
+    static let marketing = "Choose how Bruce Studios may contact you with offers and news."
+
+    // MARK: Waitlist
+
+    static let waitlistJoined = "You'll get a notification if a spot opens up."
+    static let leaveWaitlist = "Leave the waitlist for this class?"
+
+    // MARK: Explore
+
+    static let areaHint = "Frame the area on the map, then save to use everything in view, or draw your own outline."
+    static let searchHint = "Search for studios, classes, instructors or categories."
+
+    // MARK: Account
+
+    static let locationUse = "Used to suggest studios and classes near you."
+    static let resetPassword = "Enter your account email and you'll get a link to set a new password."
+    static let unlimitedExcluded = "Studios with unlimited visits aren't counted."
+
+    // MARK: Help
+
+    static let helpTopics = ["Memberships", "Booking and check-in", "Pausing or cancelling", "Payments and receipts",
+                             "Invites and vouchers", "Visit limits"]
+}
