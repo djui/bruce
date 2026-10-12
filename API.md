@@ -1,11 +1,11 @@
-# Bruce API map (Charles captures 1–7 of the iOS app 14.4.2 build 538)
+# Bruce API map (Charles captures 1–8 of the iOS app 14.4.2 build 538)
 
 > Unofficial, reverse-engineered by observing the author's own account traffic. Not affiliated with or
 > endorsed by Bruce Studios AB. The raw captures contain personal data and are **not** part of this
 > repository; the bracketed evidence numbers below refer to them for the author's own reference.
 > Machine-readable version: [`openapi.yaml`](openapi.yaml) (browse it with [`swagger.html`](swagger.html)).
 
-Evidence numbers without a prefix refer to capture 1; `c2:N` refers to capture 2, `c3:N` to capture 3, `c4:N` to capture 4, `c5:N` to capture 5, `c6:N` to capture 6, `c7:N` to capture 7.
+Evidence numbers without a prefix refer to capture 1; `c2:N` refers to capture 2, `c3:N` to capture 3, `c4:N` to capture 4, `c5:N` to capture 5, `c6:N` to capture 6, `c7:N` to capture 7, `c8:N` to capture 8.
 
 Base: `https://api.bruce.app/v52/` (older `/v1/studios` is a separate, unauthenticated public list).
 Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-res.*`).
@@ -24,7 +24,7 @@ Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-
   -> 200 `{"user_id":<USER_ID>,"user_created":false,"access_token":"<64 chars>","refresh_token":"<64 chars>","access_token_expires_at":"<ISO8601, ns precision>","refresh_token_expires_at":"<ISO8601>","user_agent":"Bruce/14.4.2_538 (iOS..; Apple)"}`.
   Observed lifetimes: access token 3 hours, refresh token ~3 months. The new access token is used as `X-Access-Token` on all following calls.
 - `DELETE /v52/access/logout` [c2:442] header `X-Access-Token`, body `{"locale":"en"}` -> 200, empty body.
-- Refresh: NOT captured. No request in capture 2 sends `refresh_token` (grep over all req/meta files), and no 401 occurs. The refresh route/body is unknown; the app treats an expired access token as "log in again".
+- Refresh: none. No request in captures 1-8 sends `refresh_token`, no 401 occurs, and no response header carries a new token. The access token from the c2 login (`access_token_expires_at` 3 h later) was still sent on all 211 requests of capture 8, about 27 h after that time, and every one got 200 [c8]. The official app's local data model stores only the access token (its `Session` entity has `accessToken`, `role`, `user`; no refresh token). So the server does not enforce `access_token_expires_at` in practice, and the clients ignore it: only an HTTP 401 ends the session ("log in again").
 
 ## Studios / classes / explore
 - `GET /v52/home_screen?coordinates=<lat>,<lng>&locale=en` [46] -> `{sections:[{title,type,items}]}`; types `CATEGORIES`, `SPOTLIGHT` (class_id, class_name, studio_id, studio_name, start_time, distance), `NEARBY_GYMS`, `NEW_STUDIO` (studio_id, studio_name, categories, open_from/open_to, has_openings, opening_hours_schedule_today).
@@ -68,13 +68,14 @@ Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-
 - Cancel (capture 2): `DELETE /v52/booking/<BOOKING_ID>` [c2:120] body `{"locale":"en","include_user":true}` -> 200 `{"booking":{id,deleted:true,deleted_at,class_id,...,user{...}}}` (soft delete). Booking 84 -> cancelled in 120 (same id).
 - Re-reads after book/cancel: `GET /v52/booking`, `/v52/booking/aggregate`, `/v52/studio/user_visit_limit`, `/v52/class/<id>` [c2:93-129].
 
-## Check-in (confirmed, capture 1 only; no check-in in capture 2)
+## Check-in (confirmed, capture 1 only; no check-in in captures 2-8)
 `POST /v52/studio/check_in` [163]
 ```json
 {"locale":"en","qr_code_id":"stc:<MAJOR>","meta":{"major":"<MAJOR>","minor":"<DOOR_ID>","door_id":"<DOOR_ID>"},"include_class":true}
 ```
 -> 200 `{"bookings":[{id,studio_id,place_id,checked_in_at,opening_hour_occurrence_id,class_id:null,...}],"payable_openings":[],"payable_opening_hours":[],"integration_door_data":null}`.
 A drop-in (gym, no class) check-in creates the booking itself. Note `MAJOR` (QR/beacon id) is not the studio id.
+Remote check-in without `meta` (only the studio's `qr_code_id` "stc:<MAJOR>", from Bruce-iOS at STC Sturegatan Park, studio 12388, Oct 12) answered **HTTP 400, yet the booking was checked in**: the official app showed the ticket and `GET /v52/booking` returns it with `checked_in_at` [c8:404]. Our client sends exactly one request per confirmed tap, so the 400 is not a duplicate of ours; most likely the server registers the check-in and then fails a later step, e.g. the BRP door integration that has no door id. The response body was not recorded. So the status code is not reliable for check-in: the clients re-read the bookings after any non-2xx answer and treat a booking at that studio with `checked_in_at` today as success (ticket shown, no error). Door ids are optional: when known (built in, or remembered from the user's own scanned door QR) they are sent as `meta`.
 
 ## User / account (context)
 - Capture 2 also has `PUT /v52/user/<USER_ID>` [c2:337, 580], `GET|POST /v52/user/<USER_ID>/address` [c2:279, 339], `DELETE /v52/user/<USER_ID>/address/<ID>` [c2:341] -> 204, `GET /v52/payment` [c2:388] (account editing; not used by the app).
@@ -103,7 +104,7 @@ All write calls take a JSON body containing at least `{"locale":"en"}` and the `
 ### Reviews
 - `GET /v52/review?studio_id=<id>&comment=true&hidden=false&order_by=-id&limit=50&include_booking=true&include_booking_class=true&include_booking_user=true&locale=en` [c3:101, 121, 592] -> `{"reviews":[{id,rating(1-5),comment,created_at,public,hidden,response,studio_id,class_id,user_id,booking:{...,class:{start_time,opening,title},user:{id,first_name,photo,display_name,social}}}],"metadata":{...}}`.
 - `booking.class.opening == true` (title null) is shown as "Solo training". The aggregate comes from studio `rating{total,average(x100),distribution{"1".."5"}}`.
-- `GET /v52/booking?user_id=&reviewable=true&include_class=true` [c3:27] lists bookings that can be reviewed. Submitting a review was not captured.
+- `GET /v52/booking?user_id=&reviewable=true&include_class=true` [c3:27] lists bookings that can be reviewed. Submitting a review: see capture 8.
 
 ### Friends
 - Friends' upcoming classes: `GET /v52/booking?friends=true&user_id=<me>&class_day_after=YYYYMMDD&deleted=false&limit=30&include_class=true&include_class_studio=true&include_class_dynamic_prices=true` [c3:106] -> `{"bookings":[{id,class_id,studio_id,user_id(friend),class{...,studio}}]}`. Join `user_id` with `GET /v52/friend` for name and photo.
@@ -122,7 +123,7 @@ All write calls take a JSON body containing at least `{"locale":"en"}` and the `
 - `GET /v52/payment/<PAYMENT_ID>/receipt.pdf` [c3:536, 549] and `GET /v52/payment/collective/invoice.pdf?payment_ids=<id>,<id>` [c3:543] return PDFs.
 - Calendar subscription: `GET /v52/user/<USER_ID>/calendar/<USER_SECRET>.ics` [c3:341, 370] (also `/v50/...` [c3:345, 369]). This is a public, unauthenticated-style feed URL containing the user's secret; treat it as a credential. It returns a VCALENDAR (`X-WR-CALNAME`, `REFRESH-INTERVAL`, VEVENTs).
 - `GET /v52/booking/aggregate?user_id=` [c3:396] -> `{"booking_aggregates":[{day:YYYYMMDD,count}]}` (statistics).
-- Statistics screen (account menu): a bar chart of visits per month (from the aggregate, summed by month; months without visits show 0) over a list of past visits grouped by day, newest day first. Each row: the time, the class length for a class ("60 min"), the title, the studio, then "area | instructor". A drop-in gym visit (`class_id:null`, `opening_hour_occurrence_id` set; capture 8, file 404) shows "Solo training" with the opening hours of that day, at the check-in time; a class shows at its start time. The list request itself is not captured (no capture opens Statistics). The clients page `GET /v52/booking?user_id=&limit=30&deleted=false&include_class=true&include_class_studio=true` by `next_cursor` without a time window and keep the bookings with `checked_in_at`. Drop-ins carry no class, so their studio name and area come from the studio list, and their opening hours are not in the booking (the clients show "Solo training" without hours).
+- Statistics screen (account menu): a bar chart of visits per month (from the aggregate, summed by month; months without visits show 0) over a list of past visits grouped by day, newest day first. Each row: the time, the class length for a class ("60 min"), the title, the studio, then "area | instructor". A drop-in gym visit (`class_id:null`, `opening_hour_occurrence_id` set [c8:404]) shows "Solo training" with the opening hours of that day, at the check-in time; a class shows at its start time. The list request itself is not captured (no capture opens Statistics). The clients page `GET /v52/booking?user_id=&limit=30&deleted=false&include_class=true&include_class_studio=true` by `next_cursor` without a time window and keep the bookings with `checked_in_at`. Drop-ins carry no class, so their studio name and area come from the studio list, and their opening hours are not in the booking (the clients show "Solo training" without hours).
 - `GET /v52/faq?locale=en` [c3:407] -> `{faqs:[{id,section_id,question,answer,published_at}]}`; `GET /v52/faq/section` [c3:410] -> `{sections:[{id,title,tags}]}`.
 - `GET /v52/search?query=<q>&type=studio,class&latitude=&longitude=&city_code=STO&search_mode=indexed&locale=en` [c3:603, 605] -> `{"result":[]}` (only empty results captured).
 - `POST /v52/voucher/redeem` [c3:275] `{"code","user_id","locale"}` -> error `{"errors":[{code,message,status}]}` (invalid code).
@@ -221,4 +222,36 @@ Capture 7 also covers opening a booked class and inviting a friend to it (Oct 20
 - Still no purchase call for the drop-in ("Buy for SEK n"); the apps show a "not available" message instead.
 
 ### Still not captured
-Token refresh; responding to a class invite; check-in other than the STC door QR (`POST /v52/studio/check_in` appears only in capture 1); membership upgrade, pause and cancel (prices: `GET /v52/membership/info`, c2:426); profile photo upload; review submission; notification mark-read; drop-in/ticket purchase; ticket (no endpoint; the app renders it from the checked-in booking).
+Responding to a class invite; check-in other than the STC door QR (`POST /v52/studio/check_in` appears only in capture 1); membership upgrade, pause and cancel (prices: `GET /v52/membership/info`, c2:426); profile photo upload; a review with a comment; notification mark-read; drop-in/ticket purchase; ticket (no endpoint; the app renders it from the checked-in booking).
+
+## Capture 8 additions (`c8:N`)
+Capture 8 (about 220 requests, Oct 12 22:46-22:47 local) is an app start after a class the user had checked in to
+(a "Hyrox" class at STC Sturegatan Park, studio 12388, starting 14:50Z; checked in at 14:34Z), followed by rating it and browsing.
+It has no check-in request (the check-in happened before the capture, from Bruce-iOS; see Check-in above) and no token refresh.
+
+- **Review trigger.** At start the app calls `GET /v52/booking?reviewable=true&user_id=<USER_ID>&include_class=true&locale=en`
+  [c8:415] -> `{"bookings":[{id, class_id, checked_in_at, review_id:null, class{...}}],"metadata":{...,"cache_expire_seconds":0}}`.
+  There is no review notification type and no silent push: the official app's Info.plist has no `UIBackgroundModes`
+  (so no background `remote-notification`), its UI strings have no rating notification, the push setting types are
+  only `new_studio`, `booking_reminder`, `check_in_reminder` [c3:279], and the notification list holds only `STANDBY_AVAILABLE`, `CHECK_IN_REMINDER`,
+  `BOOKING_CANCELLED`, `BOOKING_REMINDER`, `USER_STRIKE`, `CLASS_MESSAGE`, `USER_STRIKE_UNBLOCKED`, `USER_BLOCK` [c8:418])
+  and no pending-review endpoint: this list is the trigger. Four seconds later the rating went out.
+- **Submit a review** `POST /v52/review` [c8:467] body
+  ```json
+  {"rating":5,"public":true,"booking_id":<BOOKING_ID>,"locale":"en","include_booking":true}
+  ```
+  -> 200 `{"review":{id,rating,comment:null,created_at,public,studio_id,class_id,user_id,booking:{id,...,review_id:<new id>,checked_in_at,...}}}`.
+  The dialog of the official app (from its bundled UI strings): title "Rate class", stars, "Comment (optional)", an
+  "Anonymous comment" switch, buttons "Send (public)" / "Send (anonymous)" (= `public`), and "Skip" (you can rate
+  later from the statistics list). A low rating asks for confirmation and requires a comment. Skipping is stored on
+  the device only (`skippedReview` in its data model); no request is sent. The comment field is not in the captured
+  request; the clients send it as `comment`, the field name of review objects [c3:101] (unverified).
+- **My classes keeps checked-in classes.** The app's list calls `GET /v52/booking?user_id=&limit=30&deleted=false&class_start_time_after=<now-24h>&include_class=true&include_class_studio=true&include_class_dynamic_prices=true`
+  [c8:404] (and the same without `include_class_studio` [c8:410]). The response includes the rated class booking with
+  `checked_in_at` set, and the official app still shows it. Bruce-iOS/-MacOS used to drop every booking with
+  `checked_in_at` client-side; they now keep it with a "Checked in" badge, the ticket, and the rating action. Drop-in
+  gym visits come back in the same list with `class_id:null` and `opening_hour_occurrence_id` set.
+- `GET /v52/booking?friends=true&user_id=&class_day_after=YYYYMMDD&...` [c8:512] is the friends feed (as c3:106).
+- Other requests are known: offline/done [c8:423, 424], class days, user, bookmark, standby, config, membership
+  user_info, payment method, tos, vouchers, notification, city, home_screen, category, user_visit_limit, friend,
+  friend_request, favorite, studio/filter and image redirects.

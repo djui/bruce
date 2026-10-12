@@ -25,6 +25,8 @@ enum SheetRoute: Hashable {
     case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts, visitLimit(Int)
     case bookingRules(Int), classInvite(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
     case similarClasses(Int), area(UUID), parakey(Int)
+    /// "Rate class" dialog for a booking id (POST /v52/review [c8:467]).
+    case review(Int)
 }
 
 @MainActor
@@ -252,6 +254,66 @@ final class AppModel {
     var tier: String { (membership?.membershipTier ?? membership?.admissionTier ?? "BASE").uppercased() }
 
     func booking(forClass id: Int) -> BruceAPI.Booking? { bookings.first { $0.classId == id || $0.class?.id == id } }
+    /// Bookings not yet checked in: these count against "bookings at a time" (SIMULTANEOUS) and can be cancelled.
+    var upcomingBookings: [BruceAPI.Booking] { bookings.filter { !$0.isCheckedIn } }
+
+    // MARK: Post-class review ("Rate class") [c8:415, 467]
+
+    /// From `GET /v52/booking?reviewable=true` (checked-in, ended, not yet rated).
+    var reviewable: [BruceAPI.Booking] = []
+    /// Booking ids the user skipped in the rating dialog. Local only, like the original's `skippedReview` flag;
+    /// a skipped class can still be rated later from My classes / the class page.
+    var skippedReviews: Set<Int> = AppModel.demo ? [] : Set((UserDefaults.standard.array(forKey: "skippedReviews") as? [Int]) ?? [])
+    /// Booking ids already offered automatically in this run (the dialog opens at most once per booking per launch).
+    @ObservationIgnored private var reviewPrompted: Set<Int> = []
+
+    func reviewableBooking(forClass id: Int) -> BruceAPI.Booking? {
+        reviewable.first { $0.classId == id || $0.class?.id == id }
+    }
+    func reviewBooking(_ bookingId: Int) -> BruceAPI.Booking? {
+        reviewable.first { $0.id == bookingId } ?? bookings.first { $0.id == bookingId } ?? pastBookings.first { $0.id == bookingId }
+    }
+
+    /// Like the original: read the reviewable bookings at start (and with My classes) and open the rating dialog
+    /// for the newest one that was not skipped, when nothing else is on screen.
+    func loadReviewable() async {
+        guard tokenUsable, let uid = userId else { return }
+        guard let r = try? await BruceAPI.fetchReviewableBookings(token: token, userId: uid) else { return }
+        reviewable = r.filter { $0.reviewId == nil }
+        promptReviewIfNeeded()
+    }
+
+    func promptReviewIfNeeded() {
+        guard sheets.isEmpty, confirm == nil, infoAlert == nil else { return }
+        let next = reviewable
+            .filter { !skippedReviews.contains($0.id) && !reviewPrompted.contains($0.id) }
+            .max { ($0.class?.startTime ?? "") < ($1.class?.startTime ?? "") }
+        guard let b = next else { return }
+        reviewPrompted.insert(b.id)
+        present(.review(b.id))
+    }
+
+    func skipReview(_ bookingId: Int) {
+        skippedReviews.insert(bookingId)
+        if !AppModel.demo { UserDefaults.standard.set(Array(skippedReviews), forKey: "skippedReviews") }
+        dismissSheets()
+    }
+
+    /// `POST /v52/review` [c8:467]. `isPublic` false = the original's "Send (anonymous)".
+    @discardableResult
+    func submitReview(bookingId: Int, rating: Int, comment: String?, isPublic: Bool) async -> Bool {
+        guard (1...5).contains(rating) else { return false }
+        if AppModel.demo {
+            reviewable.removeAll { $0.id == bookingId }
+            flash("Demo: rating not sent (offline)"); return true
+        }
+        guard let req = try? BruceAPI.submitReviewRequest(token: token, bookingId: bookingId, rating: rating,
+                                                         comment: comment, isPublic: isPublic) else { return false }
+        guard await send(req, label: "Rating") else { return false }
+        reviewable.removeAll { $0.id == bookingId }
+        flash("Thanks for rating the class")
+        return true
+    }
 
     enum LimitState { case limited(Int), unlimited, notIncluded, unknown }
     var studioLimits: [Int: [BruceAPI.VisitLimit]] = [:]
@@ -524,7 +586,7 @@ final class AppModel {
             AppModel.demo = false; AppModel.demoAtRuntime = false
             resetLoadedData()
         } else if AppModel.demo { demoLoggedOut = true }
-        bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []
+        bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
         dismissSheets()
     }
@@ -536,13 +598,16 @@ final class AppModel {
         loadError = (error as? URLError) != nil ? "You're offline or the server can't be reached." : "Couldn't load \(label.lowercased())."
     }
 
-    /// Access token expired or rejected: forget it and ask for a fresh login (no refresh endpoint is known).
+    /// Access token rejected by the server (HTTP 401): forget it and ask for a fresh login. There is no refresh
+    /// call: the original app never sends `refresh_token` (captures 1-8) and only stores the access token. The
+    /// server keeps accepting an access token long after its `access_token_expires_at` (the token from the c2
+    /// login, "expiring" 3 h later, still got 211 x 200 in c8 about 27 h after that), so only a 401 ends a session.
     func expireSession() {
         guard session != nil else { return }
         TokenStore.clear()
         session = nil
         sneakPeek = false
-        bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []
+        bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
         resetLoadedData()
         status = "Your session expired. Please log in again."
@@ -557,14 +622,14 @@ final class AppModel {
         notificationSetting = nil; social = nil; stacks = [:]; tab = .home
     }
 
-    private var tokenUsable: Bool { !AppModel.demo && !token.isEmpty && session?.isAccessExpired != true }
+    /// Logged in with a token. `access_token_expires_at` is deliberately ignored (see `expireSession`).
+    private var tokenUsable: Bool { !AppModel.demo && !token.isEmpty }
 
     // MARK: Loading (read-only GETs)
 
     func bootstrap() async {
         await loadAreas()   // local store: no network
         if AppModel.demo { loadDemo(); return }
-        if session != nil, session?.isAccessExpired == true { expireSession(); return }
         guard tokenUsable else { return }   // logged out: welcome screen; sneak peek loads public data
         if let c = try? await BruceAPI.fetchCities(token: token), !c.isEmpty { cities = c }
         async let a: Void = loadStudios()
@@ -633,8 +698,10 @@ final class AppModel {
         guard tokenUsable, let uid = userId else { return }
         mineLoadedAt = Date()
         do {
+            // Keep checked-in classes: the original lists them in My classes (with the ticket) for the whole
+            // 24 h window of the request [c8:404, 410]. Unchecked past classes still drop an hour after start.
             bookings = try await BruceAPI.fetchBookings(token: token, userId: uid)
-                .filter { ($0.class?.start ?? .distantPast) > Date().addingTimeInterval(-3600) && $0.checkedInAt == nil }
+                .filter { b in b.class != nil && (b.isCheckedIn || (b.class?.start ?? .distantPast) > Date().addingTimeInterval(-3600)) }
         } catch { handleLoadError(error, "Bookings") }
         if let fresh = try? await BruceAPI.fetchStandbys(token: token, userId: uid) {
             // Replace the list (no stale rows); an entry that vanished and now has a booking moved to "Booked".
@@ -649,6 +716,7 @@ final class AppModel {
             for s in fresh { if let c = s.class, let d = classDetails[c.id], d.availableSpots != c.availableSpots { classDetails[c.id]?.availableSpots = c.availableSpots } }
         }
         bookmarks = (try? await BruceAPI.fetchBookmarks(token: token, userId: uid)) ?? []
+        await loadReviewable()
     }
 
     func loadSocial() async {
@@ -945,12 +1013,38 @@ final class AppModel {
     }
     @ObservationIgnored private var mineLoadedAt: Date?
 
+    /// `POST /v52/studio/check_in`, exactly one request per confirmed tap (a second tap while one is in flight is
+    /// ignored). An error status does not prove the check-in failed: a remote check-in without door `meta` at an
+    /// STC/BRP gym answered HTTP 400 although the booking was checked in (the official app showed the ticket,
+    /// Oct 12). So on any non-2xx answer the bookings are re-read, and a booking at that studio with
+    /// `checked_in_at` today counts as success: the ticket opens and no error is shown.
     func checkIn(_ t: CheckInTarget) async {
         if AppModel.demo { flash("Demo: check-in to \(t.name) not sent (offline)"); return }
+        guard !checkInInFlight else { return }
+        guard tokenUsable else { flash("Please log in again."); return }
         guard let req = try? BruceAPI.checkInRequest(token: token, target: t) else { return }
-        if await send(req, label: "Check-in") { flash("Checked in at \(t.name)") }
+        checkInInFlight = true
+        loading = true
+        defer { checkInInFlight = false; loading = false }
+        let code: Int, body: String
+        do { (code, body) = try await BruceAPI.perform(req) }
+        catch { flash("Check-in failed: \(error.localizedDescription)"); return }
+        if code == 401 { expireSession(); return }
+        let ok = (200..<300).contains(code)
+        if ok, let d = t.door { LearnedDoors.remember(d, studioId: t.studioId) }   // optional: reuse a scanned door
         await loadMine()
+        await loadVisits()
+        if let b = todaysCheckIn(studioId: t.studioId) {
+            if !ok { status = "Check-in: HTTP \(code), but the booking is checked in\n\(body.prefix(500))" }
+            flash("Checked in at \(t.name)")
+            present(.ticket(b.id))
+            return
+        }
+        if ok { flash("Checked in at \(t.name)"); return }
+        status = "Check-in: HTTP \(code)\n\(body.prefix(500))"
+        if let msg = BruceAPI.errorMessage(body) { flash("Check-in failed: \(msg)") } else { flash("Check-in failed (HTTP \(code))") }
     }
+    @ObservationIgnored private var checkInInFlight = false
 
     /// Candidates for the Home check-in control: today's booked classes plus studios with a
     /// known door QR (current/recent bookings and previously visited drop-in gyms).
@@ -961,6 +1055,7 @@ final class AppModel {
         for b in bookings.sorted(by: { ($0.class?.startTime ?? "") < ($1.class?.startTime ?? "") }) {
             guard let c = b.class, let d = c.start, cal.isDateInToday(d) || abs(d.timeIntervalSinceNow) < 3 * 3600 else { continue }
             let sid = c.studioId
+            guard !b.isCheckedIn else { continue }
             if let t = CheckInTarget.make(studio: studio(sid), studioId: sid, name: studioName(sid),
                                           subtitle: "\(c.title) · \(BruceDate.time(d))") { out.append(t); seen.insert(sid) }
         }
@@ -1002,7 +1097,10 @@ final class AppModel {
             if code == 401 { expireSession(); return false }
             guard (200..<300).contains(code) else {
                 status = "\(label): HTTP \(code)\n\(body.prefix(500))"
-                flash("\(label) failed (HTTP \(code))"); return false
+                // Show the server's reason (`errors[0].message`) when there is one, not just the status code.
+                if let msg = BruceAPI.errorMessage(body) { flash("\(label) failed: \(msg)") }
+                else { flash("\(label) failed (HTTP \(code))") }
+                return false
             }
             return true
         } catch {
@@ -1029,7 +1127,7 @@ struct CheckInTarget: Identifiable, Hashable {
     var id: String { "\(studioId)-\(qrCodeId)" }
 
     static func make(studio: BruceAPI.Studio?, studioId: Int, name: String, subtitle: String) -> CheckInTarget? {
-        if let d = KnownDoors.byStudio[studioId] {
+        if let d = KnownDoors.door(for: studioId) {
             return CheckInTarget(studioId: studioId, name: name, subtitle: subtitle, qrCodeId: "stc:\(d.major)", door: d)
         }
         guard let q = studio?.qrCodeId, !q.isEmpty else { return nil }

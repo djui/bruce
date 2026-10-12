@@ -31,12 +31,7 @@ struct NotificationsSheet: View {
 
     func card(_ n: BruceAPI.BruceNotification) -> some View {
         HStack(alignment: .top, spacing: 18) {
-            if let photo = n.meta?.photo ?? n.meta?.userPhoto {
-                Avatar(fileId: photo, size: 64)
-            } else {
-                Circle().fill(Color.black).frame(width: 64, height: 64)
-                    .overlay(Text("B").font(.system(size: 40, weight: .black).width(.expanded)).foregroundStyle(.white))
-            }
+            NotificationIcon(n: n, size: 64)
             VStack(alignment: .leading, spacing: 8) {
                 Text(n.title ?? "").font(.system(size: 17, weight: .bold))
                 Text(n.message ?? "").font(.system(size: 17, weight: .light)).lineSpacing(6).padding(.leading, 10)
@@ -50,6 +45,47 @@ struct NotificationsSheet: View {
         .padding(20).frame(minHeight: 200, alignment: .top)
         .contentShape(Rectangle())
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.cardBorder, lineWidth: 1))
+    }
+}
+
+/// A notification's icon: the class or studio photo (black when there is none) with a glyph for what happened, and a
+/// corner badge for what it is about (a class, a studio, or Bruce itself), tinted lime for good news and red for bad.
+struct NotificationIcon: View {
+    let n: BruceAPI.BruceNotification
+    var size: CGFloat
+    var body: some View {
+        ZStack {
+            if let photo = n.meta?.photo ?? n.meta?.userPhoto {
+                Avatar(fileId: photo, size: size)
+                Circle().fill(.black.opacity(0.35))
+            } else {
+                Circle().fill(.black)
+            }
+            Image(systemName: n.look.symbol).font(.system(size: size * 0.38, weight: .medium)).foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.5), radius: 2)
+        }
+        .frame(width: size, height: size)
+        .overlay(alignment: .bottomTrailing) { badge.offset(x: 3, y: 3) }
+        .accessibilityElement().accessibilityLabel(n.iconAccessibilityLabel)
+    }
+
+    var badge: some View {
+        let d = (size * 0.42).rounded()
+        let (fill, ink): (Color, Color) = switch n.look.tone {
+        case .good: (Theme.lime, .black)
+        case .bad: (Theme.strikeRed, .white)
+        case .neutral: (Theme.chipGrey, .black)
+        }
+        return ZStack {
+            Circle().fill(fill)
+            switch n.subject {
+            case .bruce: Text("B").font(.system(size: d * 0.6, weight: .black).width(.expanded))
+            case .classSession: Image(systemName: "figure.run").font(.system(size: d * 0.52, weight: .bold))
+            case .studio: Image(systemName: "building.2").font(.system(size: d * 0.48, weight: .bold))
+            }
+        }
+        .foregroundStyle(ink).frame(width: d, height: d)
+        .overlay(Circle().stroke(Color.white, lineWidth: 2))
     }
 }
 

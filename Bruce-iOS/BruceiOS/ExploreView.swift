@@ -70,7 +70,7 @@ struct ExploreView: View {
         return c
     }
 
-    /// What the list shows: for today only classes that haven't started yet (the badge counts the whole day).
+    /// What the list and the Classes badge show: for today only classes that haven't started yet, as in the original.
     var upcomingClasses: [BruceAPI.BruceClass] {
         dayOffset == 0 ? classes.filter { ($0.start ?? .distantFuture) > Date() } : classes
     }
@@ -123,7 +123,7 @@ struct ExploreView: View {
         VStack(spacing: 10) {
             UnderlineTabs(titles: ["Studios", "Classes"],
                           badges: [m.studios.isEmpty ? "…" : String(studios.count),
-                                   m.classesByDay[BruceDate.calendar.startOfDay(for: selectedDay)] == nil ? "…" : String(classes.count)],
+                                   m.classesByDay[BruceDate.calendar.startOfDay(for: selectedDay)] == nil ? "…" : String(upcomingClasses.count)],
                           selection: $tabIndex)
             chips
             if tabIndex == 1 {
@@ -218,16 +218,16 @@ struct ExploreView: View {
                 Divider().padding(.leading, 86)
             }
             if !upcomingClasses.isEmpty && (m.activeFilterCount > 0 || fromHour > 0 || toHour < 24) { FilterActiveFooter() }
-            if classes.count > upcomingClasses.count {
-                Text("\(classes.count - upcomingClasses.count) earlier classes today are not shown")
-                    .font(.system(size: 13)).foregroundStyle(Theme.secondary).padding(.vertical, 16)
-            }
-            if upcomingClasses.isEmpty && classes.isEmpty {
+            if upcomingClasses.isEmpty {
                 if m.classesLoadingDay != nil || m.classesByDay[BruceDate.calendar.startOfDay(for: selectedDay)] == nil {
                     ProgressView("Loading classes…").frame(maxWidth: .infinity, minHeight: 300)
                 } else {
-                    EmptyState(system: "calendar", text: "No classes match.")
+                    EmptyState(system: "clock", text: "No bookable classes for the selected filters.")
                 }
+            }
+            if classes.count > upcomingClasses.count {
+                Text("\(classes.count - upcomingClasses.count) earlier classes today are not shown")
+                    .font(.system(size: 13)).foregroundStyle(Theme.secondary).padding(.vertical, 16)
             }
         }
     }

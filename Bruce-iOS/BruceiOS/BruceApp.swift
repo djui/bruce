@@ -106,7 +106,7 @@ struct RootView: View {
             SwiftUI.Tab("My classes", systemImage: "calendar.badge.checkmark", value: Tab.myClasses) {
                 NavigationStack(path: stack(.myClasses)) { MyClassesView().routeDestinations() }
             }
-            .badge(m.bookings.count)
+            .badge(m.upcomingBookings.count)
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .modifier(SearchAccessoryModifier(enabled: (m.tab == .home || m.tab == .explore) && m.stack.isEmpty))
@@ -234,6 +234,7 @@ struct SheetScreen: View {
         case .quickCheckIn: QuickCheckInSheet()
         case .similarClasses(let id): SimilarClassesSheet(classId: id)
         case .area(let id): AreaMapSheet(areaId: id)
+        case .review(let id): ReviewSheet(bookingId: id)
         }
     }
 }
@@ -256,7 +257,8 @@ struct ModelAlerts: ViewModifier {
         content
             .alert(m.confirm?.title ?? "", isPresented: Binding(get: { active && m.confirm != nil }, set: { if !$0 { m.confirm = nil } }),
                    presenting: m.confirm) { a in
-                Button(a.button) { Task { m.confirm = nil; await a.run(); m.dismissSheets() } }
+                // Close the sheets afterwards unless the action opened one itself (e.g. the ticket after a check-in).
+                Button(a.button) { Task { m.confirm = nil; let before = m.sheets; await a.run(); if m.sheets == before { m.dismissSheets() } } }
                 Button("Cancel", role: .cancel) { m.confirm = nil }
             } message: { a in Text(a.message) }
             .alert(m.infoAlert ?? "", isPresented: Binding(get: { active && m.infoAlert != nil }, set: { if !$0 { m.infoAlert = nil } })) {
