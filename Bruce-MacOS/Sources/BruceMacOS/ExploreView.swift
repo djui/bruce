@@ -185,7 +185,7 @@ struct ExploreView: View {
                                          duration: c.durationMinutes.map { "\($0) min" } ?? "",
                                          title: c.title, studio: st?.name ?? "",
                                          meta: [st?.vicinity, c.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | "),
-                                         badge: m.isOnWaitlist(c.id) ? "On waitlist" : nil, full: (c.availableSpots ?? 1) <= 0,
+                                         badge: m.waitlistBadge(c.id), full: (c.availableSpots ?? 1) <= 0,
                                          wellness: m.isWellness(studioId: c.studioId), classId: c.id)
                             }
                             .buttonStyle(.plain)

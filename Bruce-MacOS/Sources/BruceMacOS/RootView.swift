@@ -171,6 +171,7 @@ struct SheetHost: View {
         case .editProfile: dark(EditProfileView())
         case .pause: dark(PauseMembershipView())
         case .plans: dark(MembershipPlansView())
+        case .visitLimit(let id): VisitLimitSheet(studioId: id)
         case .statistics: StatisticsView()
         case .receipts: ReceiptsView()
         case .classInvite(let id): ClassInviteSheet(classId: id)

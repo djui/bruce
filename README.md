@@ -51,14 +51,16 @@ My classes tabs, with class and studio pages and account sheets.
   tier, Wellness and favourite filters, search, a map, and **custom areas**: draw an outline on the map and
   filter studios and classes to it. Long-press (iOS) or right-click (macOS) an area to show it on the map,
   rename it or delete it. As in the official app, areas stay on the device.
-  Class rows mark Wellness classes, show an "On waitlist" pill when you are on the waitlist and "Fully
+  Class rows mark Wellness classes, show a "Waitlist" pill when you are on the waitlist and "Fully
   booked" otherwise, and show the faces of friends who booked the class;
   lists say "Filter active" at the end while filters apply. Deleted classes are hidden, as in the official app.
 - **Parakey doors**: studios whose doors open with the Parakey app say so on the class and studio pages,
   with a sheet that shows whether your account is linked and opens Parakey.
 - **Book, cancel and join waitlists** through a booking-rules sheet that shows the "book until",
-  "cancel until" and check-in windows. A fully booked class also offers **Similar classes**: nearby classes
+  "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked. A fully booked class also offers **Similar classes**: nearby classes
   around the same time, as swipeable cards.
+- **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
+  plan's limit at the studio. A class over your limit shows its drop-in price ("Buy for SEK 220").
 - **Descriptions and alerts:** studio and class descriptions are rendered as Markdown (bold, lists, links).
   Active alerts (e.g. "Women only") show in red; alerts have a start and an optional end, and expired ones
   are hidden. **Translate** turns descriptions and alerts into your device language with Apple's
@@ -79,8 +81,8 @@ My classes tabs, with class and studio pages and account sheets.
 - **Offline demo mode** for screenshots and UI work (see below).
 
 Account changes, membership plans, pausing, checkout, payments, vouchers, sign-up and password reset are
-**display-only**: they show the screens but never send a request. Buying tickets is deliberately not
-implemented.
+**display-only**: they show the screens but never send a request. Buying tickets and drop-in classes is
+deliberately not implemented.
 
 ### iOS: Liquid Glass
 

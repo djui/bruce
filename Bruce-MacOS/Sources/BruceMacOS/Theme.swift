@@ -129,10 +129,16 @@ struct CountPill: View {
 }
 
 /// Top-bar studio visit pill: "n / m", or ∞ when the studio's limit for the tier is 0 (unlimited).
+/// Tapping it opens the visit-limit sheet, as in the original.
 struct StudioLimitPill: View {
     @Environment(AppModel.self) var m
     let studioId: Int
     var body: some View {
+        Button { m.present(.visitLimit(studioId)) } label: { label.contentShape(Capsule()) }
+            .buttonStyle(.plain)
+            .help("Visit limit at this studio")
+    }
+    @ViewBuilder var label: some View {
         switch m.studioLimitState(studioId) {
         case .limited(let l): CountPill(used: m.studioVisitsThisMonth(studioId), total: l)
         case .notIncluded: CountPill(used: 0, total: 0)
@@ -270,7 +276,7 @@ struct Avatar: View {
 }
 
 /// Class row used in Explore/Classes, Friends and Visits lists.
-/// `badge` (the user is on the waitlist) shows an orange "On waitlist" line; otherwise `full` shows red
+/// `badge` shows an orange "Waitlist" line (teal "Booked" once the spot turned into a booking); otherwise `full` shows red
 /// "Fully booked". `wellness` adds a boxed tag under the duration. With `classId`, friends booked on the
 /// class show as small faces under the row.
 struct ClassRow: View {
@@ -307,8 +313,10 @@ struct ClassRow: View {
                     if !meta.isEmpty { Text(meta).font(.system(size: 16, weight: .light)).foregroundStyle(Theme.secondary).lineLimit(1) }
                     if let badge {
                         HStack(spacing: 6) {
-                            Image(systemName: "bell.fill").font(.system(size: 11)).foregroundStyle(Theme.waitlistOrange)
-                            Text(badge).font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.waitlistOrange)
+                            // "Booked" = a waitlist spot that turned into a booking (teal), "Waitlist" orange.
+                            let tint = badge == "Booked" ? Theme.teal : Theme.waitlistOrange
+                            Image(systemName: badge == "Booked" ? "checkmark.circle.fill" : "bell.fill").font(.system(size: 11)).foregroundStyle(tint)
+                            Text(badge).font(.system(size: 15, weight: .medium)).foregroundStyle(tint)
                         }
                         .padding(.top, 6)
                     } else if full {

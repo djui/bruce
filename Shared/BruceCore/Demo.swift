@@ -224,6 +224,31 @@ extension AppModel {
         case "waitlisted": standbys.append(BruceAPI.ClassHolder(id: 77, class: classDetails[9008])); push(.classDetail(9008))
         case "leave": standbys.append(BruceAPI.ClassHolder(id: 77, class: classDetails[9008])); push(.classDetail(9008)); askLeaveWaitlist(9008)
         case "joined": push(.classDetail(9008)); infoAlert = Copy.waitlistJoined
+        case "limitreached", "visitlimit":
+            // Example Yoga Studio with this month's BASE visits used up: "Buy for SEK 220" + limit notice.
+            // Shapes as recorded [c7:125, 132]: price in user_attendance_info, dynamic_prices all 0, items EPIC..BASE.
+            let cal = BruceDate.calendar
+            let monthStart = cal.date(from: cal.dateComponents([.year, .month], from: Date()))!
+            let resets = iso.string(from: cal.date(byAdding: .month, value: 1, to: monthStart)!)
+            studioLimits[1489] = dec([BruceAPI.VisitLimit].self, """
+            [{"id":"U1RVRElPOkdFTkVSQUw=","total":1,"used":1,"remaining":0,"within_limit":false,"resolvable_by_unbooking":false,"resets_at":"\(resets)","month":\(BruceDate.format(Date(), "yyyyMM")),"type":"STUDIO","visit_limit_type":"GENERAL",
+              "items":[{"id":3,"label":"EPIC","limit":8,"period":"MONTHLY"},{"id":2,"label":"BLACK","limit":8,"period":"MONTHLY"},{"id":1,"label":"BASE","limit":1,"period":"MONTHLY"}]},
+             {"id":"U0lNVUxUQU5FT1VT","total":3,"used":1,"remaining":2,"within_limit":true,"resets_at":"\(resets)","type":"SIMULTANEOUS","items":[]}]
+            """)
+            classDetails[9006]?.dynamicPrices = BruceAPI.TierPrices(["BASE": 0, "BLACK": 0, "EPIC": 0, "FREE": -1])
+            classDetails[9006]?.currency = "sek"
+            classDetails[9006]?.userAttendanceInfo = dec(BruceAPI.AttendanceInfo.self, """
+            {"id":9006,"admission_access":false,"booking_credit_access":false,"booking_credit_amount":null,"price":22000,"booking_voucher_access":false,
+             "booking_voucher_id":null,"trial":false,"user_tier_code":"BASE","booking_limit_reached":true,"visit_limit_reached":true,"visit_limit_reached_types":["STUDIO"]}
+            """)
+            push(.classDetail(9006))
+            if AppModel.setting("BRUCE_SCREEN") == "visitlimit" { present(.visitLimit(1489)) }
+        case "waitlistbooked":
+            // One waitlist entry got a spot: the API drops it from /standby and lists a booking instead [c7:80, 64].
+            // loadMine keeps such an entry as "Booked"; here that end state is set directly.
+            promotedStandbys = [BruceAPI.ClassHolder(id: 78, class: classDetails[9006])]
+            bookings = [BruceAPI.Booking(id: 9106, classId: 9006, studioId: 1489, checkedInAt: nil, class: classDetails[9006])]
+            tab = .myClasses; demoMyClassesTab = 1
         case "editprofile": sheets = [.account, .editProfile]
         case "pause": sheets = [.account, .membership, .pause]
         case "pausepicker": demoPausePicker = true; sheets = [.account, .membership, .pause]

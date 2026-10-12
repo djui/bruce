@@ -22,7 +22,7 @@ enum SheetRoute: Hashable {
     case notifications, menu, account, membership, visits, credits, strikes, payment
     case settings, login, checkIn, info(String)
     case search, selectCity, newArea, createAccount, resetPassword
-    case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts
+    case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts, visitLimit(Int)
     case bookingRules(Int), classInvite(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
     case similarClasses(Int), area(UUID), parakey(Int)
 }
@@ -64,6 +64,7 @@ final class AppModel {
     var demoHoursOpen = false
     var demoCategoryTab = 0
     var demoStudioTab = 0
+    var demoMyClassesTab = 0
 
     // Session & safety
     var session: Session? = AppModel.demo ? nil : TokenStore.resolve()
@@ -127,6 +128,14 @@ final class AppModel {
     var classesLoadingDay: Date?
     var bookings: [BruceAPI.Booking] = []
     var standbys: [BruceAPI.ClassHolder] = []
+    /// Waitlist entries that turned into bookings. The API drops a promoted entry from `GET /v52/standby` (its
+    /// `booking_id` stays null) and the booking appears in `GET /v52/booking` [c7:80, 64]; the original keeps
+    /// showing it in the Waitlist tab as "Booked". Kept only while a booking for that class exists.
+    var promotedStandbys: [BruceAPI.ClassHolder] = []
+    /// Rows of the Waitlist tab: current entries plus promoted ones, by class start.
+    var waitlistRows: [BruceAPI.ClassHolder] {
+        (standbys + promotedStandbys).sorted { ($0.class?.startTime ?? "") < ($1.class?.startTime ?? "") }
+    }
     var bookmarks: [BruceAPI.ClassHolder] = []
     var notifications: [BruceAPI.BruceNotification] = []
     var friends: [BruceAPI.Friend] = []
@@ -236,9 +245,56 @@ final class AppModel {
 
     enum LimitState { case limited(Int), unlimited, notIncluded, unknown }
     var studioLimits: [Int: [BruceAPI.VisitLimit]] = [:]
-    func loadStudioLimits(_ studioId: Int) async {
-        guard tokenUsable, let uid = userId, studioLimits[studioId] == nil else { return }
+    /// Per-studio limits; `force` re-reads them (the original re-reads `user_visit_limit` after book/cancel [c2:93-129]).
+    func loadStudioLimits(_ studioId: Int, force: Bool = false) async {
+        guard tokenUsable, let uid = userId, force || studioLimits[studioId] == nil else { return }
         if let l = try? await BruceAPI.fetchStudioLimits(token: token, userId: uid, studioId: studioId) { studioLimits[studioId] = l }
+    }
+
+    // MARK: Visit limit per studio (pill sheet, "Buy for SEK n")
+
+    /// The `STUDIO` entry of `user_visit_limit?studio_id=` (total/used/remaining/resets_at, per-tier items).
+    func studioVisitLimit(_ studioId: Int) -> BruceAPI.VisitLimit? {
+        studioLimits[studioId]?.first { $0.type == "STUDIO" }
+    }
+    /// Monthly visit limit for every tier at a studio, in plan order (BASE, BLACK, EPIC, then any others).
+    /// Source: the `STUDIO` limit's `items`, else the studio's own `visit_limit.items` from the studio list.
+    /// `limit` 0 = unlimited, -1 = not included. FREE is left out (not a plan the user can pick).
+    func tierLimits(_ studioId: Int) -> [(tier: String, limit: Int)] {
+        func clean(_ items: [BruceAPI.VisitLimitItem]?) -> [(tier: String, limit: Int)] {
+            (items ?? []).compactMap { i in
+                guard let l = i.label?.uppercased(), !l.isEmpty, l != "FREE", let v = i.limit else { return nil }
+                return (l, v)
+            }
+        }
+        var out = clean(studioVisitLimit(studioId)?.items)
+        if out.isEmpty { out = clean(studioDetails[studioId]?.visitLimit?.items) }
+        if out.isEmpty { out = clean(studioIndex[studioId]?.visitLimit?.items) }
+        let order = ["BASE": 0, "BLACK": 1, "EPIC": 2]
+        return out.sorted { (order[$0.tier] ?? 9, $0.tier) < (order[$1.tier] ?? 9, $1.tier) }
+    }
+    /// When the studio's monthly visits reset: `resets_at`, else the first day of next month.
+    func visitLimitReset(_ studioId: Int) -> Date {
+        if let d = studioVisitLimit(studioId)?.resetDate { return d }
+        let cal = BruceDate.calendar
+        let start = cal.date(from: cal.dateComponents([.year, .month], from: Date())) ?? Date()
+        return cal.date(byAdding: .month, value: 1, to: start) ?? Date()
+    }
+    /// True when the user's plan has no visits left at this class's studio this month. Uses the class's
+    /// `visit_limit_reached` [c4:96] when present, else the studio's `STUDIO` limit (used >= total, or
+    /// `within_limit == false`).
+    func visitLimitReached(_ c: BruceAPI.BruceClass) -> Bool {
+        if let r = c.attendance?.visitLimitReached { return r }
+        guard let s = studioVisitLimit(c.studioId), let t = s.total, t > 0 else { return false }
+        if s.withinLimit == false { return true }
+        if let rem = s.remaining { return rem <= 0 }
+        return (s.used ?? 0) >= t
+    }
+    /// Drop-in price in whole currency units: `user_attendance_info.price` (öre) / 100, e.g. 22000 -> SEK 220
+    /// [c7:125]. `dynamic_prices` is not a price (all 0 there). Currency from the class (`"sek"`).
+    func dropInPrice(_ c: BruceAPI.BruceClass) -> (amount: Int, currency: String)? {
+        guard let ore = c.attendance?.price, ore > 0 else { return nil }
+        return (ore / 100, (c.attendance?.currency ?? c.currency ?? "SEK").uppercased())
     }
     /// Studios in the selected city a tier can visit, counted from each studio's `visit_limit` items
     /// (-1 = not included). nil until studios with limits have loaded.
@@ -406,6 +462,7 @@ final class AppModel {
     func findClass(_ id: Int) -> BruceAPI.BruceClass? {
         classDetails[id] ?? classesByDay.values.joined().first { $0.id == id }
             ?? bookings.first { $0.class?.id == id }?.class ?? bookmarks.first { $0.class?.id == id }?.class
+            ?? standbys.first { $0.class?.id == id }?.class
     }
 
     func toggleCategory(_ id: Int) {
@@ -459,7 +516,7 @@ final class AppModel {
             AppModel.demo = false; AppModel.demoAtRuntime = false
             resetLoadedData()
         } else if AppModel.demo { demoLoggedOut = true }
-        bookings = []; standbys = []; bookmarks = []; notifications = []; friends = []
+        bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
         dismissSheets()
     }
@@ -477,7 +534,7 @@ final class AppModel {
         TokenStore.clear()
         session = nil
         sneakPeek = false
-        bookings = []; standbys = []; bookmarks = []; notifications = []; friends = []
+        bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
         resetLoadedData()
         status = "Your session expired. Please log in again."
@@ -566,11 +623,21 @@ final class AppModel {
 
     func loadMine() async {
         guard tokenUsable, let uid = userId else { return }
+        mineLoadedAt = Date()
         do {
             bookings = try await BruceAPI.fetchBookings(token: token, userId: uid)
                 .filter { ($0.class?.start ?? .distantPast) > Date().addingTimeInterval(-3600) && $0.checkedInAt == nil }
         } catch { handleLoadError(error, "Bookings") }
-        standbys = (try? await BruceAPI.fetchStandbys(token: token, userId: uid)) ?? []
+        if let fresh = try? await BruceAPI.fetchStandbys(token: token, userId: uid) {
+            // Replace the list (no stale rows); an entry that vanished and now has a booking moved to "Booked".
+            let freshIds = Set(fresh.compactMap { $0.class?.id })
+            var seen = Set<Int>()
+            promotedStandbys = (standbys + promotedStandbys).filter { s in
+                guard let cid = s.class?.id, !freshIds.contains(cid), booking(forClass: cid) != nil else { return false }
+                return seen.insert(cid).inserted
+            }
+            standbys = fresh
+        }
         bookmarks = (try? await BruceAPI.fetchBookmarks(token: token, userId: uid)) ?? []
     }
 
@@ -640,6 +707,13 @@ final class AppModel {
 
     // MARK: Waitlist (POST/DELETE /v52/standby [c3:65, 69])
     func standby(forClass id: Int) -> BruceAPI.ClassHolder? { standbys.first { $0.class?.id == id } }
+    /// Row badge for a class the user is (or was) on the waitlist for: "Booked" once the user has a booking for
+    /// it (matched by class id), else "Waitlist".
+    func waitlistBadge(_ classId: Int) -> String? {
+        if booking(forClass: classId) != nil,
+           standby(forClass: classId) != nil || promotedStandbys.contains(where: { $0.class?.id == classId }) { return "Booked" }
+        return standby(forClass: classId) != nil ? "Waitlist" : nil
+    }
     /// The user is on this class's waitlist (from GET /v52/standby; the class payload has no such flag).
     func isOnWaitlist(_ classId: Int) -> Bool { standby(forClass: classId) != nil }
     /// Friends booked on a class (GET /v52/booking?friends=true joined with GET /v52/friend), once per friend.
@@ -806,6 +880,7 @@ final class AppModel {
         if await send(req, label: "Booking") { flash("Booked \(title)") }
         await loadMine()
         await loadClassAttendees(classId)
+        await refreshLimits(forClass: classId)
     }
 
     /// Invites friends (by user id) to a class; they get it in their Bruce app.
@@ -827,8 +902,26 @@ final class AppModel {
         guard let req = try? BruceAPI.cancelRequest(token: token, bookingId: b.id) else { return }
         if await send(req, label: "Cancel booking") { flash("Booking cancelled") }
         await loadMine()
-        if let cid = b.classId ?? b.class?.id { await loadClassAttendees(cid) }
+        if let cid = b.classId ?? b.class?.id {
+            await loadClassAttendees(cid)
+            await refreshLimits(forClass: cid)
+        }
     }
+
+    /// After book/cancel the original re-reads the class and `user_visit_limit` [c2:93-129].
+    private func refreshLimits(forClass classId: Int) async {
+        guard let sid = findClass(classId)?.studioId else { return }
+        await loadStudioLimits(sid, force: true)
+        if classDetails[classId] != nil { await loadClassDetail(classId) }
+    }
+
+    /// Re-read bookings and waitlist when the app comes back to the foreground: a waitlist spot can turn into a
+    /// booking while the app is in the background.
+    func refreshOnForeground() async {
+        guard tokenUsable, !loading, Date().timeIntervalSince(mineLoadedAt ?? .distantPast) > 30 else { return }
+        await loadMine()
+    }
+    @ObservationIgnored private var mineLoadedAt: Date?
 
     func checkIn(_ t: CheckInTarget) async {
         if AppModel.demo { flash("Demo: check-in to \(t.name) not sent (offline)"); return }

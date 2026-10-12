@@ -134,11 +134,16 @@ struct CountPill: View {
     }
 }
 
-/// Studio visit pill: "n / m", or ∞ when unlimited for the user's tier.
+/// Studio visit pill: "n / m", or ∞ when unlimited for the user's tier. Tapping it opens the visit-limit sheet
+/// (visits used this month, reset date and every tier's limit at the studio), as in the original.
 struct StudioLimitPill: View {
     @Environment(AppModel.self) var m
     let studioId: Int
     var body: some View {
+        Button { m.present(.visitLimit(studioId)) } label: { label }
+            .accessibilityLabel("Visit limit at this studio")
+    }
+    @ViewBuilder var label: some View {
         switch m.studioLimitState(studioId) {
         case .limited(let l): Text("\(m.studioVisitsThisMonth(studioId)) / \(l)").monospacedDigit().padding(.horizontal, 4)
         case .notIncluded: Text("0 / 0").padding(.horizontal, 4)
@@ -252,8 +257,9 @@ struct Avatar: View {
 }
 
 /// Class row used in Explore/Classes, Friends, My classes and Visits lists.
-/// States under the row: an orange "On waitlist" pill when the user is on the class's waitlist, otherwise
-/// red "Fully booked" when no spots are left. Wellness classes get a boxed tag. Friends booked on the class
+/// States under the row: an orange "Waitlist" pill when the user is on the class's waitlist (teal "Booked" once it
+/// turned into a booking), otherwise red
+/// "Fully booked" when no spots are left. Wellness classes get a boxed tag. Friends booked on the class
 /// show as small faces under the row (off where the row already shows its friend, e.g. Friends).
 struct ClassRow: View {
     @Environment(AppModel.self) var m
@@ -267,7 +273,6 @@ struct ClassRow: View {
 
     var body: some View {
         let st = m.studio(c.studioId)
-        let waitlisted = badge != nil || m.isOnWaitlist(c.id)
         let friends = showFriends ? m.friendsBooked(c.id) : []
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .trailing, spacing: 3) {
@@ -281,13 +286,15 @@ struct ClassRow: View {
                 Text(st?.name ?? c.studio?.name ?? "").font(.system(size: 15)).lineLimit(1)
                 let line = meta ?? [st?.vicinity ?? c.studio?.vicinity, c.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | ")
                 if !line.isEmpty { Text(line).font(.system(size: 15)).foregroundStyle(Theme.secondary).lineLimit(1) }
-                if waitlisted {
+                if let badge = badge ?? m.waitlistBadge(c.id) {
+                    // "Booked" (a waitlist spot that turned into a booking) is teal, "Waitlist" orange.
+                    let tint = badge == "Booked" ? Theme.teal : Theme.waitlistOrange
                     HStack(spacing: 5) {
-                        Image(systemName: "bell.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.waitlistOrange)
-                        Text(badge ?? "On waitlist").font(.system(size: 13, weight: .semibold))
+                        Image(systemName: badge == "Booked" ? "checkmark.circle.fill" : "bell.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(tint)
+                        Text(badge).font(.system(size: 13, weight: .semibold))
                     }
                     .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Theme.waitlistOrange.opacity(0.18), in: Capsule())
+                    .background(tint.opacity(0.18), in: Capsule())
                     .padding(.top, 4)
                 } else if let a = c.availableSpots, a <= 0 {
                     Text("Fully booked").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.red).padding(.top, 2)

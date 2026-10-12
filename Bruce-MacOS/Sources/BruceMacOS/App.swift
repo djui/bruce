@@ -28,6 +28,10 @@ struct BruceMacOSApp: App {
                 .lightCanvas()
                 .onAppear { location.model = model; if model.isLoggedIn { location.requestIfNeeded() } }
                 .onChange(of: model.session) { _, s in if s != nil { location.requestIfNeeded() } }
+                // Waitlist spots can turn into bookings while the app is in the background.
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+                    Task { await model.refreshOnForeground() }
+                }
         }
         .windowResizability(.contentSize)
     }

@@ -78,17 +78,21 @@ struct MyClassesView: View {
                 if m.bookings.isEmpty { EmptyState(system: "calendar.badge.checkmark", text: "You have no bookings.") }
                 else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } }) }
             case 1:
-                if m.standbys.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
-                else { list(m.standbys.compactMap { s in s.class.map { (s.id, $0, nil) } }, badge: "On waitlist") }
+                if m.waitlistRows.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
+                // A standby that got a spot shows "Booked" (and can be cancelled), as in the original.
+                else { list(m.waitlistRows.compactMap { s in s.class.map { (s.id, $0, m.booking(forClass: $0.id)) } },
+                            badge: { m.waitlistBadge($0.id) }) }
             default:
                 if m.bookmarkedClasses.isEmpty { EmptyState(system: "bookmark", text: "No bookmarked classes yet.") }
                 else { list(m.bookmarkedClasses.map { ($0.id, $0, nil) }) }
             }
         }
         .task { await m.loadMine() }
+        .onAppear { if m.demoMyClassesTab != 0 { tab = m.demoMyClassesTab; m.demoMyClassesTab = 0 } }
     }
 
-    func list(_ items: [(Int, BruceAPI.BruceClass, BruceAPI.Booking?)], badge: String? = nil) -> some View {
+    func list(_ items: [(Int, BruceAPI.BruceClass, BruceAPI.Booking?)],
+              badge: @escaping (BruceAPI.BruceClass) -> String? = { _ in nil }) -> some View {
         let groups = Dictionary(grouping: items) { BruceDate.calendar.startOfDay(for: $0.1.start ?? Date()) }
         return ScrollView {
             LazyVStack(spacing: 0) {
@@ -101,7 +105,7 @@ struct MyClassesView: View {
                             ClassRow(time: BruceDate.time(c.start), duration: c.durationMinutes.map { "\($0) min" } ?? "",
                                      title: c.title, studio: st?.name ?? c.studio?.name ?? "",
                                      meta: [st?.vicinity, c.instructor].compactMap { $0 }.joined(separator: " | "),
-                                     badge: badge, wellness: m.isWellness(studioId: c.studioId), classId: c.id)
+                                     badge: badge(c), wellness: m.isWellness(studioId: c.studioId), classId: c.id)
                         }
                         .buttonStyle(.plain)
                         .contextMenu {

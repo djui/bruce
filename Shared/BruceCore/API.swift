@@ -213,10 +213,21 @@ enum BruceAPI {
         var lateCheckInMinutes: Int? = nil
         var classCategories: [ClassCategory]? = nil
         var studio: StudioLite? = nil
+        /// `dynamic_prices` per tier, e.g. `{"BASE":0,"BLACK":0,"EPIC":0,"FREE":-1}` [c7:125]. NOT the drop-in price
+        /// (0 even when the visit limit is reached); the price is `user_attendance_info.price`.
+        var dynamicPrices: TierPrices? = nil
+        /// Lower-case currency code of the class, e.g. "sek" [c7:125].
+        var currency: String? = nil
+        /// Per-user access state, key `user_attendance_info` (request `include_studio_user_attendance_info=true`) [c7:125].
+        /// The studio opening schedule uses `studio_user_attendance_info`; both are read.
+        var userAttendanceInfo: AttendanceInfo? = nil
+        var studioUserAttendanceInfo: AttendanceInfo? = nil
         /// Class-level notice shown in red under the description (e.g. "Women only") [c7:30]. No dates.
         var alert: String? = nil
         enum CodingKeys: String, CodingKey {
             case id, title, spots, canceled, description, photo, studio, alert, deleted
+            case dynamicPrices = "dynamic_prices", currency
+            case userAttendanceInfo = "user_attendance_info", studioUserAttendanceInfo = "studio_user_attendance_info"
             case rawInstructor = "instructor", deletedAt = "deleted_at"
             case studioId = "studio_id", startTime = "start_time", endTime = "end_time"
             case availableSpots = "available_spots"
@@ -240,6 +251,25 @@ enum BruceAPI {
             guard let s = start, let e = end else { return nil }
             return Int(e.timeIntervalSince(s) / 60)
         }
+        var attendance: AttendanceInfo? { userAttendanceInfo ?? studioUserAttendanceInfo }
+    }
+
+    /// `dynamic_prices`: tier code -> öre. Decoded leniently so an unexpected shape never breaks the class list.
+    struct TierPrices: Decodable, Hashable {
+        var values: [String: Int] = [:]
+        init(_ values: [String: Int]) { self.values = values }
+        init(from decoder: Decoder) throws {
+            guard let c = try? decoder.container(keyedBy: AnyKey.self) else { return }
+            for k in c.allKeys { if let v = try? c.decodeIfPresent(Int.self, forKey: k) { values[k.stringValue.uppercased()] = v } }
+        }
+        subscript(_ tier: String) -> Int? { values[tier.uppercased()] }
+    }
+
+    struct AnyKey: CodingKey {
+        var stringValue: String
+        var intValue: Int? { nil }
+        init(stringValue: String) { self.stringValue = stringValue }
+        init?(intValue: Int) { stringValue = String(intValue) }
     }
 
     /// `GET /v52/class` for one day (city-wide) or for one studio, paged by `next_cursor`.
@@ -293,13 +323,30 @@ enum BruceAPI {
         }
     }
 
-    static func fetchBookings(token: String, userId: Int) async throws -> [Booking] {
-        struct R: Decodable { let bookings: [Booking] }
-        let q: [(String, String)] = [
-            ("user_id", String(userId)), ("limit", "30"), ("deleted", "false"),
-            ("include_class", "true"), ("locale", "en"),
-        ]
-        return try decode(R.self, try await send(makeRequest("GET", "v52/booking", query: q, token: token))).bookings
+    /// All of the user's non-deleted bookings, paged by `next_cursor` like the original app [75, 86].
+    /// A single page (30) is not enough: older bookings fill it, so a new booking (e.g. one promoted from the
+    /// waitlist) can sit on a later page.
+    /// Same window as the original (`class_start_time_after` = 24 h ago, newest first) [c7:64]; paging stops when
+    /// `metadata.pagination.next_cursor` is null.
+    static func fetchBookings(token: String, userId: Int, maxPages: Int = 15) async throws -> [Booking] {
+        let after = ISO8601DateFormatter().string(from: Date().addingTimeInterval(-24 * 3600))
+        struct R: Decodable { let bookings: [Booking]; let metadata: Metadata? }
+        var all: [Int: Booking] = [:]
+        var cursor: String?
+        for _ in 0..<maxPages {
+            var q: [(String, String)] = [
+                ("user_id", String(userId)), ("limit", "30"), ("deleted", "false"),
+                ("class_start_time_after", after), ("include_class", "true"), ("locale", "en"),
+            ]
+            if let cursor { q.append(("next_cursor", cursor)) }
+            let r = try decode(R.self, try await send(makeRequest("GET", "v52/booking", query: q, token: token)))
+            let before = all.count
+            for b in r.bookings { all[b.id] = b }
+            guard let next = r.metadata?.pagination?.nextCursor, !next.isEmpty,
+                  !r.bookings.isEmpty, all.count > before else { break }
+            cursor = next
+        }
+        return all.values.sorted { $0.id < $1.id }
     }
 
     /// `POST /v52/booking` body `{"class_id":..,"booked_via":..,"include_user":false,"locale":"en"}`
