@@ -24,6 +24,64 @@ struct TextInfoSheet: View {
     }
 }
 
+// MARK: - Invite friends to a class
+
+/// Class page "Invite": pick friends and send them this class (POST /v52/class/<id>/invite).
+struct ClassInviteSheet: View {
+    @Environment(AppModel.self) var m
+    let classId: Int
+    @State private var picked: Set<Int> = []
+    var c: BruceAPI.BruceClass? { m.classDetails[classId] ?? m.findClass(classId) }
+    var friends: [BruceAPI.UserLite] {
+        m.friends.compactMap(\.friendUser).sorted { ($0.firstName ?? "") < ($1.firstName ?? "") }
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            NavBar(title: c?.title ?? "Invite friends", leading: .close, action: { m.dismissSheets() }) {
+                if let c {
+                    ShareButton(url: ShareURL.forClass(classId, title: c.title))
+                }
+            }
+            SectionHeaderBar(text: "Friends")
+            ScrollView {
+                VStack(spacing: 0) {
+                    if friends.isEmpty {
+                        Text(m.isLoggedIn ? "Add friends in Bruce to invite them to classes." : "Log in to invite friends.")
+                            .font(.system(size: 16, weight: .light)).foregroundStyle(Theme.secondary).padding(24)
+                    }
+                    ForEach(friends, id: \.id) { u in
+                        Button {
+                            if picked.contains(u.id) { picked.remove(u.id) } else { picked.insert(u.id) }
+                        } label: {
+                            VStack(spacing: 0) {
+                                HStack(spacing: 22) {
+                                    Avatar(fileId: u.photo, initials: u.initials, size: 64)
+                                    Text(u.firstName ?? u.fullName).font(.system(size: 18, weight: .medium))
+                                    Spacer()
+                                    Image(systemName: picked.contains(u.id) ? "checkmark.circle.fill" : "checkmark.circle")
+                                        .font(.system(size: 26, weight: .light))
+                                        .foregroundStyle(picked.contains(u.id) ? .black : Theme.secondary)
+                                }
+                                .padding(.vertical, 14).padding(.trailing, Theme.gutter)
+                                Rectangle().fill(Theme.divider).frame(height: 0.5)
+                            }
+                            .padding(.leading, Theme.gutter).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            LimeButton(title: m.loading ? "Inviting…" : "Invite friends") {
+                Task { if await m.inviteToClass(classId, userIds: Array(picked)) { m.dismissSheets() } }
+            }
+            .disabled(picked.isEmpty || m.loading).opacity(picked.isEmpty ? 0.5 : 1)
+            .padding(Theme.gutter)
+        }
+        .task { if m.friends.isEmpty { await m.loadSocial() } }
+    }
+}
+
 // MARK: - Invite friends
 
 struct InviteSheet: View {

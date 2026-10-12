@@ -107,7 +107,7 @@ All write calls take a JSON body containing at least `{"locale":"en"}` and the `
 
 ### Friends
 - Friends' upcoming classes: `GET /v52/booking?friends=true&user_id=<me>&class_day_after=YYYYMMDD&deleted=false&limit=30&include_class=true&include_class_studio=true&include_class_dynamic_prices=true` [c3:106] -> `{"bookings":[{id,class_id,studio_id,user_id(friend),class{...,studio}}]}`. Join `user_id` with `GET /v52/friend` for name and photo.
-- Class attendees: `GET /v52/booking?class_id=<id>&include_user=true&include_message=true&deleted=false&limit=30` [c3:58, 573; c2:55] returns bookings without `user_id`/`user`. Attendees are anonymised, so "who's booked" can only use the friends feed.
+- Class attendees: `GET /v52/booking?class_id=<id>&include_user=true&include_message=true&deleted=false&limit=30` [c3:58, 573; c2:55; c7:160]. See capture 7 below: members with Social on come with `user_id` and a public `user`, everyone else without (shown as "Hidden").
 - `POST /v52/friend_request` [c3:171] `{"from_user_id","to_user_id","include_from_user":true,"include_to_user":true,"locale"}`.
 - `POST /v52/friend_request/<id>/respond` [c3:245] `{"accept":bool,"include_friend_user":true,"locale"}` -> `{}`.
 
@@ -205,5 +205,12 @@ Capture 7 (about 25 requests) opens two fully booked classes and their "Similar 
   `[links](https://...)` [c7:19, 30]. Both apps render them as Markdown.
 - No new write calls: the only POST is `POST /v52/booking/offline/done` [c7:26].
 
+Capture 7 also covers opening a booked class and inviting a friend to it (Oct 2026):
+- **Class attendees** `GET /v52/booking?class_id=<id>&include_user=true&include_message=true&include_class_dynamic_prices=true&deleted=false&limit=30` [c7:160] -> `{"bookings":[...],"metadata":{...}}`. Members with "Bruce Studios Social" on carry `user_id` and `user{id,first_name,photo,photo_valid,social,city_id,display_name}` (`display_name` was null). The others have neither `user_id` nor `user`; the original app shows them as a grey "Hidden" avatar. The caller's own booking carries their full user record. This is the "who's booked" row on the class page (the invite button, then the attendees).
+- **Class invite** `POST /v52/class/<id>/invite` [c7:168] body `{"user_ids":[<friend user id>],"locale":"en"}` -> `{"invited":[<user>]}`. It is the class page's "Invite" button: a sheet titled with the class name lists the user's friends ("Contacts") with check marks and an "Invite friends" button. The membership invite codes (`GET /v52/booking/voucher`) are a separate feature under the account menu. Note that the response returns each invitee's **full private user record** (email, phone, national identity number, calendar secret, payment references); the apps ignore the response body.
+- **Class notice banner**: the class detail's embedded studio has `alerts[]` when requested with `include_studio_alerts=true&exclude_studio_expired_alerts=true` [c7:157]. Each alert has `id,type,order,message,start_date,end_date,start_day,end_day,show_on_web`. `type` is `INFO` or `CRITICAL`; the original shows the critical one as a red banner at the top of the class page. An `INFO` alert that ended months earlier was still returned, so clients filter by `start_date`/`end_date`. The studio detail request the app sent on this screen [c7:158] did not ask for alerts.
+- Class detail also carries `alert` and `message` fields on the class itself (both null here) and `user_attendance_info`.
+- Other requests are already documented: user, tos, membership user_info, payment method, reviewable bookings, config, bookmark, alternative_recommendation, user_visit_limit, offline/done, category, friend.
+
 ### Still not captured
-Token refresh; check-in other than the STC door QR (`POST /v52/studio/check_in` appears only in capture 1); membership upgrade, pause and cancel (prices: `GET /v52/membership/info`, c2:426); profile photo upload; review submission; notification mark-read; ticket (no endpoint; the app renders it from the checked-in booking).
+Token refresh; responding to a class invite; check-in other than the STC door QR (`POST /v52/studio/check_in` appears only in capture 1); membership upgrade, pause and cancel (prices: `GET /v52/membership/info`, c2:426); profile photo upload; review submission; notification mark-read; ticket (no endpoint; the app renders it from the checked-in booking).

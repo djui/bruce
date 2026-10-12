@@ -23,7 +23,7 @@ enum SheetRoute: Hashable {
     case settings, login, checkIn, info(String)
     case search, selectCity, newArea, createAccount, resetPassword
     case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts
-    case bookingRules(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
+    case bookingRules(Int), classInvite(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
     case similarClasses(Int), area(UUID), parakey(Int)
 }
 
@@ -153,6 +153,7 @@ final class AppModel {
     var infoAlert: String?
     var reviews: [Int: [BruceAPI.Review]] = [:]
     var friendsBookings: [BruceAPI.FriendBooking] = []
+    var classAttendees: [Int: [BruceAPI.ClassAttendee]] = [:]
     var notificationSetting: BruceAPI.NotificationSetting?
     var social: Bool?
     var payments: [BruceAPI.Payment] = []
@@ -487,7 +488,7 @@ final class AppModel {
     func resetLoadedData() {
         studios = []; categories = []; home = []; classesByDay = [:]; classDetails = [:]; studioDetails = [:]
         schedules = [:]; studioClasses = [:]; studioLimits = [:]; reviews = [:]; pastBookings = []
-        friendsBookings = []; invites = []; payments = []; aggregate = []; favoriteIds = [:]
+        friendsBookings = []; classAttendees = [:]; invites = []; payments = []; aggregate = []; favoriteIds = [:]
         notificationSetting = nil; social = nil; stacks = [:]; tab = .home
     }
 
@@ -747,6 +748,47 @@ final class AppModel {
         catch { similarClasses[classId] = []; handleLoadError(error, "Similar classes") }
     }
 
+    func loadClassAttendees(_ id: Int) async {
+        guard tokenUsable else { return }
+        if let a = try? await BruceAPI.fetchClassAttendees(token: token, classId: id) { classAttendees[id] = a }
+    }
+
+    /// "Who's booked" row, as in the original app: me first, then friends, then other members with a
+    /// public profile, then everyone else as "Hidden". Falls back to the friends feed for friends the
+    /// attendee list doesn't name.
+    func attendees(forClass id: Int) -> [ClassAttendeeEntry] {
+        var me: [ClassAttendeeEntry] = [], friendsIn: [ClassAttendeeEntry] = [], others: [ClassAttendeeEntry] = [], hidden: [ClassAttendeeEntry] = []
+        var seen = Set<Int>()
+        let mine = booking(forClass: id)
+        if mine != nil, let u = user {
+            me.append(ClassAttendeeEntry(key: "u\(u.id)", name: u.firstName, photo: u.photo, initials: u.initials, hidden: false))
+            seen.insert(u.id)
+        }
+        func friendUser(_ uid: Int?) -> BruceAPI.UserLite? { uid.flatMap { uid in friends.first { $0.friendUser?.id == uid }?.friendUser } }
+        for a in classAttendees[id] ?? [] {
+            if !me.isEmpty, a.id == mine?.id { continue }
+            let uid = a.user?.id ?? a.userId
+            if let uid, seen.contains(uid) { continue }
+            if let uid { seen.insert(uid) }
+            if let f = friendUser(uid) {
+                friendsIn.append(ClassAttendeeEntry(key: "u\(f.id)", name: f.firstName, photo: f.photo ?? a.user?.photo, initials: f.initials, hidden: false))
+            } else if let u = a.user, u.social != false, let name = u.displayName ?? u.firstName, !name.isEmpty {
+                let initials = [u.firstName, u.lastName].compactMap { $0?.first.map(String.init) }.joined()
+                others.append(ClassAttendeeEntry(key: "u\(u.id)", name: name, photo: u.photo, initials: initials, hidden: false))
+            } else {
+                hidden.append(ClassAttendeeEntry(key: "b\(a.id)", name: nil, photo: nil, initials: "", hidden: true))
+            }
+        }
+        for b in friendsBookings where b.classId == id || b.class?.id == id {
+            guard let f = friendUser(b.userId), !seen.contains(f.id) else { continue }
+            seen.insert(f.id)
+            friendsIn.append(ClassAttendeeEntry(key: "u\(f.id)", name: f.firstName, photo: f.photo, initials: f.initials, hidden: false))
+            // That friend's booking is already in the list as an anonymous one; don't count them twice.
+            if !hidden.isEmpty { hidden.removeLast() }
+        }
+        return me + friendsIn + others + hidden
+    }
+
     func loadStudioDetail(_ id: Int) async {
         guard tokenUsable, studioDetails[id] == nil else { return }
         if let s = try? await BruceAPI.fetchStudio(token: token, id: id) { studioDetails[id] = s }
@@ -763,6 +805,18 @@ final class AppModel {
         guard let req = try? BruceAPI.bookRequest(token: token, classId: classId) else { return }
         if await send(req, label: "Booking") { flash("Booked \(title)") }
         await loadMine()
+        await loadClassAttendees(classId)
+    }
+
+    /// Invites friends (by user id) to a class; they get it in their Bruce app.
+    func inviteToClass(_ classId: Int, userIds: [Int]) async -> Bool {
+        guard !userIds.isEmpty else { return false }
+        let who = userIds.count == 1 ? "1 friend" : "\(userIds.count) friends"
+        if AppModel.demo { flash("Demo: invited \(who) (offline, nothing sent)"); return true }
+        guard let req = try? BruceAPI.classInviteRequest(token: token, classId: classId, userIds: userIds) else { return false }
+        let ok = await send(req, label: "Invite")
+        if ok { flash("Invited \(who)") }
+        return ok
     }
 
     func cancel(_ b: BruceAPI.Booking) async {
@@ -773,6 +827,7 @@ final class AppModel {
         guard let req = try? BruceAPI.cancelRequest(token: token, bookingId: b.id) else { return }
         if await send(req, label: "Cancel booking") { flash("Booking cancelled") }
         await loadMine()
+        if let cid = b.classId ?? b.class?.id { await loadClassAttendees(cid) }
     }
 
     func checkIn(_ t: CheckInTarget) async {

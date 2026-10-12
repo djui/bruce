@@ -4,7 +4,7 @@ info:
   version: "v52"
   description: |
     Reconstructed from Charles captures of the Bruce Studios iOS app 14.4.2 (build 538).
-    Evidence: capture 1 = `captures/1`, capture 2 = `captures/2`, capture 3 = `captures/3`, capture 4 = `captures/4`, capture 5 = `captures/5`, capture 6 = `captures/6` (file numbers in `x-evidence`).
+    Evidence: capture 1 = `captures/1`, capture 2 = `captures/2`, capture 3 = `captures/3`, capture 4 = `captures/4`, capture 5 = `captures/5`, capture 6 = `captures/6`, capture 7 = `captures/7` (file numbers in `x-evidence`).
     Unofficial; shapes are abbreviated to the fields observed. See API.md.
 servers:
   - url: https://api.bruce.app/v52
@@ -181,7 +181,11 @@ paths:
     get:
       tags: [Classes]
       summary: Class detail (shown before booking)
-      x-evidence: ["c2:50", "c2:58"]
+      description: |
+        With `include_studio_alerts=true` the embedded `studio.alerts[]` carries the notice banner
+        (`type` INFO or CRITICAL, `message`, `order`, `start_date`, `end_date`). Expired alerts can still be
+        returned despite `exclude_studio_expired_alerts=true`, so filter by `end_date` [c7:157].
+      x-evidence: ["c2:50", "c2:58", "c7:157"]
       parameters:
         - { name: classId, in: path, required: true, schema: { type: integer } }
         - { name: include_studio, in: query, schema: { type: boolean } }
@@ -216,14 +220,46 @@ paths:
                 properties:
                   class_cards: { type: array, items: { $ref: "#/components/schemas/ClassCard" } }
                   metadata: { type: object, nullable: true }
+  /class/{classId}/invite:
+    post:
+      tags: [Classes]
+      summary: Invite friends to a class
+      description: |
+        Sends the class to the given friends in their Bruce app. The response returns the invitees' full user
+        records (including private fields); clients should ignore it.
+      x-evidence: ["c7:168"]
+      parameters:
+        - { name: classId, in: path, required: true, schema: { type: integer } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_ids]
+              properties:
+                user_ids: { type: array, items: { type: integer }, description: Friend user ids }
+                locale: { type: string, example: en }
+      responses:
+        "200":
+          description: "`{invited:[<user>]}`"
 
   /booking:
     get:
       tags: [Booking]
-      summary: My bookings, paged
-      x-evidence: ["75", "86"]
+      summary: Bookings, paged (mine, friends' or a class's attendees)
+      description: |
+        `user_id=<me>` lists my bookings; `friends=true` my friends' upcoming ones [c3:106].
+        `class_id=<id>&include_user=true&include_message=true` lists everyone booked on a class [c7:160]: members
+        with "Bruce Studios Social" on carry `user_id` and `user{id,first_name,photo,photo_valid,social,city_id,display_name}`;
+        everyone else comes back without `user_id`/`user` (the original app shows them as "Hidden").
+      x-evidence: ["75", "86", "c3:106", "c7:160"]
       parameters:
         - $ref: "#/components/parameters/userId"
+        - { name: class_id, in: query, schema: { type: integer } }
+        - { name: friends, in: query, schema: { type: boolean } }
+        - { name: include_user, in: query, schema: { type: boolean } }
+        - { name: include_message, in: query, schema: { type: boolean } }
         - { name: deleted, in: query, schema: { type: boolean, example: false } }
         - { name: include_class, in: query, schema: { type: boolean } }
         - { name: include_class_studio, in: query, schema: { type: boolean } }

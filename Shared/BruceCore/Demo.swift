@@ -86,6 +86,10 @@ extension AppModel {
         friendsBookings = dec([BruceAPI.FriendBooking].self, #"[{"id":1,"user_id":1,"class_id":9006},{"id":2,"user_id":2,"class_id":9001}]"#).map { b in
             BruceAPI.FriendBooking(id: b.id, userId: b.userId, classId: b.classId, class: classDetails[b.classId ?? 0])
         }
+        classAttendees[9008] = dec([BruceAPI.ClassAttendee].self, """
+        [{"id":11,"user":{"id":11,"first_name":"Alex","display_name":"Alex","social":true}},{"id":12,"user":{"id":12,"first_name":"Sam","display_name":"Sam","social":true}},
+         {"id":13},{"id":14},{"id":15,"user_id":1}]
+        """)
         // Public city facts (centre, strike-unblock price) so the policy texts show their API-driven values.
         cities = dec([BruceAPI.City].self, #"[{"id":1,"name":"Stockholm","code":"STO","coordinates":{"latitude":59.3293,"longitude":18.0686},"user_strike_block_un_lock_price":14000}]"#)
         invites = dec([BruceAPI.Voucher].self, #"[{"id":1,"code":"demo01"},{"id":2,"code":"demo02"},{"id":3,"code":"demo03"},{"id":4,"code":"demo04","user_id":1}]"#)

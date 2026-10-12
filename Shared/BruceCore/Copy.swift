@@ -112,6 +112,11 @@ enum Copy {
         return s
     }
 
+    /// Class page "Invite": asks a friend to join this class (the membership invite codes live under Account).
+    static func classInvite(_ c: BruceAPI.BruceClass, studio: String) -> String {
+        "Join me at \(c.title) at \(studio), \(classDateLine(c))."
+    }
+
     static func shareInvite(_ code: String) -> String { "Here's a free workout at Bruce Studios on me. Invite code: \(code)" }
 
     static func howItWorks(open: Int?) -> [String] {
