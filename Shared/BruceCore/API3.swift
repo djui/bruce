@@ -67,9 +67,10 @@ extension BruceAPI {
     }
 
     // MARK: Friends' bookings feed [c3:106]
-    // MARK: Class attendees [c3:58, 573; c2:55]
-    /// Public profile on an attendee booking. Same shape as `booking.user` on reviews [c3:101]; only
-    /// filled for members with "Bruce Studios Social" on. Everyone else comes back without `user`.
+    // MARK: Class attendees [c3:58, 573; c2:55; c7:160]
+    /// Public profile on an attendee booking: `{id,first_name,photo,photo_valid,social,city_id,display_name}`,
+    /// only for members with "Bruce Studios Social" on. Everyone else comes back without `user_id` and `user`
+    /// (shown as "Hidden"). The caller's own booking carries their full user record.
     struct AttendeeUser: Decodable, Hashable {
         let id: Int
         let firstName: String?
@@ -103,6 +104,12 @@ extension BruceAPI {
             cursor = next
         }
         return out
+    }
+
+    /// Invite friends to a class: `POST /v52/class/<id>/invite` `{"user_ids":[<friend id>,...],"locale":"en"}`
+    /// -> `{"invited":[<user>]}` [c7:168]. The response holds the invitees' full user records; the apps ignore it.
+    static func classInviteRequest(token: String, classId: Int, userIds: [Int]) throws -> URLRequest {
+        try makeRequest("POST", "v52/class/\(classId)/invite", token: token, body: ["user_ids": userIds, "locale": "en"])
     }
 
     struct FriendBooking: Decodable, Identifiable, Hashable {
@@ -213,7 +220,27 @@ extension BruceAPI {
 
 extension BruceAPI {
     /// Studio notice banner: `alerts[]` (include_alerts=true, exclude_expired_alerts=true) [c2:212].
-    struct StudioAlert: Codable, Hashable { let message: String?; let type: String?; let order: Int? }
+    /// `type` is `INFO` or `CRITICAL` (red in the original). `exclude_*expired_alerts` still returned an alert whose
+    /// `end_date` had passed [c7:157], so the apps filter by date themselves.
+    struct StudioAlert: Codable, Hashable {
+        let message: String?
+        let type: String?
+        let order: Int?
+        var startDate: String? = nil
+        var endDate: String? = nil
+        enum CodingKeys: String, CodingKey { case message, type, order, startDate = "start_date", endDate = "end_date" }
+        var isCritical: Bool { type?.uppercased() == "CRITICAL" }
+        func isActive(at now: Date = Date()) -> Bool {
+            if let s = startDate.flatMap(BruceDate.parse), s > now { return false }
+            if let e = endDate.flatMap(BruceDate.parse), e <= now { return false }
+            return true
+        }
+    }
+    /// The banner to show: active alerts with text, critical first, then by `order`.
+    static func currentAlert(_ alerts: [StudioAlert]?) -> StudioAlert? {
+        (alerts ?? []).filter { $0.isActive() && !($0.message ?? "").isEmpty }
+            .sorted { ($0.isCritical ? 0 : 1, $0.order ?? 0) < ($1.isCritical ? 0 : 1, $1.order ?? 0) }.first
+    }
     struct StudioPhotoFile: Codable, Hashable { let fileId: String?
         enum CodingKeys: String, CodingKey { case fileId = "file_id" } }
     struct StudioPhoto: Codable, Hashable { let order: Int?; let main: Bool?; let photo: StudioPhotoFile? }
@@ -237,8 +264,6 @@ extension BruceAPI {
 }
 
 extension BruceAPI.Studio {
-    /// First notice banner text by `order`; shown on the studio page and on its class pages.
-    var notice: String? {
-        (alerts ?? []).sorted { ($0.order ?? 0) < ($1.order ?? 0) }.compactMap(\.message).first { !$0.isEmpty }
-    }
+    /// Notice banner text for the studio page.
+    var notice: String? { BruceAPI.currentAlert(alerts)?.message }
 }

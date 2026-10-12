@@ -70,10 +70,12 @@ struct ClassDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 // Studio notice banner above the hero, as in the original class page.
-                if let msg = studio?.notice {
-                    Text(msg).font(.system(size: 15, weight: .light)).foregroundStyle(.white).multilineTextAlignment(.center)
+                if let a = BruceAPI.currentAlert(c.studio?.alerts ?? studio?.alerts), let msg = a.message {
+                    Text(msg).font(.system(size: 15, weight: .light)).foregroundStyle(a.isCritical ? .white : .primary)
+                        .multilineTextAlignment(.center)
                         .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity)
-                        .background(RoundedRectangle(cornerRadius: 12).fill(Color(red: 0.91, green: 0.30, blue: 0.29)))
+                        .background(RoundedRectangle(cornerRadius: 12)
+                            .fill(a.isCritical ? Color(red: 0.91, green: 0.30, blue: 0.29) : Theme.sectionGrey))
                         .padding(.horizontal, Theme.gutter).padding(.bottom, 16)
                 }
                 hero(c)
@@ -137,13 +139,12 @@ struct ClassDetailView: View {
     }
 
     /// Everyone booked (GET /v52/booking?class_id=), as in the original: members without a public
-    /// profile show as "Hidden". Invite shares this class with friends; membership invite codes stay under Account.
+    /// profile show as "Hidden". Invite asks friends to this class; membership invite codes stay under Account.
     func whoIsBooked(_ c: BruceAPI.BruceClass) -> some View {
         let people = m.attendees(forClass: classId)
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 18) {
-                ShareLink(item: ShareURL.forClass(classId, title: c.title),
-                          message: Text(Copy.classInvite(c, studio: m.studioName(c.studioId)))) {
+                Button { m.present(.classInvite(classId)) } label: {
                     VStack(spacing: 8) {
                         Circle().fill(Theme.lime).frame(width: 80, height: 80)
                             .overlay(Image(systemName: "plus").font(.system(size: 30, weight: .light)).foregroundStyle(.black))

@@ -23,7 +23,7 @@ enum SheetRoute: Hashable {
     case settings, login, checkIn, info(String)
     case search, selectCity, newArea, createAccount, resetPassword
     case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts
-    case bookingRules(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
+    case bookingRules(Int), classInvite(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
 }
 
 @MainActor
@@ -785,6 +785,17 @@ final class AppModel {
         if await send(req, label: "Booking") { flash("Booked \(title)") }
         await loadMine()
         await loadClassAttendees(classId)
+    }
+
+    /// Invites friends (by user id) to a class; they get it in their Bruce app.
+    func inviteToClass(_ classId: Int, userIds: [Int]) async -> Bool {
+        guard !userIds.isEmpty else { return false }
+        let who = userIds.count == 1 ? "1 friend" : "\(userIds.count) friends"
+        if AppModel.demo { flash("Demo: invited \(who) (offline, nothing sent)"); return true }
+        guard let req = try? BruceAPI.classInviteRequest(token: token, classId: classId, userIds: userIds) else { return false }
+        let ok = await send(req, label: "Invite")
+        if ok { flash("Invited \(who)") }
+        return ok
     }
 
     func cancel(_ b: BruceAPI.Booking) async {

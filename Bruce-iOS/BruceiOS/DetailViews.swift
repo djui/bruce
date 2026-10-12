@@ -41,10 +41,10 @@ struct ClassDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     hero(c)
                     VStack(alignment: .leading, spacing: 16) {
-                        if let msg = studio?.notice {
-                            Label(msg, systemImage: "info.circle.fill").font(.system(size: 14))
+                        if let a = BruceAPI.currentAlert(c.studio?.alerts ?? studio?.alerts), let msg = a.message {
+                            Label(msg, systemImage: a.isCritical ? "exclamationmark.triangle.fill" : "info.circle.fill").font(.system(size: 14))
                                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
-                                .glassEffect(.regular.tint(Theme.red.opacity(0.15)), in: .rect(cornerRadius: 20))
+                                .glassEffect(.regular.tint((a.isCritical ? Theme.red : Theme.lime).opacity(0.15)), in: .rect(cornerRadius: 20))
                         }
                         VStack(alignment: .leading, spacing: 6) {
                             Text(classDateLine(c)).font(.system(size: 18, weight: .bold))
@@ -124,13 +124,12 @@ struct ClassDetailView: View {
     }
 
     /// Everyone booked (GET /v52/booking?class_id=), as in the original: members without a public
-    /// profile show as "Hidden". Invite shares this class with friends; membership invite codes stay under Account.
+    /// profile show as "Hidden". Invite asks friends to this class; membership invite codes stay under Account.
     func whoIsBooked(_ c: BruceAPI.BruceClass) -> some View {
         let people = m.attendees(forClass: classId)
         return ScrollView(.horizontal, showsIndicators: false) {
             HStack(alignment: .top, spacing: 14) {
-                ShareLink(item: ShareURL.forClass(classId, title: c.title),
-                          message: Text(Copy.classInvite(c, studio: m.studioName(c.studioId)))) {
+                Button { m.present(.classInvite(classId)) } label: {
                     VStack(spacing: 6) {
                         Image(systemName: "plus").font(.system(size: 24, weight: .semibold)).foregroundStyle(.black)
                             .frame(width: 64, height: 64)

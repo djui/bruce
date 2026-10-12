@@ -244,6 +244,64 @@ struct TextInfoSheet: View {
     }
 }
 
+// MARK: - Invite friends to a class
+
+/// Class page "Invite": pick friends and send them this class (POST /v52/class/<id>/invite).
+struct ClassInviteSheet: View {
+    @Environment(AppModel.self) var m
+    let classId: Int
+    @State private var picked: Set<Int> = []
+    var c: BruceAPI.BruceClass? { m.classDetails[classId] ?? m.findClass(classId) }
+    var friends: [BruceAPI.UserLite] {
+        m.friends.compactMap(\.friendUser).sorted { ($0.firstName ?? "") < ($1.firstName ?? "") }
+    }
+
+    var body: some View {
+        List {
+            Section("Friends") {
+                if friends.isEmpty {
+                    Text(m.isLoggedIn ? "Add friends in Bruce to invite them to classes." : "Log in to invite friends.")
+                        .foregroundStyle(Theme.secondary)
+                }
+                ForEach(friends, id: \.id) { u in
+                    Button {
+                        if picked.contains(u.id) { picked.remove(u.id) } else { picked.insert(u.id) }
+                    } label: {
+                        HStack(spacing: 14) {
+                            Avatar(fileId: u.photo, initials: u.initials, size: 44)
+                            Text(u.firstName ?? u.fullName).font(.system(size: 17, weight: .medium))
+                            Spacer()
+                            Image(systemName: picked.contains(u.id) ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 24)).foregroundStyle(picked.contains(u.id) ? Theme.limeInk : Theme.secondary)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .safeAreaInset(edge: .bottom) {
+            LimeButton(title: m.loading ? "Inviting…" : "Invite friends") {
+                Task { if await m.inviteToClass(classId, userIds: Array(picked)) { m.dismissSheets() } }
+            }
+            .disabled(picked.isEmpty || m.loading)
+            .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
+        }
+        .sheetChrome(c?.title ?? "Invite friends")
+        .task { if m.friends.isEmpty { await m.loadSocial() } }
+        .toolbar {
+            if let c {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareLink(item: ShareURL.forClass(classId, title: c.title),
+                              message: Text(Copy.classInvite(c, studio: m.studioName(c.studioId)))) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                }
+            }
+        }
+    }
+}
+
 // MARK: - Invite friends
 
 struct InviteSheet: View {

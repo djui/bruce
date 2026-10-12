@@ -56,6 +56,9 @@ My classes tabs, with class and studio pages and account sheets.
   Every check-in asks for confirmation first.
 - **Studio pages** show opening hours ("Solo training until 22:00"), notices, facilities, reviews, photos,
   per-studio visit limits and classes.
+- **Class pages** show the studio's notice banner, everyone booked on the class (friends and members with a
+  public profile by name, the rest as "Hidden"), and an **Invite** button that sends the class to the
+  friends you pick, as in the official app.
 - **Friends' classes**, bookmarks, favourites, notifications, statistics, membership, credits, strikes,
   receipts, and notification and social settings.
 - **Fast:** studios stream in page by page, then load in parallel and are cached on disk. Class days load

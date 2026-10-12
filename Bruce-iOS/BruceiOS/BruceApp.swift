@@ -217,6 +217,7 @@ struct SheetScreen: View {
         case .plans: MembershipPlansView().darkScreen()
         case .statistics: StatisticsView()
         case .receipts: ReceiptsView()
+        case .classInvite(let id): ClassInviteSheet(classId: id)
         case .invite: InviteSheet()
         case .howItWorks: TextInfoSheet(title: "How it works", paragraphs: Copy.howItWorks(open: m.openInvites))
         case .voucher: VoucherSheet()
