@@ -95,7 +95,8 @@ extension AppModel {
         invites = dec([BruceAPI.Voucher].self, #"[{"id":1,"code":"demo01"},{"id":2,"code":"demo02"},{"id":3,"code":"demo03"},{"id":4,"code":"demo04","user_id":1}]"#)
         notificationsSeenAt = Date().addingTimeInterval(-3600 * 30)
         notifications = dec([BruceAPI.BruceNotification].self, """
-        [{"id":1,"created_at":"\(at(0, 0, 11))","title":"Booking cancelled","message":"Cancellation: High Intensity (placeholder)","read":false},
+        [{"id":4,"created_at":"\(at(0, 0, 20))","type":"STANDBY_AVAILABLE","title":"Free spot","message":"Available spot for Functional today 23:25 (placeholder)","read":false,"meta":{"class_id":9008,"studio_id":null}},
+         {"id":1,"created_at":"\(at(0, 0, 11))","title":"Booking cancelled","message":"Cancellation: High Intensity (placeholder)","read":false},
          {"id":3,"created_at":"\(at(0, 0, 5))","title":"Booking cancelled","message":"Cancellation: Hatha Flow (placeholder)","read":false},
          {"id":2,"created_at":"\(at(-2, 19, 3))","title":"Booking reminder","message":"Your class starts tomorrow (placeholder)","read":false}]
         """)

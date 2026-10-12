@@ -187,7 +187,8 @@ extension BruceAPI {
     // MARK: Notifications, friends
 
     struct NotificationMeta: Decodable, Hashable { let photo: String?; let userPhoto: String?
-        enum CodingKeys: String, CodingKey { case photo, userPhoto = "user_photo" } }
+        var classId: Int? = nil; var studioId: Int? = nil
+        enum CodingKeys: String, CodingKey { case photo, userPhoto = "user_photo", classId = "class_id", studioId = "studio_id" } }
     struct BruceNotification: Decodable, Identifiable, Hashable {
         let id: Int
         let createdAt: String?

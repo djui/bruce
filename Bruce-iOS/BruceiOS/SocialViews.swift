@@ -135,7 +135,7 @@ struct NotificationsSheet: View {
                         Text(BruceDate.dayHeader(day)).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.secondary).padding(.top, 10)
                         ForEach(list.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) { n in
                             // Opens the class the notification is about, else its studio.
-                            Button { Task { await m.openNotification(n) } } label: { card(n) }.buttonStyle(.plain)
+                            Button { m.openNotification(n) } label: { card(n) }.buttonStyle(.plain)
                         }
                     }
                 }

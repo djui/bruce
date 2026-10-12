@@ -646,8 +646,8 @@ final class AppModel {
     func loadSocial() async {
         guard tokenUsable, let uid = userId else { return }
         notifications = (try? await BruceAPI.fetchNotifications(token: token, userId: uid)) ?? []
-        // A "Free spot" (or cancellation) newer than the last waitlist read means that list is stale.
-        if notifications.contains(where: { ($0.date ?? .distantPast) > (mineLoadedAt ?? .distantPast) && $0.kind != .other }) {
+        // A "Free spot" or cancellation newer than the last bookings/waitlist read means those lists are stale.
+        if notifications.contains(where: { $0.kind != .other && ($0.date ?? .distantPast) > (mineLoadedAt ?? .distantPast) }) {
             await loadMine()
         }
         friends = (try? await BruceAPI.fetchFriends(token: token, userId: uid)) ?? []
