@@ -132,12 +132,12 @@ extension AppModel {
             iso.string(from: cal.date(bySettingHour: h, minute: min, second: 0, of: cal.date(byAdding: .day, value: -day, to: Date())!)!)
         }
         let json = """
-        [{"id":1,"studio_id":1112,"checked_in_at":"\(at(0, 11, 28))"},
+        [{"id":1,"studio_id":1724,"checked_in_at":"\(at(0, 11, 28))"},
          {"id":2,"studio_id":12388,"checked_in_at":"\(at(0, 16, 34))","class":{"title":"Hyrox","start_time":"\(at(0, 16, 50))","end_time":"\(at(0, 17, 50))",
           "instructor":"Sina Ramezani","studio":{"id":12388,"name":"STC Sturegatan Park","vicinity":"Östermalm"}}},
          {"id":3,"studio_id":1724,"checked_in_at":"\(at(1, 14, 37))","class":{"opening":true,"start_time":"\(at(1, 5, 0))","end_time":"\(at(1, 23, 0))",
           "studio":{"id":1724,"name":"STC Rosenlundsparken","vicinity":"Södermalm"}}},
-         {"id":4,"studio_id":1489,"checked_in_at":"\(at(2, 7, 51))"}]
+         {"id":4,"studio_id":1724,"checked_in_at":"\(at(2, 7, 51))"}]
         """
         return ((try? JSONDecoder().decode([BruceAPI.Visit].self, from: Data(json.utf8))) ?? [])
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
