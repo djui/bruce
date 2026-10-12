@@ -365,10 +365,10 @@ paths:
         Door QR format: `stc://open-door?major=<MAJOR>&minor=<DOOR_ID>`.
         `major` identifies the gym (matches studio `qr_code_id` = `stc:<MAJOR>`), `minor` the door.
         For a drop-in gym the check-in creates the booking itself.
-        The only captured check-in [c1:163] carries `meta` from the scanned door QR; capture 8 has no check-in
-        request (the class booking it shows was checked in before the capture started). Sending only the studio's
-        `qr_code_id` ("stc:<major>") without `meta` for an STC/BRP door gym got HTTP 400 in Bruce-iOS, so the
-        clients require the door ids (built-in, or remembered from a scanned door QR) for those studios.
+        The only captured check-in [c1:163] carries `meta` from the scanned door QR. `meta` is optional: a remote
+        check-in with only `qr_code_id` ("stc:<major>") at an STC/BRP door gym answered HTTP 400 but the booking was
+        checked in (`checked_in_at` set, ticket shown in the official app). Clients should re-read
+        `GET /booking` after an error status before reporting a failed check-in.
       x-evidence: ["163"]
       requestBody:
         required: true

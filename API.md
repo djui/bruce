@@ -75,7 +75,7 @@ Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-
 ```
 -> 200 `{"bookings":[{id,studio_id,place_id,checked_in_at,opening_hour_occurrence_id,class_id:null,...}],"payable_openings":[],"payable_opening_hours":[],"integration_door_data":null}`.
 A drop-in (gym, no class) check-in creates the booking itself. Note `MAJOR` (QR/beacon id) is not the studio id.
-Without `meta` (only the studio's `qr_code_id` "stc:<MAJOR>") an STC/BRP door gym answered HTTP 400 in Bruce-iOS (studio 12388, Oct 12), while the official app, which always sends the scanned door's ids, checked the same booking in. The clients therefore only send door-gym check-ins with door ids (built in, or remembered from the user's own scanned door QR) and otherwise ask for one scan.
+Remote check-in without `meta` (only the studio's `qr_code_id` "stc:<MAJOR>", from Bruce-iOS at STC Sturegatan Park, studio 12388, Oct 12) answered **HTTP 400, yet the booking was checked in**: the official app showed the ticket and `GET /v52/booking` returns it with `checked_in_at` [c8:404]. Our client sends exactly one request per confirmed tap, so the 400 is not a duplicate of ours; most likely the server registers the check-in and then fails a later step, e.g. the BRP door integration that has no door id. The response body was not recorded. So the status code is not reliable for check-in: the clients re-read the bookings after any non-2xx answer and treat a booking at that studio with `checked_in_at` today as success (ticket shown, no error). Door ids are optional: when known (built in, or remembered from the user's own scanned door QR) they are sent as `meta`.
 
 ## User / account (context)
 - Capture 2 also has `PUT /v52/user/<USER_ID>` [c2:337, 580], `GET|POST /v52/user/<USER_ID>/address` [c2:279, 339], `DELETE /v52/user/<USER_ID>/address/<ID>` [c2:341] -> 204, `GET /v52/payment` [c2:388] (account editing; not used by the app).
@@ -226,11 +226,13 @@ Responding to a class invite; check-in other than the STC door QR (`POST /v52/st
 ## Capture 8 additions (`c8:N`)
 Capture 8 (about 220 requests, Oct 12 22:46-22:47 local) is an app start after a class the user had checked in to
 (a "Hyrox" class at STC Sturegatan Park, studio 12388, starting 14:50Z; checked in at 14:34Z), followed by rating it and browsing.
-It has no check-in request (the check-in happened before the capture) and no token refresh.
+It has no check-in request (the check-in happened before the capture, from Bruce-iOS; see Check-in above) and no token refresh.
 
 - **Review trigger.** At start the app calls `GET /v52/booking?reviewable=true&user_id=<USER_ID>&include_class=true&locale=en`
   [c8:415] -> `{"bookings":[{id, class_id, checked_in_at, review_id:null, class{...}}],"metadata":{...,"cache_expire_seconds":0}}`.
-  There is no review notification type (the notification list holds only `STANDBY_AVAILABLE`, `CHECK_IN_REMINDER`,
+  There is no review notification type and no silent push: the official app's Info.plist has no `UIBackgroundModes`
+  (so no background `remote-notification`), its UI strings have no rating notification, the push setting types are
+  only `new_studio`, `booking_reminder`, `check_in_reminder` [c3:279], and the notification list holds only `STANDBY_AVAILABLE`, `CHECK_IN_REMINDER`,
   `BOOKING_CANCELLED`, `BOOKING_REMINDER`, `USER_STRIKE`, `CLASS_MESSAGE`, `USER_STRIKE_UNBLOCKED`, `USER_BLOCK` [c8:418])
   and no pending-review endpoint: this list is the trigger. Four seconds later the rating went out.
 - **Submit a review** `POST /v52/review` [c8:467] body

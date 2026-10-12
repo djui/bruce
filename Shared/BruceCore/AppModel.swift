@@ -212,7 +212,6 @@ final class AppModel {
     }
 
     func askCheckIn(_ t: CheckInTarget) {
-        if t.needsDoorScan { infoAlert = Copy.scanDoorFirst(t.name); return }
         confirm = PendingAction(title: "Check in at \(t.name)?", message: "\(t.subtitle)\nThis sends a real check-in to Bruce Studios.",
                                 button: "Check in") { [weak self] in await self?.checkIn(t) }
     }
@@ -1014,17 +1013,38 @@ final class AppModel {
     }
     @ObservationIgnored private var mineLoadedAt: Date?
 
+    /// `POST /v52/studio/check_in`, exactly one request per confirmed tap (a second tap while one is in flight is
+    /// ignored). An error status does not prove the check-in failed: a remote check-in without door `meta` at an
+    /// STC/BRP gym answered HTTP 400 although the booking was checked in (the official app showed the ticket,
+    /// Oct 12). So on any non-2xx answer the bookings are re-read, and a booking at that studio with
+    /// `checked_in_at` today counts as success: the ticket opens and no error is shown.
     func checkIn(_ t: CheckInTarget) async {
         if AppModel.demo { flash("Demo: check-in to \(t.name) not sent (offline)"); return }
-        if t.needsDoorScan { infoAlert = Copy.scanDoorFirst(t.name); return }
+        guard !checkInInFlight else { return }
+        guard tokenUsable else { flash("Please log in again."); return }
         guard let req = try? BruceAPI.checkInRequest(token: token, target: t) else { return }
-        if await send(req, label: "Check-in") {
-            flash("Checked in at \(t.name)")
-            // Remember a scanned door so the next check-in here works from the list too.
-            if let d = t.door { LearnedDoors.remember(d, studioId: t.studioId) }
-        }
+        checkInInFlight = true
+        loading = true
+        defer { checkInInFlight = false; loading = false }
+        let code: Int, body: String
+        do { (code, body) = try await BruceAPI.perform(req) }
+        catch { flash("Check-in failed: \(error.localizedDescription)"); return }
+        if code == 401 { expireSession(); return }
+        let ok = (200..<300).contains(code)
+        if ok, let d = t.door { LearnedDoors.remember(d, studioId: t.studioId) }   // optional: reuse a scanned door
         await loadMine()
+        await loadVisits()
+        if let b = todaysCheckIn(studioId: t.studioId) {
+            if !ok { status = "Check-in: HTTP \(code), but the booking is checked in\n\(body.prefix(500))" }
+            flash("Checked in at \(t.name)")
+            present(.ticket(b.id))
+            return
+        }
+        if ok { flash("Checked in at \(t.name)"); return }
+        status = "Check-in: HTTP \(code)\n\(body.prefix(500))"
+        if let msg = BruceAPI.errorMessage(body) { flash("Check-in failed: \(msg)") } else { flash("Check-in failed (HTTP \(code))") }
     }
+    @ObservationIgnored private var checkInInFlight = false
 
     /// Candidates for the Home check-in control: today's booked classes plus studios with a
     /// known door QR (current/recent bookings and previously visited drop-in gyms).
@@ -1105,10 +1125,6 @@ struct CheckInTarget: Identifiable, Hashable {
     let qrCodeId: String
     let door: KnownDoors.Door?
     var id: String { "\(studioId)-\(qrCodeId)" }
-    /// STC/BRP door QR studios ("stc:<major>") whose door id is unknown. The original always sends the scanned
-    /// door's `meta{major,minor,door_id}` for these [c1:163]; without it the server answers HTTP 400, so the
-    /// apps ask for one door-QR scan instead of sending a check-in that cannot work.
-    var needsDoorScan: Bool { door == nil && qrCodeId.hasPrefix("stc:") }
 
     static func make(studio: BruceAPI.Studio?, studioId: Int, name: String, subtitle: String) -> CheckInTarget? {
         if let d = KnownDoors.door(for: studioId) {

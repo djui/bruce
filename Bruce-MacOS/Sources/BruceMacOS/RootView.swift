@@ -44,7 +44,7 @@ struct RootView: View {
         .task { await m.bootstrap() }
         .alert(m.confirm?.title ?? "", isPresented: Binding(get: { m.confirm != nil }, set: { if !$0 { m.confirm = nil } }),
                presenting: m.confirm) { a in
-            Button(a.button) { Task { m.confirm = nil; await a.run(); m.dismissSheets() } }
+            Button(a.button) { Task { m.confirm = nil; let before = m.sheets; await a.run(); if m.sheets == before { m.dismissSheets() } } }
             Button("Cancel", role: .cancel) { m.confirm = nil }
         } message: { a in Text(a.message) }
         .alert(m.infoAlert ?? "", isPresented: Binding(get: { m.infoAlert != nil }, set: { if !$0 { m.infoAlert = nil } })) {

@@ -70,8 +70,10 @@ My classes tabs, with class and studio pages and account sheets.
   on-device Translation framework (iOS, macOS 15+); no online translation service is used.
 - **Check in** by scanning the studio's door QR code with the camera, or with one tap from a suggestion
   (a booked class whose check-in window is open, the nearest studio, or the last one you visited).
-  Every check-in asks for confirmation first. STC-style door gyms need the door's id from its QR code: scan
-  the door once and later one-tap check-ins there reuse it. Failed check-ins show the server's reason.
+  Every check-in asks for confirmation first, and the ticket opens when it went through. The server can
+  answer an error even though the check-in was registered, so the apps re-read your bookings before
+  reporting a failure (and then show the server's reason). A scanned door QR is remembered for later
+  one-tap check-ins at that door.
 - **My classes** keeps a class after you check in (with a "Checked in" badge and the ticket), as the
   official app does, until it leaves the 24-hour window.
 - **Rate the class** after attending: like the official app, the apps ask at start for each checked-in

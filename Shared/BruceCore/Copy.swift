@@ -64,10 +64,6 @@ enum Copy {
     /// Badge on a My classes row the user already checked in to.
     static let checkedIn = "Checked in"
 
-    /// STC/BRP gyms need the door's id, which only the door QR code carries.
-    static func scanDoorFirst(_ studio: String) -> String {
-        "\(studio) checks you in through its door. Scan the QR code on the door once (Check in tab); after that you can check in here from the list too."
-    }
 
     // MARK: Rating a class (POST /v52/review)
 

@@ -15,7 +15,8 @@ enum KnownDoors {
 }
 
 /// Doors remembered from the user's own successful door-QR check-ins, so a later check-in from the list
-/// (without scanning) can send the same `meta` the original sends [c1:163]. Local only (UserDefaults);
+/// (without scanning) can send the same `meta` the original sends [c1:163]. Optional: a remote check-in without
+/// `meta` is still sent and does check in (Oct 12). Local only (UserDefaults);
 /// door ids are printed on the door and not secret. Off in demo mode.
 enum LearnedDoors {
     static let key = "learnedDoors"
