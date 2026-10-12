@@ -84,7 +84,9 @@ My classes tabs, with class and studio pages and account sheets.
 - **Class pages** show the studio's notice banner, everyone booked on the class (friends and members with a
   public profile by name, the rest as "Hidden"), and an **Invite** button that sends the class to the
   friends you pick, as in the official app.
-- **Notifications** open the class they are about (or its studio, strikes or membership).
+- **Notifications** open the class they are about (or its studio, strikes or membership). Each icon shows what happened
+  (free spot, reminder, check-in, cancellation, studio message, strike, block…) and a corner badge for whether it is about
+  a class, a studio or Bruce itself, lime for good news and red for bad.
 - **Friends' classes**, bookmarks, favourites, statistics, membership, credits, strikes,
   receipts, and notification and social settings.
 - **Fast:** studios stream in page by page, then load in parallel and are cached on disk. Class days load
