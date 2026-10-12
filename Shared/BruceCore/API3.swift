@@ -165,11 +165,35 @@ extension BruceAPI {
     }
 
     // MARK: Opening schedule with attendance info (price for paid tickets) [c4:31]
+    /// `studio_user_attendance_info` (schedule) / `user_attendance_info` (class) [c4:31, c7:125]. On a class:
+    /// `{admission_access:false, price:22000 (öre), user_tier_code:"BASE", booking_limit_reached:true,
+    /// visit_limit_reached:true, visit_limit_reached_types:["STUDIO"], ...}`; no currency there.
     struct AttendanceInfo: Decodable, Hashable {
         let admissionAccess: Bool?
         let price: Int?            // öre, e.g. 28000 = SEK 280
         let currency: String?
-        enum CodingKeys: String, CodingKey { case price, currency, admissionAccess = "admission_access" }
+        var visitLimitReached: Bool? = nil
+        var bookingLimitReached: Bool? = nil
+        /// e.g. `["STUDIO","WELLNESS_MONTHLY"]`.
+        var visitLimitReachedTypes: [String]? = nil
+        enum CodingKeys: String, CodingKey {
+            case price, currency, admissionAccess = "admission_access"
+            case visitLimitReached = "visit_limit_reached", bookingLimitReached = "booking_limit_reached"
+            case visitLimitReachedTypes = "visit_limit_reached_types"
+        }
+    }
+}
+
+extension BruceAPI.AttendanceInfo {
+    /// Lenient: a field of an unexpected type is dropped instead of failing the whole class or schedule.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        admissionAccess = try? c.decodeIfPresent(Bool.self, forKey: .admissionAccess)
+        price = try? c.decodeIfPresent(Int.self, forKey: .price)
+        currency = try? c.decodeIfPresent(String.self, forKey: .currency)
+        visitLimitReached = try? c.decodeIfPresent(Bool.self, forKey: .visitLimitReached)
+        bookingLimitReached = try? c.decodeIfPresent(Bool.self, forKey: .bookingLimitReached)
+        visitLimitReachedTypes = try? c.decodeIfPresent([String].self, forKey: .visitLimitReachedTypes)
     }
 }
 

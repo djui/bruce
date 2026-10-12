@@ -50,7 +50,9 @@ My classes tabs, with class and studio pages and account sheets.
   tier, Wellness and favourite filters, search, a map, and **custom areas**: draw an outline on the map and
   filter studios and classes to it. As in the official app, areas stay on the device.
 - **Book, cancel and join waitlists** through a booking-rules sheet that shows the "book until",
-  "cancel until" and check-in windows.
+  "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked.
+- **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
+  plan's limit at the studio. A class over your limit shows its drop-in price ("Buy for SEK 220").
 - **Check in** by scanning the studio's door QR code with the camera, or with one tap from a suggestion
   (a booked class whose check-in window is open, the nearest studio, or the last one you visited).
   Every check-in asks for confirmation first.
@@ -64,8 +66,8 @@ My classes tabs, with class and studio pages and account sheets.
 - **Offline demo mode** for screenshots and UI work (see below).
 
 Account changes, membership plans, pausing, checkout, payments, vouchers, sign-up and password reset are
-**display-only**: they show the screens but never send a request. Buying tickets is deliberately not
-implemented.
+**display-only**: they show the screens but never send a request. Buying tickets and drop-in classes is
+deliberately not implemented.
 
 ### iOS: Liquid Glass
 

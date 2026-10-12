@@ -117,7 +117,7 @@ struct CategoryView: View {
                             ClassRow(time: BruceDate.time(c.start), duration: c.durationMinutes.map { "\($0) min" } ?? "",
                                      title: c.title, studio: st?.name ?? "",
                                      meta: [st?.vicinity, c.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | "),
-                                     badge: m.standbys.contains { $0.class?.id == c.id } ? "Waitlist" : nil, classId: c.id)
+                                     badge: m.waitlistBadge(c.id), classId: c.id)
                         }
                         .buttonStyle(.plain)
                     }

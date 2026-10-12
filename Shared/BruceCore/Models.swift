@@ -46,6 +46,12 @@ enum BruceDate {
     }
 
     static func time(_ d: Date?) -> String { format(d, "HH:mm") }
+
+    /// "20261101" -> that day at 00:00 Stockholm time.
+    static func parseDay(_ s: String) -> Date? {
+        guard s.count == 8, let y = Int(s.prefix(4)), let mo = Int(s.dropFirst(4).prefix(2)), let d = Int(s.suffix(2)) else { return nil }
+        return calendar.date(from: DateComponents(year: y, month: mo, day: d))
+    }
 }
 
 extension BruceAPI {
@@ -160,8 +166,11 @@ extension BruceAPI {
 
     static func fetchClass(token: String, id: Int) async throws -> BruceClass {
         struct R: Decodable { let `class`: BruceClass }
+        // Same includes as the original's class detail call [c2:50, 58, 93, 100]: dynamic prices and the
+        // user's attendance info carry the drop-in price and `visit_limit_reached` [c4:96].
         let q = [("include_studio", "true"), ("include_info", "true"), ("include_class_categories", "true"), ("include_absolute_times", "true"),
-                 ("include_booking_credit_costs", "true"), ("locale", "en")]
+                 ("include_booking_credit_costs", "true"), ("include_dynamic_prices", "true"),
+                 ("include_studio_user_attendance_info", "true"), ("locale", "en")]
         return try decode(R.self, try await send(makeRequest("GET", "v52/class/\(id)", query: q, token: token))).class
     }
 
@@ -278,14 +287,47 @@ extension BruceAPI {
     }
 
     struct VisitLimitItem: Codable, Hashable { let label: String?; let limit: Int? }
+    /// One entry of `GET /v52/studio/user_visit_limit` `limits[]`: `{total,used,remaining,within_limit,resets_at,type,items}`.
+    /// For `type == "STUDIO"`, `items` lists the studio's limit per tier (`[{label:"EPIC",limit:8,period:"MONTHLY"},...]`,
+    /// in API order EPIC, BLACK, BASE; total 0 = unlimited) [c7:132, 76, 91]. Unused fields (id, month, ...) are ignored.
     struct VisitLimit: Decodable, Hashable {
         let total: Int?
         let used: Int?
         let remaining: Int?
         let type: String?
         let items: [VisitLimitItem]?
+        var withinLimit: Bool? = nil
+        /// `resets_at`, UTC ISO 8601, e.g. "2026-10-31T23:00:00Z" = 1 November 00:00 in Stockholm [c7:132].
+        var resetsAt: String? = nil
+        enum CodingKeys: String, CodingKey {
+            case total, used, remaining, type, items, withinLimit = "within_limit", resetsAt = "resets_at"
+        }
+        var resetDate: Date? {
+            guard let r = resetsAt else { return nil }
+            if let d = BruceDate.parse(r) { return d }
+            if r.count == 8, let d = BruceDate.parseDay(r) { return d }   // YYYYMMDD
+            if let t = Double(r), t > 1_000_000_000 { return Date(timeIntervalSince1970: t) }
+            return nil
+        }
     }
+}
 
+extension BruceAPI.VisitLimit {
+    /// Lenient: `resets_at` may be a string or a number; an odd field never drops the whole limits list.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        total = try? c.decodeIfPresent(Int.self, forKey: .total)
+        used = try? c.decodeIfPresent(Int.self, forKey: .used)
+        remaining = try? c.decodeIfPresent(Int.self, forKey: .remaining)
+        type = try? c.decodeIfPresent(String.self, forKey: .type)
+        items = try? c.decodeIfPresent([BruceAPI.VisitLimitItem].self, forKey: .items)
+        withinLimit = try? c.decodeIfPresent(Bool.self, forKey: .withinLimit)
+        if let s = try? c.decodeIfPresent(String.self, forKey: .resetsAt) { resetsAt = s }
+        else if let n = try? c.decodeIfPresent(Double.self, forKey: .resetsAt) { resetsAt = String(format: "%.0f", n) }
+    }
+}
+
+extension BruceAPI {
     static func fetchVisitLimits(token: String, userId: Int) async throws -> [VisitLimit] {
         struct R: Decodable { let limits: [VisitLimit] }
         let q = [("locale", "en"), ("user_id", String(userId))]
@@ -338,6 +380,8 @@ extension BruceAPI {
 
     // MARK: My classes
 
+    /// Bookmark or standby (waitlist entry) with its class. Standby `booking_id` is always null, even after the
+    /// user got a spot: a promoted entry simply disappears from `GET /v52/standby` [c7:80, 64].
     struct ClassHolder: Decodable, Identifiable, Hashable {
         let id: Int
         let `class`: BruceClass?

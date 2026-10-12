@@ -52,6 +52,7 @@ struct ClassDetailView: View {
                                     .foregroundStyle(a <= 0 ? Theme.red : Theme.secondary)
                             }
                         }
+                        if limitReached(c) { limitNotice }
                         if let r = BookingRules(c) {
                             if booking != nil { bookedBox(r) } else { rulesLines(c, r) }
                         }
@@ -78,6 +79,17 @@ struct ClassDetailView: View {
                 RedButton(title: "Cancel booking") { m.present(.bookingRules(c.id)) }
             } else if m.standby(forClass: c.id) != nil {
                 RedButton(title: "Leave waitlist") { m.askLeaveWaitlist(c.id) }
+            } else if limitReached(c) {
+                // Plan's visits at this studio are used up: the original offers a paid drop-in instead of Book.
+                // The purchase call was never captured, so the button only explains that.
+                if let p = m.dropInPrice(c) {
+                    LimeButton(title: "Buy for \(p.currency) \(p.amount)") { m.flash(Copy.dropInUnavailable) }
+                } else {
+                    Button {} label: {
+                        Text("Visit limit reached").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
+                    }
+                    .buttonStyle(.glass).controlSize(.large).disabled(true)
+                }
             } else if (c.availableSpots ?? 1) <= 0 {
                 Button { Task { await m.joinWaitlist(c.id) } } label: {
                     Text("Join waitlist").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
@@ -88,6 +100,17 @@ struct ClassDetailView: View {
             }
         }
         .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
+    }
+
+    func limitReached(_ c: BruceAPI.BruceClass) -> Bool {
+        booking == nil && m.standby(forClass: c.id) == nil && m.visitLimitReached(c)
+    }
+
+    var limitNotice: some View {
+        Label { Text(Copy.visitLimitReached).font(.system(size: 15)).fixedSize(horizontal: false, vertical: true) }
+            icon: { Image(systemName: "info.circle") }
+            .padding(16).frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular, in: .rect(cornerRadius: 20))
     }
 
     func rulesLines(_ c: BruceAPI.BruceClass, _ r: BookingRules) -> some View {
@@ -186,6 +209,90 @@ struct RuleRow: View {
             }
             Spacer(minLength: 0)
         }
+    }
+}
+
+// MARK: - Visit limit (tap on the "n / m" pill)
+
+/// Visits used at a studio this month, what is left and when it resets, and the monthly limit of every
+/// tier at the studio with the user's plan marked. Data: `user_visit_limit?studio_id=` (`STUDIO` entry and its
+/// per-tier `items`), falling back to the studio list's `visit_limit.items`.
+struct VisitLimitSheet: View {
+    @Environment(AppModel.self) var m
+    let studioId: Int
+
+    var body: some View {
+        let tiers = m.tierLimits(studioId)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                VStack(alignment: .leading, spacing: 12) {
+                    Text("Visit limits at this studio").font(.system(size: 24, weight: .bold)).padding(.bottom, 4)
+                    if tiers.isEmpty {
+                        Text("No plan limits available for this studio.").foregroundStyle(Theme.secondary)
+                    }
+                    ForEach(tiers, id: \.tier) { t in
+                        HStack {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(t.tier).font(.system(size: 18, weight: .heavy).width(.expanded))
+                                Text(VisitLimitSheet.limitText(t.limit)).font(.system(size: 16)).foregroundStyle(Theme.secondary)
+                            }
+                            Spacer()
+                            if t.tier == m.tier {
+                                Text("YOUR PLAN").font(.system(size: 11, weight: .bold).width(.expanded)).foregroundStyle(Theme.lime)
+                                    .padding(.horizontal, 10).padding(.vertical, 6).background(Color.black, in: .rect(cornerRadius: 4))
+                            }
+                        }
+                        .padding(18).frame(maxWidth: .infinity, alignment: .leading)
+                        .glassEffect(.regular, in: .rect(cornerRadius: 16))
+                    }
+                    NavigationLink(value: SheetRoute.plans) {
+                        Text("Change plan").font(.system(size: 17, weight: .bold)).foregroundStyle(.black)
+                            .frame(maxWidth: .infinity).frame(height: 40)
+                    }
+                    .buttonStyle(.glassProminent).tint(Theme.lime).controlSize(.large).padding(.top, 12)
+                }
+                .padding(Theme.gutter).padding(.top, 8)
+            }
+        }
+        .sheetChrome("")
+        .task {
+            await m.loadStudioDetail(studioId)
+            await m.loadStudioLimits(studioId)
+        }
+    }
+
+    static func limitText(_ l: Int) -> String {
+        l > 0 ? "\(l) visits / mo" : l == 0 ? "Unlimited visits" : "Not included"
+    }
+
+    var header: some View {
+        let used = m.studioVisitsThisMonth(studioId)
+        let reset = m.visitLimitReset(studioId)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(m.studioName(studioId)).font(.system(size: 20, weight: .bold))
+            switch m.studioLimitState(studioId) {
+            case .limited(let total):
+                (Text("\(used)").foregroundStyle(Theme.lime) + Text("/\(total)"))
+                    .font(.system(size: 56, weight: .light)).monospacedDigit().padding(.top, 8)
+                Text("VISITS USED THIS MONTH").font(.system(size: 13, weight: .semibold).width(.expanded)).foregroundStyle(.white.opacity(0.75))
+                Text(Copy.visitsLeft(max(0, (m.studioVisitLimit(studioId)?.remaining) ?? (total - used)),
+                                     month: BruceDate.format(Date(), "MMMM"), reset: BruceDate.format(reset, "MMMM d")))
+                    .font(.system(size: 16)).padding(.top, 6)
+            case .unlimited:
+                Image(systemName: "infinity").font(.system(size: 48, weight: .light)).foregroundStyle(Theme.lime).padding(.top, 8)
+                Text("UNLIMITED VISITS ON YOUR PLAN").font(.system(size: 13, weight: .semibold).width(.expanded)).foregroundStyle(.white.opacity(0.75))
+            case .notIncluded:
+                Text("0/0").font(.system(size: 56, weight: .light)).padding(.top, 8)
+                Text("NOT INCLUDED IN YOUR PLAN").font(.system(size: 13, weight: .semibold).width(.expanded)).foregroundStyle(.white.opacity(0.75))
+            case .unknown:
+                ProgressView().tint(.white).padding(.top, 8)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, Theme.gutter).padding(.vertical, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.darkBG)
     }
 }
 
@@ -569,7 +676,7 @@ struct StudioDetailView: View {
                 SectionHeaderBar(text: BruceDate.dayHeader(day)).padding(.top, 10)
                 ForEach(list) { c in
                     NavigationLink(value: Route.classDetail(c.id)) {
-                        ClassRow(c: c, meta: c.instructor ?? "", badge: m.standby(forClass: c.id) != nil ? "Waitlist" : nil)
+                        ClassRow(c: c, meta: c.instructor ?? "", badge: m.waitlistBadge(c.id))
                     }
                     .buttonStyle(.plain)
                 }

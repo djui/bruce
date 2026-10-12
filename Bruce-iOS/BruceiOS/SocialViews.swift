@@ -72,15 +72,17 @@ struct MyClassesView: View {
                         if m.bookings.isEmpty { EmptyState(system: "calendar.badge.checkmark", text: "You have no bookings.") }
                         else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } }) }
                     case 1:
-                        if m.standbys.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
-                        else { list(m.standbys.compactMap { s in s.class.map { (s.id, $0, nil) } }, badge: "Waitlist") }
+                        if m.waitlistRows.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
+                        // A standby that got a spot shows "Booked" (and can be cancelled), as in the original.
+                        else { list(m.waitlistRows.compactMap { s in s.class.map { (s.id, $0, m.booking(forClass: $0.id)) } },
+                                    badge: { m.waitlistBadge($0.id) }) }
                     default:
                         if m.bookmarkedClasses.isEmpty { EmptyState(system: "bookmark", text: "No bookmarked classes yet.") }
                         else { list(m.bookmarkedClasses.map { ($0.id, $0, nil) }) }
                     }
                 } header: {
                     UnderlineTabs(titles: ["Bookings", "Waitlist", "Bookmarks"],
-                                  badges: [m.bookings.isEmpty ? nil : String(m.bookings.count), m.standbys.isEmpty ? nil : String(m.standbys.count), nil],
+                                  badges: [m.bookings.isEmpty ? nil : String(m.bookings.count), m.waitlistRows.isEmpty ? nil : String(m.waitlistRows.count), nil],
                                   selection: $tab)
                     .padding(.top, 8)
                     .background(Theme.background)
@@ -97,14 +99,16 @@ struct MyClassesView: View {
         }
         .task { await m.loadMine() }
         .refreshable { await m.loadMine() }
+        .onAppear { if m.demoMyClassesTab != 0 { tab = m.demoMyClassesTab; m.demoMyClassesTab = 0 } }
     }
 
-    func list(_ items: [(Int, BruceAPI.BruceClass, BruceAPI.Booking?)], badge: String? = nil) -> some View {
+    func list(_ items: [(Int, BruceAPI.BruceClass, BruceAPI.Booking?)],
+              badge: @escaping (BruceAPI.BruceClass) -> String? = { _ in nil }) -> some View {
         ForEach(groupedByDay(items, date: { $0.1.start }), id: \.0) { day, list in
             SectionHeaderBar(text: BruceDate.dayHeader(day))
             ForEach(list.sorted { $0.1.startTime < $1.1.startTime }, id: \.0) { item in
                 let c = item.1
-                NavigationLink(value: Route.classDetail(c.id)) { ClassRow(c: c, badge: badge) }
+                NavigationLink(value: Route.classDetail(c.id)) { ClassRow(c: c, badge: badge(c)) }
                     .buttonStyle(.plain)
                     .contextMenu {
                         if item.2 != nil {
