@@ -343,7 +343,7 @@ struct MembershipPlansView: View {
                 feature("\(m.planStudioCount(plan.code) ?? plan.studios) studios in \(m.cityName)", m.studios.isEmpty ? nil : "\(m.studios.count) studios in the country", info: true)
                 feature("Unlimited visits at STC gyms", m.planUnlimitedCount(plan.code).map { "\($0) studios with unlimited visits in \(m.cityName)" })
                 feature("\(isCurrent ? (m.simultaneousLimit ?? plan.bookings) : plan.bookings) bookings at a time", nil)
-                if plan.wellness > 0 { feature("Access to Wellness studios", "Up to \(isCurrent ? (m.wellnessLimit?.total ?? plan.wellness) : plan.wellness) Wellness visits / month", info: true) }
+                if plan.wellness > 0 { feature("Access to Wellness studios", "Up to \(isCurrent ? (m.wellnessLimit?.total.flatMap { $0 > 0 ? $0 : nil } ?? plan.wellness) : plan.wellness) Wellness visits / month", info: true) }
             }
             .padding(.top, 10)
             Text("No joining fee").font(.system(size: 15, weight: .light)).padding(.top, 14)

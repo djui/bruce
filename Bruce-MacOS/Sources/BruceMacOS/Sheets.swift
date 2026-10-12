@@ -130,9 +130,9 @@ struct AccountSheet: View {
                                 .background(RoundedRectangle(cornerRadius: 3).fill(Theme.baseTag))
                         }
                     }.buttonStyle(.plain)
-                    if let w = m.wellnessLimit {
+                    if m.wellnessLimit != nil {
                         Button { m.wellnessOverlay = true } label: {
-                            InfoRow(title: "Wellness visits", subtitle: "\(w.used ?? 0) / \(w.total ?? 0)")
+                            InfoRow(title: "Wellness visits", subtitle: m.wellnessSummary)
                         }.buttonStyle(.plain)
                     }
                     Button { m.pushSheet(.visits) } label: {
@@ -161,9 +161,20 @@ struct WellnessSheet: View {
         let w = m.wellnessLimit
         VStack(alignment: .leading, spacing: 6) {
             Text("Wellness access").font(.system(size: 20, weight: .bold))
-            (Text("\(w?.used ?? 0)").foregroundColor(Theme.lime) + Text("/\(w?.total ?? 0)").foregroundColor(Color(white: 0.6)))
-                .font(.system(size: 52, weight: .light))
-            Text("VISITS USED THIS MONTH").font(.system(size: 13, weight: .semibold)).kerning(1).foregroundStyle(Color(white: 0.6))
+            switch w?.state ?? .unknown {
+            case .limited(let total):
+                (Text("\(w?.used ?? 0)").foregroundColor(Theme.lime) + Text("/\(total)").foregroundColor(Color(white: 0.6)))
+                    .font(.system(size: 52, weight: .light))
+                Text("VISITS USED THIS MONTH").font(.system(size: 13, weight: .semibold)).kerning(1).foregroundStyle(Color(white: 0.6))
+            case .unlimited:
+                Image(systemName: "infinity").font(.system(size: 44, weight: .light)).foregroundStyle(Theme.lime)
+                Text("UNLIMITED VISITS ON YOUR PLAN").font(.system(size: 13, weight: .semibold)).kerning(1).foregroundStyle(Color(white: 0.6))
+            case .notIncluded:
+                Text("0/0").font(.system(size: 52, weight: .light)).foregroundColor(Color(white: 0.6))
+                Text("NOT INCLUDED IN YOUR PLAN").font(.system(size: 13, weight: .semibold)).kerning(1).foregroundStyle(Color(white: 0.6))
+            case .unknown:
+                ProgressView()
+            }
         }
         .foregroundStyle(.white).padding(24).frame(maxWidth: .infinity, alignment: .leading)
         .background(Theme.darkPanel)
