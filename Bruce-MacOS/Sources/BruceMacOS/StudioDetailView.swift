@@ -500,3 +500,63 @@ struct CheckoutSheet: View {
     }
 }
 
+
+// MARK: - Rate the class (POST /v52/review [c8:467])
+
+/// Opened automatically for a booking from `GET /v52/booking?reviewable=true` (as the original does at start),
+/// or from My classes / the class page. Stars 1-5, optional comment, optional anonymity (`public:false`).
+struct ReviewSheet: View {
+    @Environment(AppModel.self) var m
+    let bookingId: Int
+    @State private var rating = 0
+    @State private var comment = ""
+    @State private var anonymous = false
+    @State private var sending = false
+
+    var c: BruceAPI.BruceClass? { m.reviewBooking(bookingId)?.class }
+    var needsComment: Bool { (1...2).contains(rating) && comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            NavBar(title: Copy.reviewTitle, leading: .close, action: { m.dismissSheets() }) {
+                Button { m.skipReview(bookingId); m.flash(Copy.reviewSkip) } label: { Text("Skip").underline().font(.system(size: 16, weight: .medium)) }
+                    .buttonStyle(.plain)
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    if let c {
+                        Text(c.title).font(.system(size: 20, weight: .bold))
+                        Text("\(classDateLine(c)) at \(m.studioName(c.studioId))").font(.system(size: 15)).foregroundStyle(Theme.secondary)
+                    }
+                    HStack(spacing: 14) {
+                        ForEach(1...5, id: \.self) { i in
+                            Button { rating = i } label: {
+                                Image(systemName: i <= rating ? "star.fill" : "star").font(.system(size: 30))
+                                    .foregroundStyle(i <= rating ? Color.orange : Theme.secondary)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                    TextField(Copy.reviewCommentHint, text: $comment, axis: .vertical)
+                        .lineLimit(3...8).textFieldStyle(.roundedBorder)
+                    if needsComment {
+                        Text(Copy.reviewLowNeedsComment).font(.system(size: 13)).foregroundStyle(.red)
+                    }
+                    Toggle(Copy.reviewAnonymous, isOn: $anonymous)
+                    Text(Copy.reviewPrivacy).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    LimeButton(title: sending ? "Sending…" : (anonymous ? "Send anonymously" : "Send")) {
+                        sending = true
+                        Task {
+                            let ok = await m.submitReview(bookingId: bookingId, rating: rating, comment: comment, isPublic: !anonymous)
+                            sending = false
+                            if ok { m.dismissSheets() }
+                        }
+                    }
+                    .disabled(rating == 0 || needsComment || sending)
+                    .opacity(rating == 0 || needsComment || sending ? 0.5 : 1)
+                }
+                .padding(Theme.gutter)
+            }
+        }
+    }
+}

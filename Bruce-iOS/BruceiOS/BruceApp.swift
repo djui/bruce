@@ -106,7 +106,7 @@ struct RootView: View {
             SwiftUI.Tab("My classes", systemImage: "calendar.badge.checkmark", value: Tab.myClasses) {
                 NavigationStack(path: stack(.myClasses)) { MyClassesView().routeDestinations() }
             }
-            .badge(m.bookings.count)
+            .badge(m.upcomingBookings.count)
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .modifier(SearchAccessoryModifier(enabled: (m.tab == .home || m.tab == .explore) && m.stack.isEmpty))
@@ -234,6 +234,7 @@ struct SheetScreen: View {
         case .quickCheckIn: QuickCheckInSheet()
         case .similarClasses(let id): SimilarClassesSheet(classId: id)
         case .area(let id): AreaMapSheet(areaId: id)
+        case .review(let id): ReviewSheet(bookingId: id)
         }
     }
 }

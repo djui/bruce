@@ -47,6 +47,8 @@ Both apps follow the structure of the official app screen by screen: Home, Explo
 My classes tabs, with class and studio pages and account sheets.
 
 - **Log in** with your Bruce Studios email and password. Only the session tokens are kept, in the Keychain.
+  As in the official app there is no token refresh: the server keeps accepting the access token after its
+  nominal 3-hour expiry, so you are only asked to log in again when the server rejects it (HTTP 401).
 - **Explore** all live studios (about 700 in Sweden) and the city-wide class schedule, with category,
   tier, Wellness and favourite filters, search, a map, and **custom areas**: draw an outline on the map and
   filter studios and classes to it. Long-press (iOS) or right-click (macOS) an area to show it on the map,
@@ -68,7 +70,13 @@ My classes tabs, with class and studio pages and account sheets.
   on-device Translation framework (iOS, macOS 15+); no online translation service is used.
 - **Check in** by scanning the studio's door QR code with the camera, or with one tap from a suggestion
   (a booked class whose check-in window is open, the nearest studio, or the last one you visited).
-  Every check-in asks for confirmation first.
+  Every check-in asks for confirmation first. STC-style door gyms need the door's id from its QR code: scan
+  the door once and later one-tap check-ins there reuse it. Failed check-ins show the server's reason.
+- **My classes** keeps a class after you check in (with a "Checked in" badge and the ticket), as the
+  official app does, until it leaves the 24-hour window.
+- **Rate the class** after attending: like the official app, the apps ask at start for each checked-in
+  class that has ended and is not rated yet (stars, optional comment, optional anonymity). Skipped classes
+  can be rated later from My classes or the class page.
 - **Studio pages** show opening hours ("Solo training until 22:00"), notices, facilities, reviews, photos,
   per-studio visit limits and classes.
 - **Class pages** show the studio's notice banner, everyone booked on the class (friends and members with a
@@ -194,7 +202,7 @@ bundle ID. See the [iOS README](Bruce-iOS/README.md#testflight) for all variable
 
 - [`API.md`](API.md): every observed endpoint with parameters, request and response shapes, and the
   booking, check-in and visit-limit rules the apps rely on. It also lists what has *not* been observed
-  (token refresh, review submission, plan changes, and so on).
+  (plan changes, invite responses, and so on), and that the API has no token refresh call.
 - [`openapi.yaml`](openapi.yaml): OpenAPI 3.0 description of the core endpoints.
 - [`swagger.html`](swagger.html): open it in a browser for an interactive Swagger UI with the spec
   embedded. Swagger UI is loaded from the jsDelivr CDN.
@@ -210,7 +218,9 @@ normally on the author's own device, and its HTTPS requests were recorded with
 off those recordings.
 
 - The app binary was not decrypted, disassembled or modified, and no certificate pinning or other
-  protection was bypassed.
+  protection was bypassed. The only other source was the plain resource files in the installed app
+  bundle (localized UI strings and the Core Data model's entity names), read to confirm that the official
+  app stores no refresh token and how its rating dialog behaves.
 - No other members' accounts were accessed.
 - Write calls were documented only where the author performed the action in the official app. Anything
   not observed is marked as such.

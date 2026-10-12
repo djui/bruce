@@ -19,7 +19,7 @@ extension AppModel {
     var openWindowTargets: [(CheckInTarget, BruceAPI.BruceClass)] {
         let now = Date()
         return bookings.compactMap { b -> (CheckInTarget, BruceAPI.BruceClass)? in
-            guard let c = b.class, let r = BookingRules(c) else { return nil }
+            guard !b.isCheckedIn, let c = b.class, let r = BookingRules(c) else { return nil }
             guard r.checkInFrom <= now, now <= (r.end ?? r.start.addingTimeInterval(3600)) else { return nil }
             let sid = c.studioId
             guard let t = CheckInTarget.make(studio: studio(sid), studioId: sid, name: studioName(sid),
@@ -59,7 +59,7 @@ extension AppModel {
         let cal = BruceDate.calendar
         var seen = Set<String>()
         return bookings.sorted { ($0.class?.startTime ?? "") < ($1.class?.startTime ?? "") }.compactMap { b in
-            guard let c = b.class, let d = c.start, cal.isDateInToday(d) else { return nil }
+            guard !b.isCheckedIn, let c = b.class, let d = c.start, cal.isDateInToday(d) else { return nil }
             let sid = c.studioId
             guard let t = CheckInTarget.make(studio: studio(sid), studioId: sid, name: studioName(sid),
                                              subtitle: "\(c.title) · \(BruceDate.time(d))"),

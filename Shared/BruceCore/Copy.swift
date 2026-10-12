@@ -59,6 +59,25 @@ enum Copy {
                                                 ("No-show", ": booked but never checked in, 2 strikes")]
     static let noShow = "Booked, but never checked in."
 
+    // MARK: Check-in
+
+    /// Badge on a My classes row the user already checked in to.
+    static let checkedIn = "Checked in"
+
+    /// STC/BRP gyms need the door's id, which only the door QR code carries.
+    static func scanDoorFirst(_ studio: String) -> String {
+        "\(studio) checks you in through its door. Scan the QR code on the door once (Check in tab); after that you can check in here from the list too."
+    }
+
+    // MARK: Rating a class (POST /v52/review)
+
+    static let reviewTitle = "Rate the class"
+    static let reviewCommentHint = "Comment (optional)"
+    static let reviewAnonymous = "Hide my name and photo"
+    static let reviewPrivacy = "Ratings with a comment show your first name and photo on the studio page unless you hide them."
+    static let reviewSkip = "Skipped. You can rate this class later from My classes."
+    static let reviewLowNeedsComment = "Tell the studio what could be better: a comment is needed for ratings of 1 or 2."
+
     // MARK: Visit limits
 
     /// Shown under "Buy for SEK n" when the plan's monthly visits at a studio are used up.

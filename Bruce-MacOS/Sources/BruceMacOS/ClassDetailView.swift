@@ -80,7 +80,17 @@ struct ClassDetailView: View {
                 }
                 hero(c)
                 VStack(alignment: .leading, spacing: 0) {
-                    if booking != nil {
+                    if let b = booking, b.isCheckedIn {
+                        // Checked in: keep the class with its ticket, then offer the rating (as the original).
+                        Group {
+                            if let r = m.reviewableBooking(forClass: c.id) {
+                                LimeButton(title: Copy.reviewTitle) { m.present(.review(r.id)) }
+                            } else {
+                                LimeButton(title: "Show ticket") { m.present(.ticket(b.id)) }
+                            }
+                        }
+                        .padding(.top, 24)
+                    } else if booking != nil {
                         RedButton(title: "Cancel booking") { m.present(.bookingRules(c.id)) }.padding(.top, 24)
                     } else if m.standby(forClass: c.id) != nil {
                         HStack(spacing: 12) {
@@ -115,7 +125,7 @@ struct ClassDetailView: View {
                         Text(i).font(.system(size: 17, weight: .light)).foregroundStyle(Theme.secondary).padding(.top, 4)
                     }
                     if let r = BookingRules(c) {
-                        if booking != nil { bookedBox(r) } else { rulesLines(c, r) }
+                        if let b = booking { bookedBox(r, checkedIn: b.checkedInAt.flatMap(BruceDate.parse)) } else { rulesLines(c, r) }
                     }
                     if let a = c.availableSpots {
                         Text(a > 5 ? "5+ spots left" : a <= 0 ? "Fully booked" : "\(a) spot\(a == 1 ? "" : "s") left")
@@ -169,12 +179,17 @@ struct ClassDetailView: View {
         .padding(.top, 22)
     }
 
-    func bookedBox(_ r: BookingRules) -> some View {
+    func bookedBox(_ r: BookingRules, checkedIn: Date? = nil) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            if let checkedIn {
+                Label("Checked in \(BruceDate.time(checkedIn))", systemImage: "checkmark.seal.fill").font(.system(size: 15, weight: .semibold))
+            }
             RuleRow(icon: "viewfinder", title: "Check in",
                     text: "\(BruceDate.format(r.start, "d MMM yyyy")), \(BruceDate.time(r.checkInFrom)) – \(BruceDate.time(r.lateCheckIn))")
-            RuleRow(icon: "calendar.badge.minus", title: "Late cancellation", text: "Cancel after \(BookingRules.long(r.lateCancel))")
-            RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation", text: "Cancel after \(BookingRules.long(r.shortNotice))")
+            if checkedIn == nil {
+                RuleRow(icon: "calendar.badge.minus", title: "Late cancellation", text: "Cancel after \(BookingRules.long(r.lateCancel))")
+                RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation", text: "Cancel after \(BookingRules.long(r.shortNotice))")
+            }
         }
         .padding(18)
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))

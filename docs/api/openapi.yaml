@@ -4,7 +4,7 @@ info:
   version: "v52"
   description: |
     Reconstructed from Charles captures of the Bruce Studios iOS app 14.4.2 (build 538).
-    Evidence: capture 1 = `captures/1`, capture 2 = `captures/2`, capture 3 = `captures/3`, capture 4 = `captures/4`, capture 5 = `captures/5`, capture 6 = `captures/6`, capture 7 = `captures/7` (file numbers in `x-evidence`).
+    Evidence: capture 1 = `captures/1`, capture 2 = `captures/2`, capture 3 = `captures/3`, capture 4 = `captures/4`, capture 5 = `captures/5`, capture 6 = `captures/6`, capture 7 = `captures/7`, capture 8 = `captures/8` (file numbers in `x-evidence`).
     Unofficial; shapes are abbreviated to the fields observed. See API.md.
 servers:
   - url: https://api.bruce.app/v52
@@ -37,7 +37,10 @@ paths:
             schema: { $ref: "#/components/schemas/AuthenticateRequest" }
       responses:
         "200":
-          description: Tokens (access ~3h, refresh ~3 months)
+          description: |
+            Tokens. `access_token_expires_at` is 3 h after login, but the server keeps accepting the access token
+            long after it (the c2 token still got 211 x 200 in c8, ~27 h past that time). No refresh call has been
+            observed in captures 1-8 and the original app stores only the access token; a 401 means "log in again".
           content:
             application/json:
               schema: { $ref: "#/components/schemas/AuthenticateResponse" }
@@ -143,7 +146,7 @@ paths:
       tags: [Studios]
       summary: Legacy public studio list (v1, unauthenticated, ~101 studios)
       security: []
-      servers: [{ url: https://api.bruce.app/v1 }]
+      servers: [{ url: "https://api.bruce.app/v1" }]
       responses:
         "200": { description: "`{studios:[...]}`" }
 
@@ -250,10 +253,14 @@ paths:
       summary: Bookings, paged (mine, friends' or a class's attendees)
       description: |
         `user_id=<me>` lists my bookings; `friends=true` my friends' upcoming ones [c3:106].
+        My bookings include the ones already checked in (`checked_in_at` set); the original's list request
+        (`class_start_time_after=<now-24h>&deleted=false&include_class=true&include_class_studio=true`) keeps showing
+        them [c8:404, c8:410]. `reviewable=true&include_class=true` lists checked-in, ended bookings without a
+        review: the original calls it at every start and opens its "Rate class" dialog for them [c3:27, c8:415].
         `class_id=<id>&include_user=true&include_message=true` lists everyone booked on a class [c7:160]: members
         with "Bruce Studios Social" on carry `user_id` and `user{id,first_name,photo,photo_valid,social,city_id,display_name}`;
         everyone else comes back without `user_id`/`user` (the original app shows them as "Hidden").
-      x-evidence: ["75", "86", "c3:106", "c7:160"]
+      x-evidence: ["75", "86", "c3:106", "c7:160", "c8:404", "c8:410", "c8:415"]
       parameters:
         - $ref: "#/components/parameters/userId"
         - { name: class_id, in: query, schema: { type: integer } }
@@ -263,7 +270,8 @@ paths:
         - { name: deleted, in: query, schema: { type: boolean, example: false } }
         - { name: include_class, in: query, schema: { type: boolean } }
         - { name: include_class_studio, in: query, schema: { type: boolean } }
-        - { name: reviewable, in: query, schema: { type: boolean } }
+        - { name: reviewable, in: query, schema: { type: boolean }, description: "Checked-in, ended, not yet reviewed (c8:415)" }
+        - { name: class_start_time_after, in: query, schema: { type: string, format: date-time } }
         - $ref: "#/components/parameters/limit"
         - $ref: "#/components/parameters/nextCursor"
       responses:
@@ -357,6 +365,10 @@ paths:
         Door QR format: `stc://open-door?major=<MAJOR>&minor=<DOOR_ID>`.
         `major` identifies the gym (matches studio `qr_code_id` = `stc:<MAJOR>`), `minor` the door.
         For a drop-in gym the check-in creates the booking itself.
+        The only captured check-in [c1:163] carries `meta` from the scanned door QR; capture 8 has no check-in
+        request (the class booking it shows was checked in before the capture started). Sending only the studio's
+        `qr_code_id` ("stc:<major>") without `meta` for an STC/BRP door gym got HTTP 400 in Bruce-iOS, so the
+        clients require the door ids (built-in, or remembered from a scanned door QR) for those studios.
       x-evidence: ["163"]
       requestBody:
         required: true
@@ -589,6 +601,29 @@ paths:
         - { name: include_booking_user, in: query, required: false, schema: { type: boolean } }
       responses:
         "200": { description: "{reviews:[{id,rating,comment,created_at,booking:{class:{opening,title,start_time},user:{first_name,photo}}}]}" }
+    post:
+      tags: [Booking]
+      summary: Rate a class after attending it
+      description: |
+        Sent from the "Rate class" dialog the original opens at start for bookings from
+        `GET /booking?reviewable=true` [c8:415 -> c8:467]. There is no review notification type and no other
+        trigger. `public:false` is "Send (anonymous)". The captured review had no comment (and no `comment`
+        key); `comment` is the field name of review objects [c3:101]. The response booking carries `review_id`.
+      x-evidence: ["c8:467"]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateReviewRequest" }
+      responses:
+        "200":
+          description: The new review with its booking
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  review: { $ref: "#/components/schemas/Review" }
   /friend_request/{requestId}/respond:
     post:
       tags: [Social]
@@ -957,6 +992,29 @@ components:
         deleted: { type: boolean }
         deleted_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
+        review_id: { type: integer, nullable: true, description: "Set once the class was rated (c8:467)" }
+    CreateReviewRequest:
+      type: object
+      required: [rating, booking_id]
+      properties:
+        rating: { type: integer, minimum: 1, maximum: 5, example: 5 }
+        public: { type: boolean, example: true, description: "false = anonymous" }
+        booking_id: { type: integer }
+        comment: { type: string, description: Optional (not in the captured request) }
+        include_booking: { type: boolean, example: true }
+        locale: { type: string, example: en }
+    Review:
+      type: object
+      properties:
+        id: { type: integer }
+        rating: { type: integer }
+        comment: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+        public: { type: boolean }
+        studio_id: { type: integer }
+        class_id: { type: integer, nullable: true }
+        user_id: { type: integer }
+        booking: { $ref: "#/components/schemas/Booking" }
     CreateBookingRequest:
       type: object
       required: [class_id]

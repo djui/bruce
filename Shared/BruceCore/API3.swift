@@ -66,6 +66,28 @@ extension BruceAPI {
         return try decode(R.self, try await send(makeRequest("GET", "v52/review", query: q, token: token))).reviews
     }
 
+    // MARK: Post-class review [c8:415, 467]
+    /// Bookings the user can still rate: `GET /v52/booking?reviewable=true&user_id=&include_class=true&locale=en`
+    /// [c3:27, c8:415]. The original calls it at every app start; a checked-in class that has ended and has no
+    /// `review_id` comes back here (one page, `cache_expire_seconds: 0`). There is no review notification type
+    /// and no pending-review endpoint: this list is the trigger for the "Rate class" dialog.
+    static func fetchReviewableBookings(token: String, userId: Int) async throws -> [Booking] {
+        struct R: Decodable { let bookings: [Booking] }
+        let q = [("reviewable", "true"), ("user_id", String(userId)), ("include_class", "true"), ("locale", "en")]
+        return try decode(R.self, try await send(makeRequest("GET", "v52/booking", query: q, token: token))).bookings
+    }
+
+    /// `POST /v52/review` [c8:467] body `{"rating":1-5,"public":bool,"booking_id":<id>,"locale":"en","include_booking":true}`
+    /// -> `{"review":{id,rating,comment,created_at,public,studio_id,class_id,user_id,booking{...,review_id}}}`.
+    /// `public:false` is the original's "Send (anonymous)". The captured review had no comment (and no `comment`
+    /// key); a comment is sent as `comment`, the field name the review objects use [c3:101].
+    static func submitReviewRequest(token: String, bookingId: Int, rating: Int, comment: String?, isPublic: Bool) throws -> URLRequest {
+        var body: [String: Any] = ["rating": rating, "public": isPublic, "booking_id": bookingId,
+                                   "include_booking": true, "locale": "en"]
+        if let c = comment?.trimmingCharacters(in: .whitespacesAndNewlines), !c.isEmpty { body["comment"] = c }
+        return try makeRequest("POST", "v52/review", token: token, body: body)
+    }
+
     // MARK: Friends' bookings feed [c3:106]
     // MARK: Class attendees [c3:58, 573; c2:55; c7:160]
     /// Public profile on an attendee booking: `{id,first_name,photo,photo_valid,social,city_id,display_name}`,
