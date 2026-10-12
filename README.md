@@ -75,7 +75,9 @@ My classes tabs, with class and studio pages and account sheets.
   public profile by name, the rest as "Hidden"), and an **Invite** button that sends the class to the
   friends you pick, as in the official app.
 - **Notifications** open the class they are about (or its studio, strikes or membership).
-- **Friends' classes**, bookmarks, favourites, statistics, membership, credits, strikes,
+- **Statistics** as in the official app: a bar chart of visits per month, and below it every visit of the
+  selected month by day (class or solo training, studio, area and instructor).
+- **Friends' classes**, bookmarks, favourites, membership, credits, strikes,
   receipts, and notification and social settings.
 - **Fast:** studios stream in page by page, then load in parallel and are cached on disk. Class days load
   in parallel time windows, and images are cached and downsampled. Measurements are in the

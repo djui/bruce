@@ -370,39 +370,40 @@ struct MembershipPlansView: View {
 
 struct StatisticsView: View {
     @Environment(AppModel.self) var m
-    var byMonth: [(String, Int)] {
-        var d: [String: Int] = [:]
-        for a in m.aggregate { d[String(String(a.day).prefix(6)), default: 0] += a.count }
-        return d.sorted { $0.key > $1.key }.map { k, v in
-            let date = BruceDate.calendar.date(from: DateComponents(year: Int(k.prefix(4)), month: Int(k.suffix(2)), day: 1))
-            return (BruceDate.format(date, "MMMM yyyy"), v)
-        }
-    }
+    @State private var visits: [BruceAPI.Visit]?
+    @State private var month = BruceDate.calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+
     var body: some View {
+        let shown = (visits ?? []).filter { $0.date.map { BruceDate.calendar.isDate($0, equalTo: month, toGranularity: .month) } == true }
+        let groups = Dictionary(grouping: shown) { BruceDate.calendar.startOfDay(for: $0.date ?? .distantPast) }
         VStack(spacing: 0) {
             NavBar(title: "Statistics") { m.popSheet() }
-            HStack(spacing: 16) {
-                stat("Total visits", m.aggregate.reduce(0) { $0 + $1.count })
-                stat("This month", m.aggregate.filter { String($0.day).hasPrefix(BruceDate.format(Date(), "yyyyMM")) }.reduce(0) { $0 + $1.count })
-            }
-            .padding(Theme.gutter)
             ScrollView {
-                VStack(spacing: 0) {
-                    SectionHeaderBar(text: "Visits per month")
-                    ForEach(byMonth, id: \.0) { k, v in InfoRow(title: k, subtitle: "\(v) visit\(v == 1 ? "" : "s")", chevron: false) }
-                    if byMonth.isEmpty { Text("No visits yet.").foregroundStyle(Theme.secondary).padding(.top, 30) }
+                LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    VisitBarChart(months: m.monthlyVisits, selection: $month).padding(.top, 12).padding(.bottom, 28)
+                    ForEach(groups.keys.sorted(by: >), id: \.self) { day in
+                        Section {
+                            ForEach(groups[day]!.sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }) { v in
+                                ClassRow(time: BruceDate.time(v.date), duration: v.durationMinutes.map { "\($0) min" } ?? "",
+                                         title: v.title, studio: m.studioName(for: v), meta: m.visitMeta(v), showMenu: false)
+                            }
+                        } header: {
+                            SectionHeaderBar(text: BruceDate.dayHeader(day))
+                        }
+                    }
+                    if visits == nil {
+                        ProgressView().padding(.top, 30)
+                    } else if shown.isEmpty {
+                        Text("No visits in \(BruceDate.format(month, "MMMM")).").foregroundStyle(Theme.secondary).padding(.top, 30)
+                    }
                 }
             }
         }
-        .task { await m.loadAggregate() }
-    }
-    func stat(_ t: String, _ v: Int) -> some View {
-        VStack(spacing: 8) {
-            Text("\(v)").font(.system(size: 34, weight: .heavy).width(.expanded))
-            Text(t).font(.system(size: 14, weight: .light)).foregroundStyle(Theme.secondary)
+        .task {
+            async let a: Void = m.loadAggregate()
+            visits = await m.fetchVisitHistory()
+            await a
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 18)
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
     }
 }
 
