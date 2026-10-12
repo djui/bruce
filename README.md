@@ -51,13 +51,14 @@ My classes tabs, with class and studio pages and account sheets.
   tier, Wellness and favourite filters, search, a map, and **custom areas**: draw an outline on the map and
   filter studios and classes to it. Long-press (iOS) or right-click (macOS) an area to show it on the map,
   rename it or delete it. As in the official app, areas stay on the device.
-  Class rows mark Wellness classes, show a "Waitlist" pill when you are on the waitlist and "Fully
+  Class rows mark Wellness classes, show a "Waitlist" pill when you are on the waitlist ("Spot open" once it has a free spot) and "Fully
   booked" otherwise, and show the faces of friends who booked the class;
   lists say "Filter active" at the end while filters apply. Deleted classes are hidden, as in the official app.
 - **Parakey doors**: studios whose doors open with the Parakey app say so on the class and studio pages,
   with a sheet that shows whether your account is linked and opens Parakey.
 - **Book, cancel and join waitlists** through a booking-rules sheet that shows the "book until",
-  "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked. A fully booked class also offers **Similar classes**: nearby classes
+  "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked. A "Free spot"
+  notification does not book for you: the class page then offers Book next to Leave waitlist. A fully booked class also offers **Similar classes**: nearby classes
   around the same time, as swipeable cards.
 - **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
   plan's limit at the studio. A class over your limit shows its drop-in price ("Buy for SEK 220").
@@ -73,7 +74,8 @@ My classes tabs, with class and studio pages and account sheets.
 - **Class pages** show the studio's notice banner, everyone booked on the class (friends and members with a
   public profile by name, the rest as "Hidden"), and an **Invite** button that sends the class to the
   friends you pick, as in the official app.
-- **Friends' classes**, bookmarks, favourites, notifications, statistics, membership, credits, strikes,
+- **Notifications** open the class they are about (or its studio, strikes or membership).
+- **Friends' classes**, bookmarks, favourites, statistics, membership, credits, strikes,
   receipts, and notification and social settings.
 - **Fast:** studios stream in page by page, then load in parallel and are cached on disk. Class days load
   in parallel time windows, and images are cached and downsampled. Measurements are in the

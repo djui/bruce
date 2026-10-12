@@ -523,6 +523,15 @@ paths:
                 locale: { type: string }
       responses:
         "200": { description: "empty" }
+  /notification:
+    get:
+      tags: [User]
+      summary: In-app notifications (no paging, no mark-read call)
+      x-evidence: ["42", "159", "178"]
+      parameters:
+        - { name: user_id, in: query, required: true, schema: { type: integer } }
+      responses:
+        "200": { description: "{notifications:[{id,user_id,created_at,type,title,message,read,hidden,im,push,email,sms,info,channel,meta:{class_id,studio_id,photo,user_photo,inviting_user_name}}]}. type: STANDBY_AVAILABLE (Free spot; does not book), BOOKING_REMINDER, BOOKING_CANCELLED, CLASS_MESSAGE, CHECK_IN_REMINDER, USER_STRIKE, USER_BLOCK, USER_STRIKE_UNBLOCKED, CLASS_INVITE, PAUSE_ENDING. meta is missing on USER_STRIKE_UNBLOCKED and PAUSE_ENDING." }
   /standby:
     get:
       tags: [Booking]
