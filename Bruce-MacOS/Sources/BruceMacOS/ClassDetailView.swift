@@ -85,7 +85,9 @@ struct ClassDetailView: View {
                     } else if m.standby(forClass: c.id) != nil {
                         HStack(spacing: 12) {
                             RedButton(title: "Leave waitlist") { m.askLeaveWaitlist(c.id) }
-                            if (c.availableSpots ?? 1) <= 0 { similarButton(c) }
+                            // A spot opened ("Free spot" notification): it is not booked for you, so offer Book.
+                            if (c.availableSpots ?? 0) > 0 { LimeButton(title: "Book") { m.present(.bookingRules(c.id)) } }
+                            else { similarButton(c) }
                         }
                         .padding(.top, 24)
                     } else if m.visitLimitReached(c) {

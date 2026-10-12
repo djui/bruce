@@ -163,6 +163,8 @@ enum Copy {
 
     static let waitlistJoined = "You'll get a notification if a spot opens up."
     static let leaveWaitlist = "Leave the waitlist for this class?"
+    /// Badge on a waitlisted class that has a free spot again (booking it is first come, first served).
+    static let spotOpen = "Spot open"
 
     // MARK: Explore
 

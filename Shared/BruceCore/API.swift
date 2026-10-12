@@ -196,7 +196,7 @@ enum BruceAPI {
         let startTime: String
         let endTime: String?
         let spots: Int?
-        let availableSpots: Int?
+        var availableSpots: Int?
         /// Raw `instructor`; use `instructor` for display.
         let rawInstructor: String?
         let canceled: Bool?

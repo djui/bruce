@@ -313,9 +313,9 @@ struct ClassRow: View {
                     if !meta.isEmpty { Text(meta).font(.system(size: 16, weight: .light)).foregroundStyle(Theme.secondary).lineLimit(1) }
                     if let badge {
                         HStack(spacing: 6) {
-                            // "Booked" = a waitlist spot that turned into a booking (teal), "Waitlist" orange.
-                            let tint = badge == "Booked" ? Theme.teal : Theme.waitlistOrange
-                            Image(systemName: badge == "Booked" ? "checkmark.circle.fill" : "bell.fill").font(.system(size: 11)).foregroundStyle(tint)
+                            // "Booked" = a waitlist spot that turned into a booking, "Spot open" = a free spot to book (teal); "Waitlist" orange.
+                            let tint = badge == "Waitlist" ? Theme.waitlistOrange : Theme.teal
+                            Image(systemName: badge == "Booked" ? "checkmark.circle.fill" : badge == Copy.spotOpen ? "person.crop.circle.badge.plus" : "bell.fill").font(.system(size: 11)).foregroundStyle(tint)
                             Text(badge).font(.system(size: 15, weight: .medium)).foregroundStyle(tint)
                         }
                         .padding(.top, 6)
