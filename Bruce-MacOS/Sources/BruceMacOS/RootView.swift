@@ -44,7 +44,7 @@ struct RootView: View {
         .task { await m.bootstrap() }
         .alert(m.confirm?.title ?? "", isPresented: Binding(get: { m.confirm != nil }, set: { if !$0 { m.confirm = nil } }),
                presenting: m.confirm) { a in
-            Button(a.button) { Task { m.confirm = nil; await a.run(); m.dismissSheets() } }
+            Button(a.button) { Task { m.confirm = nil; let before = m.sheets; await a.run(); if m.sheets == before { m.dismissSheets() } } }
             Button("Cancel", role: .cancel) { m.confirm = nil }
         } message: { a in Text(a.message) }
         .alert(m.infoAlert ?? "", isPresented: Binding(get: { m.infoAlert != nil }, set: { if !$0 { m.infoAlert = nil } })) {
@@ -91,8 +91,8 @@ struct TabBar: View {
                                 .font(.system(size: 22, weight: m.tab == item.0 ? .semibold : .light))
                                 .frame(height: 30)
                                 .overlay(alignment: .topTrailing) {
-                                    if item.0 == .myClasses && !m.bookings.isEmpty {
-                                        Text("\(m.bookings.count)").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                                    if item.0 == .myClasses && !m.upcomingBookings.isEmpty {
+                                        Text("\(m.upcomingBookings.count)").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
                                             .frame(minWidth: 22, minHeight: 22).background(Circle().fill(Color(red: 1, green: 0.22, blue: 0.24)))
                                             .offset(x: 14, y: -8)
                                     }
@@ -185,6 +185,7 @@ struct SheetHost: View {
         case .quickCheckIn: QuickCheckInSheet()
         case .similarClasses(let id): SimilarClassesSheet(classId: id)
         case .area(let id): AreaMapSheet(areaId: id)
+        case .review(let id): ReviewSheet(bookingId: id)
         }
     }
 }

@@ -263,6 +263,12 @@ extension AppModel {
         case "statistics": sheets = [.account, .statistics]
         case "receipts": sheets = [.account, .receipts]
         case "rules": push(.classDetail(9001)); present(.bookingRules(9001))
+        case "checkedin", "review":
+            // A checked-in class that ended: stays in My classes, and is reviewable (POST /v52/review [c8:467]).
+            let b = BruceAPI.Booking(id: 2, classId: 9001, studioId: 1489, checkedInAt: iso.string(from: Date().addingTimeInterval(-3600)),
+                                     class: classDetails[9001])
+            bookings = [b]; reviewable = [b]
+            if AppModel.setting("BRUCE_SCREEN") == "review" { present(.review(2)) } else { tab = .myClasses }
         case "booked": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001))
         case "cancelsheet": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001)); present(.bookingRules(9001))
         case "detailmap": push(.classDetail(9001)); demoScrollBottom = true

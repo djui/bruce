@@ -71,12 +71,14 @@ struct MyClassesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: "My classes") { CountPill(used: m.bookings.count, total: m.simultaneousLimit ?? 3) }
+            ScreenHeader(title: "My classes") { CountPill(used: m.upcomingBookings.count, total: m.simultaneousLimit ?? 3) }
             UnderlineTabs(titles: ["Bookings", "Waitlist", "Bookmarks"], selection: $tab)
             switch tab {
             case 0:
                 if m.bookings.isEmpty { EmptyState(system: "calendar.badge.checkmark", text: "You have no bookings.") }
-                else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } }) }
+                // Checked-in classes stay listed with a "Checked in" badge, as in the original [c8:404].
+                else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } },
+                            badge: { c in m.booking(forClass: c.id)?.isCheckedIn == true ? Copy.checkedIn : nil }) }
             case 1:
                 if m.waitlistRows.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
                 // A standby that got a spot shows "Booked" (and can be cancelled), as in the original.
@@ -109,7 +111,12 @@ struct MyClassesView: View {
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
-                            if item.2 != nil {
+                            if let b = item.2, b.isCheckedIn {
+                                Button("Show ticket") { m.present(.ticket(b.id)) }
+                                if let r = m.reviewableBooking(forClass: c.id) {
+                                    Button("\(Copy.reviewTitle)…") { m.present(.review(r.id)) }
+                                }
+                            } else if item.2 != nil {
                                 Button("Cancel booking…") { m.present(.bookingRules(c.id)) }
                             }
                         }

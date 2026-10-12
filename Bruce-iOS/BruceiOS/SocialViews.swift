@@ -70,7 +70,9 @@ struct MyClassesView: View {
                     switch tab {
                     case 0:
                         if m.bookings.isEmpty { EmptyState(system: "calendar.badge.checkmark", text: "You have no bookings.") }
-                        else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } }) }
+                        // Checked-in classes stay listed with a "Checked in" badge, as in the original [c8:404].
+                        else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } },
+                                    badge: { c in m.booking(forClass: c.id)?.isCheckedIn == true ? Copy.checkedIn : nil }) }
                     case 1:
                         if m.waitlistRows.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
                         // A standby that got a spot shows "Booked" (and can be cancelled), as in the original.
@@ -93,7 +95,7 @@ struct MyClassesView: View {
         .bruceTitle("My classes")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Text(m.simultaneousLimit.map { "\(m.bookings.count) / \($0)" } ?? "\(m.bookings.count)").font(.system(size: 15, weight: .semibold)).monospacedDigit()
+                Text(m.simultaneousLimit.map { "\(m.upcomingBookings.count) / \($0)" } ?? "\(m.upcomingBookings.count)").font(.system(size: 15, weight: .semibold)).monospacedDigit()
                     .padding(.horizontal, 6)
             }
         }
@@ -111,7 +113,12 @@ struct MyClassesView: View {
                 NavigationLink(value: Route.classDetail(c.id)) { ClassRow(c: c, badge: badge(c)) }
                     .buttonStyle(.plain)
                     .contextMenu {
-                        if item.2 != nil {
+                        if let b = item.2, b.isCheckedIn {
+                            Button("Show ticket", systemImage: "ticket") { m.present(.ticket(b.id)) }
+                            if let r = m.reviewableBooking(forClass: c.id) {
+                                Button("\(Copy.reviewTitle)…", systemImage: "star") { m.present(.review(r.id)) }
+                            }
+                        } else if item.2 != nil {
                             Button("Cancel booking…", systemImage: "xmark.circle", role: .destructive) { m.present(.bookingRules(c.id)) }
                         }
                         ShareLink(item: ShareURL.forClass(c.id, title: c.title))

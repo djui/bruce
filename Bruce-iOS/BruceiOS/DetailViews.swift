@@ -130,7 +130,7 @@ struct ClassDetailView: View {
                         }
                         if limitReached(c) { limitNotice }
                         if let r = BookingRules(c) {
-                            if booking != nil { bookedBox(r) } else { rulesLines(c, r) }
+                            if let b = booking { bookedBox(r, checkedIn: b.checkedInAt.flatMap(BruceDate.parse)) } else { rulesLines(c, r) }
                         }
                         if let studio, studio.usesParakey { ParakeyRow(studio: studio, forClass: true) }
                         whoIsBooked(c).padding(.top, 4)
@@ -152,7 +152,14 @@ struct ClassDetailView: View {
     /// Floating glass action bar (Book / Cancel / Waitlist), as in the original's big pill button.
     @ViewBuilder func actionBar(_ c: BruceAPI.BruceClass) -> some View {
         Group {
-            if booking != nil {
+            if let b = booking, b.isCheckedIn {
+                // Checked in: the class stays here (as in the original) with its ticket, then the rating.
+                if let r = m.reviewableBooking(forClass: c.id) {
+                    LimeButton(title: Copy.reviewTitle, systemImage: "star.fill") { m.present(.review(r.id)) }
+                } else {
+                    LimeButton(title: "Show ticket", systemImage: "ticket") { m.present(.ticket(b.id)) }
+                }
+            } else if booking != nil {
                 RedButton(title: "Cancel booking") { m.present(.bookingRules(c.id)) }
             } else if m.standby(forClass: c.id) != nil {
                 HStack(spacing: 10) {
@@ -220,14 +227,18 @@ struct ClassDetailView: View {
         .glassEffect(.regular, in: .rect(cornerRadius: 24))
     }
 
-    func bookedBox(_ r: BookingRules) -> some View {
+    func bookedBox(_ r: BookingRules, checkedIn: Date? = nil) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Label("Booked", systemImage: "checkmark.circle.fill").font(.system(size: 13, weight: .heavy).width(.expanded))
+            Label(checkedIn.map { "Checked in \(BruceDate.time($0))" } ?? "Booked",
+                  systemImage: checkedIn == nil ? "checkmark.circle.fill" : "checkmark.seal.fill")
+                .font(.system(size: 13, weight: .heavy).width(.expanded))
                 .foregroundStyle(.black).padding(.horizontal, 10).padding(.vertical, 5).background(Capsule().fill(Theme.lime))
             RuleRow(icon: "qrcode.viewfinder", title: "Check in",
                     text: "\(BruceDate.format(r.start, "d MMM yyyy")), \(BruceDate.time(r.checkInFrom)) – \(BruceDate.time(r.lateCheckIn))")
-            RuleRow(icon: "calendar.badge.minus", title: "Late cancellation", text: "Cancel after \(BookingRules.long(r.lateCancel))")
-            RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation", text: "Cancel after \(BookingRules.long(r.shortNotice))")
+            if checkedIn == nil {
+                RuleRow(icon: "calendar.badge.minus", title: "Late cancellation", text: "Cancel after \(BookingRules.long(r.lateCancel))")
+                RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation", text: "Cancel after \(BookingRules.long(r.shortNotice))")
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(18)
@@ -952,6 +963,88 @@ struct TicketSheet: View {
         }
         .navigationTitle("Ticket").navigationBarTitleDisplayMode(.inline)
         .toolbar { ToolbarItem(placement: .topBarTrailing) { Button("Done", role: .confirm) { m.dismissSheets() } } }
+    }
+}
+
+// MARK: - Rate the class (POST /v52/review [c8:467])
+
+/// Opened automatically for a booking from `GET /v52/booking?reviewable=true` (as the original does at start),
+/// or from My classes / the class page. Stars 1-5, optional comment, optional anonymity (`public:false`).
+struct ReviewSheet: View {
+    @Environment(AppModel.self) var m
+    let bookingId: Int
+    @State private var rating = 0
+    @State private var comment = ""
+    @State private var anonymous = false
+    @State private var sending = false
+    @FocusState private var commentFocused: Bool
+
+    var booking: BruceAPI.Booking? { m.reviewBooking(bookingId) }
+    var c: BruceAPI.BruceClass? { booking?.class.flatMap { m.classDetails[$0.id] ?? $0 } }
+    var hasComment: Bool { !comment.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    /// Like the original, a low rating needs a comment before it can be sent.
+    var needsComment: Bool { (1...2).contains(rating) && !hasComment }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                if let c {
+                    VStack(spacing: 8) {
+                        Text(c.title.uppercased()).font(Theme.heading(22)).multilineTextAlignment(.center)
+                        Text("\(classDateLine(c)) at \(m.studioName(c.studioId))").font(.system(size: 16))
+                            .foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity).padding(.top, 8)
+                }
+                HStack(spacing: 10) {
+                    ForEach(1...5, id: \.self) { i in
+                        Button { withAnimation(.spring(duration: 0.25)) { rating = i } } label: {
+                            Image(systemName: i <= rating ? "star.fill" : "star")
+                                .font(.system(size: 32, weight: .semibold))
+                                .foregroundStyle(i <= rating ? Theme.limeInk : Theme.tertiary)
+                                .frame(maxWidth: .infinity).frame(height: 56)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("\(i) star\(i == 1 ? "" : "s")")
+                        .accessibilityAddTraits(i == rating ? .isSelected : [])
+                    }
+                }
+                .padding(.horizontal, 8)
+                .glassEffect(.regular, in: .rect(cornerRadius: 24))
+                TextField(Copy.reviewCommentHint, text: $comment, axis: .vertical)
+                    .lineLimit(3...8).font(.system(size: 16))
+                    .focused($commentFocused)
+                    .padding(16)
+                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
+                if needsComment {
+                    Label(Copy.reviewLowNeedsComment, systemImage: "exclamationmark.circle")
+                        .font(.system(size: 14)).foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true)
+                }
+                Toggle(Copy.reviewAnonymous, isOn: $anonymous).font(.system(size: 16, weight: .medium))
+                    .tint(Theme.limeInk).padding(.horizontal, 4)
+                Label(Copy.reviewPrivacy, systemImage: "info.circle")
+                    .font(.system(size: 14)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                LimeButton(title: sending ? "Sending…" : (anonymous ? "Send anonymously" : "Send")) {
+                    commentFocused = false
+                    sending = true
+                    Task {
+                        let ok = await m.submitReview(bookingId: bookingId, rating: rating, comment: comment, isPublic: !anonymous)
+                        sending = false
+                        if ok { m.dismissSheets() }
+                    }
+                }
+                .disabled(rating == 0 || needsComment || sending)
+                .padding(.top, 4)
+            }
+            .padding(Theme.gutter)
+        }
+        .scrollDismissesKeyboard(.interactively)
+        .sheetChrome(Copy.reviewTitle)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button("Skip") { m.skipReview(bookingId); m.flash(Copy.reviewSkip) }
+            }
+        }
     }
 }
 

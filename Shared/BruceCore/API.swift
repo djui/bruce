@@ -317,13 +317,18 @@ enum BruceAPI {
         let studioId: Int?
         let checkedInAt: String?
         let `class`: BruceClass?
+        /// Set once the user has rated the class (`POST /v52/review` fills it) [c8:467].
+        var reviewId: Int? = nil
         enum CodingKeys: String, CodingKey {
             case id, `class`
-            case classId = "class_id", studioId = "studio_id", checkedInAt = "checked_in_at"
+            case classId = "class_id", studioId = "studio_id", checkedInAt = "checked_in_at", reviewId = "review_id"
         }
+        var isCheckedIn: Bool { checkedInAt != nil }
     }
 
-    /// All of the user's non-deleted bookings, paged by `next_cursor` like the original app [75, 86].
+    /// All of the user's non-deleted bookings, paged by `next_cursor` like the original app [75, 86, c8:404].
+    /// The response includes bookings the user already checked in to (`checked_in_at` set); the original keeps
+    /// listing them in My classes until they drop out of the 24 h window [c8:404].
     /// A single page (30) is not enough: older bookings fill it, so a new booking (e.g. one promoted from the
     /// waitlist) can sit on a later page.
     /// Same window as the original (`class_start_time_after` = 24 h ago, newest first) [c7:64]; paging stops when
@@ -369,6 +374,15 @@ enum BruceAPI {
         let (data, resp) = try await URLSession.shared.data(for: req)
         let code = (resp as? HTTPURLResponse)?.statusCode ?? -1
         return (code, String(data: data, encoding: .utf8) ?? "")
+    }
+
+    /// First human-readable message of an error body `{"errors":[{"code","message","status"}]}` [c3:275].
+    static func errorMessage(_ body: String) -> String? {
+        struct E: Decodable { struct Item: Decodable { let message: String?; let code: String? }; let errors: [Item]? }
+        guard let d = body.data(using: .utf8), let e = try? JSONDecoder().decode(E.self, from: d),
+              let first = e.errors?.first else { return nil }
+        let msg = (first.message ?? first.code ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return msg.isEmpty ? nil : msg
     }
 }
 
