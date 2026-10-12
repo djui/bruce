@@ -96,9 +96,11 @@ extension AppModel {
         notificationsSeenAt = Date().addingTimeInterval(-3600 * 30)
         notifications = dec([BruceAPI.BruceNotification].self, """
         [{"id":4,"created_at":"\(at(0, 0, 20))","type":"STANDBY_AVAILABLE","title":"Free spot","message":"Available spot for Functional today 23:25 (placeholder)","read":false,"meta":{"class_id":9008,"studio_id":null}},
-         {"id":1,"created_at":"\(at(0, 0, 11))","title":"Booking cancelled","message":"Cancellation: High Intensity (placeholder)","read":false},
-         {"id":3,"created_at":"\(at(0, 0, 5))","title":"Booking cancelled","message":"Cancellation: Hatha Flow (placeholder)","read":false},
-         {"id":2,"created_at":"\(at(-2, 19, 3))","title":"Booking reminder","message":"Your class starts tomorrow (placeholder)","read":false}]
+         {"id":5,"created_at":"\(at(0, 0, 15))","type":"CHECK_IN_REMINDER","title":"Check In","message":"Time to check in at Hot Yoga (placeholder)","read":false,"meta":{"class_id":9003,"studio_id":null}},
+         {"id":1,"created_at":"\(at(0, 0, 11))","type":"BOOKING_CANCELLED","title":"Booking cancelled","message":"Cancellation: High Intensity (placeholder)","read":false,"meta":{"class_id":9001,"studio_id":null}},
+         {"id":6,"created_at":"\(at(0, 0, 8))","type":"USER_STRIKE","title":"Late cancellation","message":"You made a late cancellation on High Intensity (placeholder)","read":false,"meta":{"class_id":null,"studio_id":null}},
+         {"id":3,"created_at":"\(at(0, 0, 5))","type":"CLASS_MESSAGE","title":"Hatha Flow has been cancelled.","message":"Too few bookings (placeholder)","read":false,"meta":{"class_id":9002,"studio_id":null,"photo":"k5pxisc2ienijh72umlm"}},
+         {"id":2,"created_at":"\(at(-2, 19, 3))","type":"BOOKING_REMINDER","title":"Booking reminder","message":"Your class starts tomorrow (placeholder)","read":false,"meta":{"class_id":9003,"studio_id":null,"photo":"xdz9eqgslqobguwuiqn8"}}]
         """)
         friends = dec([BruceAPI.Friend].self, """
         [{"id":1,"friend_user":{"id":1,"first_name":"Friend","last_name":"One"}},{"id":2,"friend_user":{"id":2,"first_name":"Friend","last_name":"Two"}}]
