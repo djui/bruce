@@ -67,6 +67,44 @@ extension BruceAPI {
     }
 
     // MARK: Friends' bookings feed [c3:106]
+    // MARK: Class attendees [c3:58, 573; c2:55]
+    /// Public profile on an attendee booking. Same shape as `booking.user` on reviews [c3:101]; only
+    /// filled for members with "Bruce Studios Social" on. Everyone else comes back without `user`.
+    struct AttendeeUser: Decodable, Hashable {
+        let id: Int
+        let firstName: String?
+        let lastName: String?
+        let displayName: String?
+        let photo: String?
+        let social: Bool?
+        enum CodingKeys: String, CodingKey {
+            case id, photo, social, firstName = "first_name", lastName = "last_name", displayName = "display_name"
+        }
+    }
+    struct ClassAttendee: Decodable, Identifiable, Hashable {
+        let id: Int
+        let userId: Int?
+        let user: AttendeeUser?
+        enum CodingKeys: String, CodingKey { case id, user, userId = "user_id" }
+    }
+    /// Everyone booked on a class: `GET /v52/booking?class_id=<id>&include_user=true&include_message=true&deleted=false`,
+    /// paged by `next_cursor` (a class rarely needs more than one page of 30).
+    static func fetchClassAttendees(token: String, classId: Int, maxPages: Int = 4) async throws -> [ClassAttendee] {
+        struct R: Decodable { let bookings: [ClassAttendee]; let metadata: Metadata? }
+        var out: [ClassAttendee] = []
+        var cursor: String?
+        for _ in 0..<maxPages {
+            var q = [("class_id", String(classId)), ("include_user", "true"), ("include_message", "true"),
+                     ("deleted", "false"), ("limit", "30"), ("locale", "en")]
+            if let cursor { q.append(("next_cursor", cursor)) }
+            let r = try decode(R.self, try await send(makeRequest("GET", "v52/booking", query: q, token: token)))
+            out += r.bookings
+            guard let next = r.metadata?.pagination?.nextCursor, !next.isEmpty, !r.bookings.isEmpty else { break }
+            cursor = next
+        }
+        return out
+    }
+
     struct FriendBooking: Decodable, Identifiable, Hashable {
         let id: Int
         let userId: Int?
@@ -195,5 +233,12 @@ extension BruceAPI {
         let q = [("query", query), ("type", "studio,class"), ("latitude", String(lat)), ("longitude", String(lon)),
                  ("city_code", cityCode), ("search_mode", "indexed"), ("locale", "en")]
         return try decode(R.self, try await send(makeRequest("GET", "v52/search", query: q, token: token))).result
+    }
+}
+
+extension BruceAPI.Studio {
+    /// First notice banner text by `order`; shown on the studio page and on its class pages.
+    var notice: String? {
+        (alerts ?? []).sorted { ($0.order ?? 0) < ($1.order ?? 0) }.compactMap(\.message).first { !$0.isEmpty }
     }
 }

@@ -51,7 +51,7 @@ struct StudioDetailView: View {
 
     /// Notice banner from studio `alerts[].message` (e.g. door/kiosk instructions).
     @ViewBuilder var notice: some View {
-        if let msg = (studio?.alerts ?? []).sorted(by: { ($0.order ?? 0) < ($1.order ?? 0) }).compactMap(\.message).first, !msg.isEmpty {
+        if let msg = studio?.notice {
             Text(msg).font(.system(size: 15, weight: .light)).multilineTextAlignment(.center)
                 .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity)
                 .background(RoundedRectangle(cornerRadius: 12).fill(Theme.sectionGrey))

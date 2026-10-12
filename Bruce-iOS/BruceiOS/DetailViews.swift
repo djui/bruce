@@ -31,6 +31,7 @@ struct ClassDetailView: View {
         .task {
             await m.loadClassDetail(classId)
             if let sid = m.findClass(classId)?.studioId { await m.loadStudioLimits(sid) }
+            await m.loadClassAttendees(classId)
         }
     }
 
@@ -40,6 +41,11 @@ struct ClassDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     hero(c)
                     VStack(alignment: .leading, spacing: 16) {
+                        if let msg = studio?.notice {
+                            Label(msg, systemImage: "info.circle.fill").font(.system(size: 14))
+                                .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                                .glassEffect(.regular.tint(Theme.red.opacity(0.15)), in: .rect(cornerRadius: 20))
+                        }
                         VStack(alignment: .leading, spacing: 6) {
                             Text(classDateLine(c)).font(.system(size: 18, weight: .bold))
                             if let i = c.instructor, !i.isEmpty {
@@ -55,7 +61,7 @@ struct ClassDetailView: View {
                         if let r = BookingRules(c) {
                             if booking != nil { bookedBox(r) } else { rulesLines(c, r) }
                         }
-                        whoIsBooked.padding(.top, 4)
+                        whoIsBooked(c).padding(.top, 4)
                     }
                     .padding(Theme.gutter)
                     StudioInfoBlock(studio: studio, description: c.description)
@@ -117,31 +123,44 @@ struct ClassDetailView: View {
         .glassEffect(.regular.tint(Theme.lime.opacity(0.12)), in: .rect(cornerRadius: 24))
     }
 
-    /// Attendees are anonymised by the API; friends come from GET /v52/booking?friends=true.
-    var whoIsBooked: some View {
-        let friendUsers = m.friendsBookings.filter { $0.classId == classId || $0.class?.id == classId }
-            .compactMap { b in m.friends.first { $0.friendUser?.id == b.userId }?.friendUser }
-        return HStack(alignment: .center, spacing: 16) {
-            Button { m.present(.invite) } label: {
-                VStack(spacing: 6) {
-                    Image(systemName: "plus").font(.system(size: 24, weight: .semibold)).foregroundStyle(.black)
-                        .frame(width: 64, height: 64)
-                        .glassEffect(.regular.tint(Theme.lime).interactive(), in: .circle)
-                    Text("Invite").font(.system(size: 13, weight: .medium))
-                }
-            }
-            .buttonStyle(.plain)
-            if friendUsers.isEmpty {
-                Text("No friends have booked this class yet").font(.system(size: 15)).foregroundStyle(Theme.secondary)
-            } else {
-                ForEach(friendUsers, id: \.id) { u in
+    /// Everyone booked (GET /v52/booking?class_id=), as in the original: members without a public
+    /// profile show as "Hidden". Invite shares this class with friends; membership invite codes stay under Account.
+    func whoIsBooked(_ c: BruceAPI.BruceClass) -> some View {
+        let people = m.attendees(forClass: classId)
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack(alignment: .top, spacing: 14) {
+                ShareLink(item: ShareURL.forClass(classId, title: c.title),
+                          message: Text(Copy.classInvite(c, studio: m.studioName(c.studioId)))) {
                     VStack(spacing: 6) {
-                        Avatar(fileId: u.photo, initials: u.initials, size: 64)
-                        Text(u.firstName ?? "").font(.system(size: 13, weight: .medium))
+                        Image(systemName: "plus").font(.system(size: 24, weight: .semibold)).foregroundStyle(.black)
+                            .frame(width: 64, height: 64)
+                            .glassEffect(.regular.tint(Theme.lime).interactive(), in: .circle)
+                        Text("Invite").font(.system(size: 13, weight: .medium))
+                    }
+                }
+                .buttonStyle(.plain)
+                if people.isEmpty {
+                    Text("No one has booked this class yet").font(.system(size: 15)).foregroundStyle(Theme.secondary)
+                        .frame(height: 64)
+                } else {
+                    ForEach(people) { p in
+                        VStack(spacing: 6) {
+                            if p.hidden {
+                                Image(systemName: "eyeglasses").font(.system(size: 24)).foregroundStyle(Theme.secondary)
+                                    .frame(width: 64, height: 64).background(Circle().fill(Theme.secondary.opacity(0.15)))
+                                Text("Hidden").font(.system(size: 13, weight: .medium)).italic().foregroundStyle(Theme.secondary)
+                            } else {
+                                Avatar(fileId: p.photo, initials: p.initials, size: 64)
+                                Text(p.name ?? "").font(.system(size: 13, weight: .medium)).lineLimit(1)
+                            }
+                        }
+                        .frame(width: 72)
                     }
                 }
             }
+            .padding(.horizontal, Theme.gutter)
         }
+        .padding(.horizontal, -Theme.gutter)
     }
 
     func hero(_ c: BruceAPI.BruceClass) -> some View {
@@ -503,7 +522,7 @@ struct StudioDetailView: View {
     }
 
     @ViewBuilder var notice: some View {
-        if let msg = (studio?.alerts ?? []).sorted(by: { ($0.order ?? 0) < ($1.order ?? 0) }).compactMap(\.message).first, !msg.isEmpty {
+        if let msg = studio?.notice {
             Label(msg, systemImage: "info.circle.fill").font(.system(size: 14))
                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                 .glassEffect(.regular.tint(Theme.lime.opacity(0.15)), in: .rect(cornerRadius: 20))

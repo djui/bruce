@@ -103,7 +103,8 @@ All write calls take a JSON body containing at least `{"locale":"en"}` and the `
 
 ### Friends
 - Friends' upcoming classes: `GET /v52/booking?friends=true&user_id=<me>&class_day_after=YYYYMMDD&deleted=false&limit=30&include_class=true&include_class_studio=true&include_class_dynamic_prices=true` [c3:106] -> `{"bookings":[{id,class_id,studio_id,user_id(friend),class{...,studio}}]}`. Join `user_id` with `GET /v52/friend` for name and photo.
-- Class attendees: `GET /v52/booking?class_id=<id>&include_user=true&include_message=true&deleted=false&limit=30` [c3:58, 573; c2:55] returns bookings without `user_id`/`user`. Attendees are anonymised, so "who's booked" can only use the friends feed.
+- Class attendees: `GET /v52/booking?class_id=<id>&include_user=true&include_message=true&deleted=false&limit=30` [c3:58, 573; c2:55]. The captured responses had bookings without `user_id`/`user`, but the original app's class page (Oct 2026 screenshots) shows every attendee: name and photo for some, "Hidden" for the rest. So `user` is assumed to be present only for members with a public ("Bruce Studios Social") profile, shaped like `booking.user` on reviews (`id,first_name,photo,display_name,social`); everyone else is shown as "Hidden". The apps also merge in friends from the friends feed.
+- Class invite: the original app's class-page "Invite" opens a picker of the user's contacts ("Invite friends") for that class. Its request was not captured; the apps share the class link instead. The membership invite codes (`GET /v52/booking/voucher`) are a separate feature.
 - `POST /v52/friend_request` [c3:171] `{"from_user_id","to_user_id","include_from_user":true,"include_to_user":true,"locale"}`.
 - `POST /v52/friend_request/<id>/respond` [c3:245] `{"accept":bool,"include_friend_user":true,"locale"}` -> `{}`.
 

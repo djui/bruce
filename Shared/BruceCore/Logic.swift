@@ -67,3 +67,13 @@ struct PlanInfo {
 func isValidEmail(_ s: String) -> Bool {
     s.range(of: #"^[^@\s]+@[^@\s]+\.[^@\s]+$"#, options: .regularExpression) != nil
 }
+
+/// One avatar in a class's "who's booked" row. `hidden` = a member without a public profile.
+struct ClassAttendeeEntry: Identifiable, Hashable {
+    let key: String
+    let name: String?
+    let photo: String?
+    let initials: String
+    let hidden: Bool
+    var id: String { key }
+}
