@@ -206,7 +206,7 @@ struct ExploreView: View {
             SectionHeaderBar(text: BruceDate.dayHeader(selectedDay))
             ForEach(upcomingClasses) { c in
                 NavigationLink(value: Route.classDetail(c.id)) {
-                    ClassRow(c: c, badge: m.standby(forClass: c.id) != nil ? "Waitlist" : nil)
+                    ClassRow(c: c, badge: m.waitlistBadge(c.id))
                 }
                 .buttonStyle(.plain)
                 Divider().padding(.leading, 86)
@@ -803,7 +803,7 @@ struct CategoryView: View {
                         SectionHeaderBar(text: BruceDate.dayHeader(day))
                         ForEach(list) { c in
                             NavigationLink(value: Route.classDetail(c.id)) {
-                                ClassRow(c: c, badge: m.standby(forClass: c.id) != nil ? "Waitlist" : nil)
+                                ClassRow(c: c, badge: m.waitlistBadge(c.id))
                             }
                             .buttonStyle(.plain)
                         }

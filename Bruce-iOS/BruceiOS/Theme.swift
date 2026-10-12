@@ -132,11 +132,16 @@ struct CountPill: View {
     }
 }
 
-/// Studio visit pill: "n / m", or ∞ when unlimited for the user's tier.
+/// Studio visit pill: "n / m", or ∞ when unlimited for the user's tier. Tapping it opens the visit-limit sheet
+/// (visits used this month, reset date and every tier's limit at the studio), as in the original.
 struct StudioLimitPill: View {
     @Environment(AppModel.self) var m
     let studioId: Int
     var body: some View {
+        Button { m.present(.visitLimit(studioId)) } label: { label }
+            .accessibilityLabel("Visit limit at this studio")
+    }
+    @ViewBuilder var label: some View {
         switch m.studioLimitState(studioId) {
         case .limited(let l): Text("\(m.studioVisitsThisMonth(studioId)) / \(l)").monospacedDigit().padding(.horizontal, 4)
         case .notIncluded: Text("0 / 0").padding(.horizontal, 4)
@@ -272,12 +277,14 @@ struct ClassRow: View {
                 let line = meta ?? [st?.vicinity ?? c.studio?.vicinity, c.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | ")
                 if !line.isEmpty { Text(line).font(.system(size: 15)).foregroundStyle(Theme.secondary).lineLimit(1) }
                 if let badge {
+                    // "Booked" (a waitlist spot that turned into a booking) is teal, "Waitlist" orange.
+                    let tint = badge == "Booked" ? Theme.teal : Theme.waitlistOrange
                     HStack(spacing: 6) {
-                        Circle().fill(Theme.waitlistOrange).frame(width: 7, height: 7)
+                        Circle().fill(tint).frame(width: 7, height: 7)
                         Text(badge).font(.system(size: 13, weight: .semibold))
                     }
                     .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(Theme.waitlistOrange.opacity(0.18), in: Capsule())
+                    .background(tint.opacity(0.18), in: Capsule())
                     .padding(.top, 4)
                 } else if let a = c.availableSpots, a <= 0 {
                     Text("Fully booked").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.red).padding(.top, 2)

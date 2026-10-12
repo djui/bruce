@@ -59,6 +59,17 @@ enum Copy {
                                                 ("No-show", ": booked but never checked in, 2 strikes")]
     static let noShow = "Booked, but never checked in."
 
+    // MARK: Visit limits
+
+    /// Shown under "Buy for SEK n" when the plan's monthly visits at a studio are used up.
+    static let visitLimitReached = "You've reached this month's visit limit at this studio for your plan."
+    /// The single-visit purchase call has not been captured, so buying is left to the official app.
+    static let dropInUnavailable = "Buying a single visit isn't available in this unofficial client. Use the Bruce app to buy it."
+    /// "1 visit left in October • Resets November 1".
+    static func visitsLeft(_ left: Int, month: String, reset: String) -> String {
+        "\(left) visit\(left == 1 ? "" : "s") left in \(month) • Resets \(reset)"
+    }
+
     // MARK: Pause
 
     /// From `membership/user_info` (`pause_days_total`, `total_pause_periods`).

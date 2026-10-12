@@ -10,7 +10,11 @@ struct BruceiOSApp: App {
         WindowGroup {
             RootView().environment(model).environmentObject(ui).environmentObject(location)
                 .onAppear { location.model = model }
-                .onChange(of: phase) { _, p in if p == .active { location.start() } else if p == .background { location.stop() } }
+                .onChange(of: phase) { old, p in
+                    if p == .active { location.start() } else if p == .background { location.stop() }
+                    // Waitlist spots can turn into bookings while the app is in the background.
+                    if p == .active && old == .background { Task { await model.refreshOnForeground() } }
+                }
         }
     }
 }
@@ -215,6 +219,7 @@ struct SheetScreen: View {
         case .editProfile: EditProfileView().darkScreen()
         case .pause: PauseMembershipView().darkScreen()
         case .plans: MembershipPlansView().darkScreen()
+        case .visitLimit(let id): VisitLimitSheet(studioId: id)
         case .statistics: StatisticsView()
         case .receipts: ReceiptsView()
         case .classInvite(let id): ClassInviteSheet(classId: id)

@@ -84,6 +84,16 @@ struct ClassDetailView: View {
                         RedButton(title: "Cancel booking") { m.present(.bookingRules(c.id)) }.padding(.top, 24)
                     } else if m.standby(forClass: c.id) != nil {
                         RedButton(title: "Leave waitlist") { m.askLeaveWaitlist(c.id) }.padding(.top, 24)
+                    } else if m.visitLimitReached(c) {
+                        // Plan's visits at this studio are used up: the original offers a paid drop-in instead of
+                        // Book. The purchase call was never captured, so the button only explains that.
+                        if let p = m.dropInPrice(c) {
+                            LimeButton(title: "Buy for \(p.currency) \(p.amount)") { m.flash(Copy.dropInUnavailable) }.padding(.top, 24)
+                        } else {
+                            Text("Visit limit reached").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.secondary)
+                                .frame(maxWidth: .infinity).frame(height: 54).background(Capsule().fill(Theme.chipGrey)).padding(.top, 24)
+                        }
+                        limitNotice.padding(.top, 16)
                     } else if (c.availableSpots ?? 1) <= 0 {
                         RedButton(title: "Join waitlist") { Task { await m.joinWaitlist(c.id) } }.padding(.top, 24)
                     } else {
@@ -113,6 +123,17 @@ struct ClassDetailView: View {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { proxy.scrollTo("bottom", anchor: .bottom) } }
         }
         }
+    }
+
+    var limitNotice: some View {
+        HStack(alignment: .center, spacing: 16) {
+            Image(systemName: "info.circle").font(.system(size: 26, weight: .light))
+            Text(Copy.visitLimitReached).font(.system(size: 16, weight: .light)).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+        .padding(18)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.sectionGrey))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.cardBorder))
     }
 
     func rulesLines(_ c: BruceAPI.BruceClass, _ r: BookingRules) -> some View {
@@ -257,6 +278,87 @@ struct BookingRulesSheet: View {
         }
         .background(Color.white)
         .clipShape(UnevenRoundedCorners(radius: 14))
+    }
+}
+
+/// Tap on the "n / m" pill: visits used at the studio this month, what is left and when it resets, and every
+/// tier's monthly limit at the studio with the user's plan marked (`user_visit_limit?studio_id=` `STUDIO` entry,
+/// else the studio list's `visit_limit.items`).
+struct VisitLimitSheet: View {
+    @Environment(AppModel.self) var m
+    let studioId: Int
+
+    var body: some View {
+        let tiers = m.tierLimits(studioId)
+        VStack(spacing: 0) {
+            NavBar(title: "", leading: m.sheets.count > 1 ? .back : .close) {
+                m.sheets.count > 1 ? m.popSheet() : m.dismissSheets()
+            }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    header
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Visit limits at this studio").font(.system(size: 24, weight: .bold)).padding(.bottom, 8)
+                        if tiers.isEmpty {
+                            Text("No plan limits available for this studio.").foregroundStyle(Theme.secondary)
+                        }
+                        ForEach(tiers, id: \.tier) { t in
+                            HStack {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text(t.tier).font(.system(size: 18, weight: .heavy).width(.expanded))
+                                    Text(t.limit > 0 ? "\(t.limit) visits / mo" : t.limit == 0 ? "Unlimited visits" : "Not included")
+                                        .font(.system(size: 17, weight: .light)).foregroundStyle(Theme.secondary)
+                                }
+                                Spacer()
+                                if t.tier == m.tier {
+                                    Text("YOUR PLAN").font(.system(size: 11, weight: .semibold).width(.expanded)).foregroundStyle(Theme.lime)
+                                        .padding(.horizontal, 10).padding(.vertical, 6).background(Rectangle().fill(Theme.ink))
+                                }
+                            }
+                            .padding(20).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.sectionGrey))
+                            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.cardBorder))
+                        }
+                        LimeButton(title: "Change plan") { m.pushSheet(.plans) }.padding(.top, 16)
+                    }
+                    .padding(Theme.gutter).padding(.top, 12)
+                }
+            }
+        }
+        .task {
+            await m.loadStudioDetail(studioId)
+            await m.loadStudioLimits(studioId)
+        }
+    }
+
+    var header: some View {
+        let used = m.studioVisitsThisMonth(studioId)
+        let reset = m.visitLimitReset(studioId)
+        let caption = Font.system(size: 13, weight: .semibold).width(.expanded)
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(m.studioName(studioId)).font(.system(size: 20, weight: .bold))
+            switch m.studioLimitState(studioId) {
+            case .limited(let total):
+                (Text("\(used)").foregroundStyle(Theme.lime) + Text("/\(total)"))
+                    .font(.system(size: 56, weight: .light)).monospacedDigit().padding(.top, 8)
+                Text("VISITS USED THIS MONTH").font(caption).foregroundStyle(.white.opacity(0.75))
+                Text(Copy.visitsLeft(max(0, (m.studioVisitLimit(studioId)?.remaining) ?? (total - used)),
+                                     month: BruceDate.format(Date(), "MMMM"), reset: BruceDate.format(reset, "MMMM d")))
+                    .font(.system(size: 16, weight: .light)).padding(.top, 6)
+            case .unlimited:
+                Image(systemName: "infinity").font(.system(size: 48, weight: .light)).foregroundStyle(Theme.lime).padding(.top, 8)
+                Text("UNLIMITED VISITS ON YOUR PLAN").font(caption).foregroundStyle(.white.opacity(0.75))
+            case .notIncluded:
+                Text("0/0").font(.system(size: 56, weight: .light)).padding(.top, 8)
+                Text("NOT INCLUDED IN YOUR PLAN").font(caption).foregroundStyle(.white.opacity(0.75))
+            case .unknown:
+                ProgressView().controlSize(.small).padding(.top, 8)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, Theme.gutter).padding(.vertical, 24)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.darkPanel)
     }
 }
 

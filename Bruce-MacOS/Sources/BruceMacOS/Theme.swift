@@ -127,10 +127,16 @@ struct CountPill: View {
 }
 
 /// Top-bar studio visit pill: "n / m", or ∞ when the studio's limit for the tier is 0 (unlimited).
+/// Tapping it opens the visit-limit sheet, as in the original.
 struct StudioLimitPill: View {
     @Environment(AppModel.self) var m
     let studioId: Int
     var body: some View {
+        Button { m.present(.visitLimit(studioId)) } label: { label.contentShape(Capsule()) }
+            .buttonStyle(.plain)
+            .help("Visit limit at this studio")
+    }
+    @ViewBuilder var label: some View {
         switch m.studioLimitState(studioId) {
         case .limited(let l): CountPill(used: m.studioVisitsThisMonth(studioId), total: l)
         case .notIncluded: CountPill(used: 0, total: 0)
@@ -293,7 +299,8 @@ struct ClassRow: View {
                     if !meta.isEmpty { Text(meta).font(.system(size: 16, weight: .light)).foregroundStyle(Theme.secondary).lineLimit(1) }
                     if let badge {
                         HStack(spacing: 10) {
-                            Circle().fill(Theme.waitlistOrange).frame(width: 8, height: 8).offset(x: -24)
+                            // "Booked" = a waitlist spot that turned into a booking (teal), "Waitlist" orange.
+                            Circle().fill(badge == "Booked" ? Theme.teal : Theme.waitlistOrange).frame(width: 8, height: 8).offset(x: -24)
                             Text(badge).font(.system(size: 16, weight: .light)).foregroundStyle(Theme.secondary).offset(x: -18)
                         }
                         .padding(.top, 8)
