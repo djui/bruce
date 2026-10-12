@@ -15,7 +15,10 @@ struct NotificationsSheet: View {
                     LazyVStack(alignment: .leading, spacing: 14) {
                         ForEach(groups.keys.sorted(by: >), id: \.self) { day in
                             Text(BruceDate.dayHeader(day)).font(.system(size: 17, weight: .light)).padding(.top, 14)
-                            ForEach(groups[day]!.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) { n in card(n) }
+                            ForEach(groups[day]!.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) { n in
+                                // Opens the class the notification is about, else its studio.
+                                Button { m.openNotification(n) } label: { card(n) }.buttonStyle(.plain)
+                            }
                         }
                     }
                     .padding(.horizontal, Theme.gutter).padding(.bottom, 24)
@@ -45,6 +48,7 @@ struct NotificationsSheet: View {
             }
         }
         .padding(20).frame(minHeight: 200, alignment: .top)
+        .contentShape(Rectangle())
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Theme.cardBorder, lineWidth: 1))
     }
 }

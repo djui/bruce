@@ -637,6 +637,8 @@ final class AppModel {
                 return seen.insert(cid).inserted
             }
             standbys = fresh
+            // The standby list carries the class's current `available_spots`; keep an open class page in step.
+            for s in fresh { if let c = s.class, let d = classDetails[c.id], d.availableSpots != c.availableSpots { classDetails[c.id]?.availableSpots = c.availableSpots } }
         }
         bookmarks = (try? await BruceAPI.fetchBookmarks(token: token, userId: uid)) ?? []
     }
@@ -644,6 +646,10 @@ final class AppModel {
     func loadSocial() async {
         guard tokenUsable, let uid = userId else { return }
         notifications = (try? await BruceAPI.fetchNotifications(token: token, userId: uid)) ?? []
+        // A "Free spot" or cancellation newer than the last bookings/waitlist read means those lists are stale.
+        if notifications.contains(where: { $0.kind != .other && ($0.date ?? .distantPast) > (mineLoadedAt ?? .distantPast) }) {
+            await loadMine()
+        }
         friends = (try? await BruceAPI.fetchFriends(token: token, userId: uid)) ?? []
         friendsBookings = (try? await BruceAPI.fetchFriendsBookings(token: token, userId: uid)) ?? []
     }
@@ -708,11 +714,19 @@ final class AppModel {
     // MARK: Waitlist (POST/DELETE /v52/standby [c3:65, 69])
     func standby(forClass id: Int) -> BruceAPI.ClassHolder? { standbys.first { $0.class?.id == id } }
     /// Row badge for a class the user is (or was) on the waitlist for: "Booked" once the user has a booking for
-    /// it (matched by class id), else "Waitlist".
+    /// it (matched by class id), "Spot open" while the class has a free spot, else "Waitlist".
     func waitlistBadge(_ classId: Int) -> String? {
         if booking(forClass: classId) != nil,
            standby(forClass: classId) != nil || promotedStandbys.contains(where: { $0.class?.id == classId }) { return "Booked" }
+        if waitlistSpotOpen(classId) { return Copy.spotOpen }
         return standby(forClass: classId) != nil ? "Waitlist" : nil
+    }
+    /// On the waitlist, not booked, and the class has a free spot again. A "Free spot" notification goes to the
+    /// waitlist but does not book: the entry stays in `GET /v52/standby` until the user books the spot (or someone
+    /// else takes it), so the class's `available_spots` is the only sign. Uses the freshest copy of the class.
+    func waitlistSpotOpen(_ classId: Int) -> Bool {
+        guard let s = standby(forClass: classId), booking(forClass: classId) == nil else { return false }
+        return ((classDetails[classId] ?? s.class)?.availableSpots ?? 0) > 0
     }
     /// The user is on this class's waitlist (from GET /v52/standby; the class payload has no such flag).
     func isOnWaitlist(_ classId: Int) -> Bool { standby(forClass: classId) != nil }

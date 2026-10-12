@@ -133,7 +133,10 @@ struct NotificationsSheet: View {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(groupedByDay(m.notifications, date: \.date).reversed(), id: \.0) { day, list in
                         Text(BruceDate.dayHeader(day)).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.secondary).padding(.top, 10)
-                        ForEach(list.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) { n in card(n) }
+                        ForEach(list.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) { n in
+                            // Opens the class the notification is about, else its studio.
+                            Button { m.openNotification(n) } label: { card(n) }.buttonStyle(.plain)
+                        }
                     }
                 }
                 .padding(.horizontal, Theme.gutter).padding(.bottom, 24)
@@ -164,7 +167,8 @@ struct NotificationsSheet: View {
             }
         }
         .padding(16)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .contentShape(.rect(cornerRadius: 24))
+        .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
     }
 
     func icon(_ n: BruceAPI.BruceNotification) -> String {
