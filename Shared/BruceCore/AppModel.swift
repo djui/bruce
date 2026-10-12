@@ -226,6 +226,16 @@ final class AppModel {
     var refLon: Double { userLocation?.coordinate.longitude ?? cityLon }
     /// Wellness visits this month from GET /v52/studio/user_visit_limit (type WELLNESS_MONTHLY).
     var wellnessLimit: BruceAPI.VisitLimit? { visitLimits.first { $0.type == "WELLNESS_MONTHLY" } }
+    /// "Wellness visits" row text: "used / total this month", "Unlimited", or "Not included" (BASE gets total -1 [c4]).
+    var wellnessSummary: String {
+        guard let w = wellnessLimit else { return "—" }
+        switch w.state {
+        case .limited(let t): return "\(w.used ?? 0) / \(t) this month"
+        case .unlimited: return "Unlimited"
+        case .notIncluded: return "Not included in your plan"
+        case .unknown: return "—"
+        }
+    }
     /// Strike-unblock price from the city (nil until loaded).
     var unblockPriceKr: Int? { (city?.unlockPrice).map { $0 / 100 } }
 
@@ -313,9 +323,7 @@ final class AppModel {
     var simultaneousLimit: Int? { studioLimits.values.joined().first { $0.type == "SIMULTANEOUS" }?.total
         ?? visitLimits.first { $0.type == "SIMULTANEOUS" }?.total }
     func studioLimitState(_ studioId: Int) -> LimitState {
-        if let s = studioLimits[studioId]?.first(where: { $0.type == "STUDIO" }), let t = s.total {
-            return t > 0 ? .limited(t) : t == 0 ? .unlimited : .notIncluded
-        }
+        if let s = studioLimits[studioId]?.first(where: { $0.type == "STUDIO" }), s.total != nil { return s.state }
         guard let items = studio(studioId)?.visitLimit?.items,
               let l = items.first(where: { $0.label?.uppercased() == tier })?.limit else { return .unknown }
         return l > 0 ? .limited(l) : l == 0 ? .unlimited : .notIncluded
@@ -1026,5 +1034,14 @@ struct CheckInTarget: Identifiable, Hashable {
         }
         guard let q = studio?.qrCodeId, !q.isEmpty else { return nil }
         return CheckInTarget(studioId: studioId, name: name, subtitle: subtitle, qrCodeId: q, door: nil)
+    }
+}
+
+extension BruceAPI.VisitLimit {
+    /// `total` > 0 caps the visits, 0 means unlimited, -1 means not included in the user's tier
+    /// (e.g. `WELLNESS_MONTHLY` and Wellness studios on BASE) [c4].
+    var state: AppModel.LimitState {
+        guard let t = total else { return .unknown }
+        return t > 0 ? .limited(t) : t == 0 ? .unlimited : .notIncluded
     }
 }

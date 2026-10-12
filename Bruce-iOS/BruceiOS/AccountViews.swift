@@ -63,8 +63,8 @@ struct AccountSheet: View {
                             .padding(.horizontal, 10).padding(.vertical, 5).background(Capsule().fill(Theme.baseTag))
                     }
                 }
-                if let w = m.wellnessLimit {
-                    Button { m.wellnessOverlay = true } label: { InfoRow(title: "Wellness visits", subtitle: "\(w.used ?? 0) / \(w.total ?? 0) this month") }
+                if m.wellnessLimit != nil {
+                    Button { m.wellnessOverlay = true } label: { InfoRow(title: "Wellness visits", subtitle: m.wellnessSummary) }
                 }
                 NavigationLink(value: SheetRoute.visits) {
                     InfoRow(title: "Total monthly visits", subtitle: visits.map { "\($0.used ?? 0) / \($0.total ?? 0)" } ?? "—",
@@ -99,10 +99,22 @@ struct WellnessSheet: View {
         let w = m.wellnessLimit
         VStack(alignment: .leading, spacing: 14) {
             Text("Wellness access").font(.system(size: 18, weight: .bold))
-            Text("\(Text("\(w?.used ?? 0)").foregroundStyle(Theme.limeInk))\(Text("/\(w?.total ?? 0)").foregroundStyle(Theme.secondary))")
-                .font(.system(size: 52, weight: .black).width(.expanded))
-            Text("VISITS USED THIS MONTH · \(m.tier) PLAN").font(.system(size: 12, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary)
-            if let r = w?.remaining { Text("\(r) remaining").font(.system(size: 15)) }
+            switch w?.state ?? .unknown {
+            case .limited(let total):
+                Text("\(Text("\(w?.used ?? 0)").foregroundStyle(Theme.limeInk))\(Text("/\(total)").foregroundStyle(Theme.secondary))")
+                    .font(.system(size: 52, weight: .black).width(.expanded))
+                Text("VISITS USED THIS MONTH · \(m.tier) PLAN").font(.system(size: 12, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary)
+                Text("\(max(0, w?.remaining ?? total - (w?.used ?? 0))) remaining").font(.system(size: 15))
+            case .unlimited:
+                Image(systemName: "infinity").font(.system(size: 48, weight: .black)).foregroundStyle(Theme.limeInk)
+                Text("UNLIMITED VISITS · \(m.tier) PLAN").font(.system(size: 12, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary)
+            case .notIncluded:
+                Text("0/0").font(.system(size: 52, weight: .black).width(.expanded)).foregroundStyle(Theme.secondary)
+                Text("NOT INCLUDED IN THE \(m.tier) PLAN").font(.system(size: 12, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary)
+                Text("Wellness studios can still be booked as paid tickets.").font(.system(size: 15))
+            case .unknown:
+                ProgressView()
+            }
             Spacer()
         }
         .padding(24)
