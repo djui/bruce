@@ -163,10 +163,13 @@ enum Alerts {
             .filter { !$0.isEmpty }
     }
 
-    /// Class page: the class's own `alert` (as in the official app); without one, the studio's active alerts.
+    /// Class page: the class's own `alert` (as in the official app); without one, the studio's active alerts,
+    /// minus the one already shown as the banner at the top of the page (`BruceAPI.currentAlert`).
     static func forClass(_ c: BruceAPI.BruceClass, studio: BruceAPI.Studio?) -> [String] {
         if let a = c.alert?.trimmingCharacters(in: .whitespacesAndNewlines), !a.isEmpty { return [a] }
-        return active(c.studio?.alerts ?? studio?.alerts)
+        let alerts = c.studio?.alerts ?? studio?.alerts
+        let banner = BruceAPI.currentAlert(alerts)?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return active(alerts).filter { $0 != banner }
     }
 }
 
