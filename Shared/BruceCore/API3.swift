@@ -243,22 +243,48 @@ extension BruceAPI.AttendanceInfo {
 }
 
 extension BruceAPI {
-    /// Studio notice banner: `alerts[]` (include_alerts=true, exclude_expired_alerts=true) [c2:212].
-    /// `type` is `INFO` or `CRITICAL` (red in the original). `exclude_*expired_alerts` still returned an alert whose
-    /// `end_date` had passed [c7:157], so the apps filter by date themselves.
+    /// Studio alert: `alerts[]` (include_alerts=true / include_studio_alerts=true) [c2:212, c7:30, c7:157]. Each alert has a
+    /// `start_date` and an optional `end_date` (null = open-ended); `type` is `INFO` or `CRITICAL` (red in the original).
+    /// The `exclude_*expired_alerts` flags are not reliable (expired alerts still come back), so `isActive` filters on the client.
     struct StudioAlert: Codable, Hashable {
         let message: String?
         let type: String?
         let order: Int?
+        var id: Int? = nil
         var startDate: String? = nil
         var endDate: String? = nil
-        enum CodingKeys: String, CodingKey { case message, type, order, startDate = "start_date", endDate = "end_date" }
+        enum CodingKeys: String, CodingKey { case message, type, order, id, startDate = "start_date", endDate = "end_date" }
+        var start: Date? { startDate.flatMap(BruceDate.parse) }
+        var end: Date? { endDate.flatMap(BruceDate.parse) }
         var isCritical: Bool { type?.uppercased() == "CRITICAL" }
+        /// Started (or no start given) and not yet ended (or no end given).
         func isActive(at now: Date = Date()) -> Bool {
-            if let s = startDate.flatMap(BruceDate.parse), s > now { return false }
-            if let e = endDate.flatMap(BruceDate.parse), e <= now { return false }
+            if let s = start, s > now { return false }
+            if let e = end, e <= now { return false }
             return true
         }
+    }
+
+    // MARK: Similar classes [c7:24, 41] GET /v52/studio/class/alternative_recommendation?class_id=
+    /// A "Similar classes" card: nearby classes around the same time (the official app offers them for a full class).
+    struct ClassCard: Decodable, Identifiable, Hashable {
+        struct StudioRef: Decodable, Hashable { let id: Int; let name: String? }
+        let id: Int
+        let title: String?
+        let photo: String?
+        let distance: Int?          // metres from the original class's studio
+        let startTime: String
+        let endTime: String?
+        let studio: StudioRef?
+        enum CodingKeys: String, CodingKey { case id, title, photo, distance, studio, startTime = "start_time", endTime = "end_time" }
+        var start: Date? { BruceDate.parse(startTime) }
+        var end: Date? { endTime.flatMap(BruceDate.parse) }
+    }
+    static func fetchSimilarClasses(token: String, classId: Int) async throws -> [ClassCard] {
+        struct R: Decodable { let classCards: [ClassCard]
+            enum CodingKeys: String, CodingKey { case classCards = "class_cards" } }
+        let q = [("class_id", String(classId)), ("locale", "en")]
+        return try decode(R.self, try await send(makeRequest("GET", "v52/studio/class/alternative_recommendation", query: q, token: token))).classCards
     }
     /// The banner to show: active alerts with text, critical first, then by `order`.
     static func currentAlert(_ alerts: [StudioAlert]?) -> StudioAlert? {

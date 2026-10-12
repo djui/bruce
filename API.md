@@ -1,4 +1,4 @@
-# Bruce API map (Charles captures 1–6 of the iOS app 14.4.2 build 538)
+# Bruce API map (Charles captures 1–7 of the iOS app 14.4.2 build 538)
 
 > Unofficial, reverse-engineered by observing the author's own account traffic. Not affiliated with or
 > endorsed by Bruce Studios AB. The raw captures contain personal data and are **not** part of this
@@ -43,7 +43,7 @@ Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-
 ### Studio detail
 - `GET /v52/studio/<id>?include_addresses=true&include_addresses_address=true&include_categories=true&include_facilities=true&include_studio_photos=true&include_studio_photos_photo=true&include_user_booking_limit=true&include_alerts=true&exclude_expired_alerts=true&locale=en` [c2:51, 212, 1015] -> `{"studio":{id,name,description,integration_type,integration_door_type,integration_door_config,qr_code_id,geofencing_enabled,schedule_type,studio_facilities,...}}`.
 - `GET /v52/studio/<id>/opening_hour/schedule` [c2:215, 1018] -> `{"schedule":[{id,start,end,is_all_day,opening_hour{start_hour,end_hour,recurring_rule,unmanned},studio_user_attendance_info{admission_access,booking_credit_access,price,trial,visit_limit_reached,...}}]}`.
-- `GET /v52/studio/class/alternative_recommendation?class_id=<id>&locale=en` [c2:53].
+- `GET /v52/studio/class/alternative_recommendation?class_id=<id>&locale=en` [c2:53, c7:24, c7:41]: "Similar classes" (see capture 7).
 - `GET /v52/favorite` [c2:152, 213], `GET /v52/bookmark` [c2:52], `GET /v52/standby` [c2:474], `GET /v52/admission` [c2:423], `GET /v52/membership/info` [c2:426] (context only).
 
 ### Class list - capture 2
@@ -51,6 +51,10 @@ Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-
 - City/day schedule: `studio_city_id=1` (Stockholm), `start_time_after=YYYY-MM-DDT00:00:00`, `start_time_before=<next day>T00:00:00` (local, no zone), `limit=30`, `next_cursor=<base64 "id:<n>">`, plus `is_recurring_base=false&is_master=false&dedicated=false&opening=false&studio_status=live&include_absolute_times=true&include_class_categories=true&include_booking_credit_costs=true&include_dynamic_prices=true&locale=en`. The app pages through each day separately (Oct 11 to Oct 18 captured).
 - Per studio [c2:214, 216, 1017, 1019]: `studio_id=<id>&presentation_studio_id=<id>` with UTC range (`...Z`), optional `bookable_earliest_before=<now>`, `include_address=true`, `include_studio_user_attendance_info=true`; `opening=true` returns opening-hour slots instead of classes.
 - -> `{"classes":[{id,studio_id,presentation_studio_id,title,description,start_time,end_time (UTC Z),time_zone,spots,available_spots,canceled,instructor,bookable_earliest,bookable_latest,unbookable_latest,auto_check_in,late_check_in_minutes,early_check_in_minutes,booking_credit_costs{BASE,BLACK,EPIC,FREE},dynamic_prices,class_categories[...]}],"metadata":{"pagination":{...,"next_cursor":"..."},"cache_expire_seconds":55}}`. Class objects carry no studio name; join with the studio list by `studio_id`.
+- Soft-deleted classes: the list responses (as sent by the official app, without a `deleted` parameter) include classes with `deleted:true` and a `deleted_at` timestamp. In captures 1–6 that is 931 of 6,453 unique classes (about 14%); 236 of them sit at the same studio and start time as a live class. The official app does not list them. Adding `deleted=false` drops them server-side (checked live on 2026-10-12 against studio 6614: 30 of 30 returned classes were not deleted, without the parameter the same page held a deleted one). Example: class 10893685 ("Signature Reformer - Kod till dörr 8065 - ...", Energii Brunkebergstorg) got `deleted_at` 2026-10-11T20:04:14Z, with its title rewritten before the delete. The clients send `deleted=false` and also drop `deleted`/`deleted_at` rows client-side.
+- `instructor` is free text from the studio's booking system. Every Energii class (studios 6481, 6614, 8065, 8626, integration `flexybox`; 243 of 243 in the captures) prefixes it with Markdown bold markers and no closing pair, e.g. `"**Millie Jabol - English speaking"`. This is not a hidden/private flag: those classes are otherwise ordinary live classes. The clients strip the `**`.
+- Wellness classes: the class payload has no wellness flag. A class counts as Wellness when its studio has `label:"WELLNESS"` (46 of 691 studios), the same label that drives the Wellness filter and the `WELLNESS_MONTHLY` visit limit. Examples: "Red Light", "Cryo", "EMS" at DNA by SLVK, "Bastu: Pollux" at Folkbastu. The same titles at studios without the label (e.g. "EMS" at iPulse Studios) are not Wellness.
+- Waitlist vs. fully booked: `available_spots:0` means fully booked. Whether *you* are on the waitlist is not in the class payload; it comes from `GET /v52/standby` (see below).
 - `GET /v52/class/<id>?include_studio=true&include_info=true&include_address=true&include_studio_alerts=true&exclude_studio_expired_alerts=true&include_absolute_times=true&include_dynamic_prices=true&include_booking_credit_costs=true&include_studio_user_attendance_info=true&locale=en` [c2:50, 58, 93, 100] - class detail before booking.
 
 ## Booking
@@ -141,7 +145,7 @@ All write calls take a JSON body containing at least `{"locale":"en"}` and the `
 - c4 has no new write endpoints. The only request body is `POST /v52/booking/offline/done` `{"locale":"en"}` [c4:15].
 
 ### Studio page rules (from app screenshots, Oct 2026)
-- Notice banner = studio `alerts[].message` (type `INFO`, sorted by `order`; request `include_alerts=true&exclude_expired_alerts=true`) [c2:212]. The `alert` string field was null in all captures.
+- Notice banner = studio `alerts[].message` (type `INFO`, sorted by `order`; request `include_alerts=true&exclude_expired_alerts=true`) [c2:212]. Only active alerts are shown: see capture 7 for `start_date`/`end_date`. The studio's `alert` string field was null in all captures; classes have their own `alert` (c7).
 - Hours line: teal "Solo training until HH:MM" (open), orange "Solo training ends at HH:MM" (closing within ~60 min; orange seen at 29-38 min, teal at 2 h 38 min), red "Currently closed for solo training".
 - Lime button only for "Show ticket" (checked in today) or "Buy ticket for SEK n" (paid access); none otherwise.
 - Studios with classes get a "Classes" tab and a "Show classes / N classes" row, filled from `GET /v52/class?studio_id=<id>&presentation_studio_id=<id>` per day.
@@ -169,8 +173,39 @@ Capture 6 (about 347 files) covers creating and using custom areas ("New area" i
   `next_cursor` = base64 `id::<last id>`, ids descending), `GET /v52/class` (cursor `id:<n>`) and
   `GET /v52/category`.
 
+### Parakey doors (capture 6, Oct 2026 screenshots)
+- Studios with `integration_door_type:"parakey"` (214 of the studio rows in the captures; others: `brp`, `wondr`, `zoezi`, `m3_fit`, `blx`, `ellions`, `tic_off`) open their doors with the Parakey app. The studio detail adds `parakey_config:{id, optional}` (`null` elsewhere) [c6:631, 638]; the list payload only has the door type.
+- `GET /v52/user/<id>` carries `parakey_email` once the Bruce account is linked with Parakey [c6:451, 557]. No linking or key request was captured: the official app says checking in creates the access key, valid no earlier than ten minutes before class.
+- Both clients show a "Doors open with Parakey" row on the class and studio pages and a sheet that explains it, shows the linked email and opens the Parakey app (App Store id 1001574067).
+
+### Friends on class rows
+- Class rows show the faces of friends booked on the class, from the same `GET /v52/booking?friends=true` + `GET /v52/friend` join as the Friends tab (so at most the 30 upcoming friend bookings that call returns).
+
 ## Capture 7 additions (`c7:N`)
-Capture 7 covers opening a booked class and inviting a friend to it (Oct 2026).
+Capture 7 (about 25 requests) opens two fully booked classes and their "Similar classes" sheet.
+- **Class alert.** `GET /v52/class/<id>?...&include_studio_alerts=true&exclude_studio_expired_alerts=true` [c7:19, 30].
+  The class object has an `alert` string, e.g. `"Only women are welcome here. Please respect this."` [c7:30]
+  (null for most classes [c7:19]). The official app shows it in red under the description, with a translate
+  button. It has no dates.
+- **Studio alerts with dates.** The embedded `class.studio.alerts[]` [c7:30] (and the studio's `alerts[]`)
+  are `{id, studio_id, message_string_id, type:"INFO", order, show_on_web, start_date, end_date, start_day,
+  end_day, message, created_at, updated_at, deleted_at}`. `end_date` may be `null` (open-ended; `end_day` is
+  then `0`), so an alert has a start and an optional end. `exclude_studio_expired_alerts=true` did **not**
+  remove an alert whose `end_date` was 2023-08-23, so clients must filter: active = `start_date <= now` and
+  (`end_date` null or `now < end_date`). Both apps show the class `alert` if present, otherwise the studio's
+  active alerts, in red.
+- **Similar classes.** `GET /v52/studio/class/alternative_recommendation?class_id=<id>&locale=en`
+  [c7:24, 41] -> `{"class_cards":[{id, title, photo, time_zone, distance, start_time, end_time, created_at,
+  studio:{id, name}}], "metadata":null}`. About ten cards: classes nearby (`distance` in metres from the
+  original class's studio; `0` = same studio) around the same time, the same day. `id` is a class id
+  (open it with `GET /v52/class/<id>`). The app requests it when a full class opens and shows the cards in
+  a bottom sheet ("Similar classes to <title>, <HH:MM> nearby <studio>") from the "Similar classes" button
+  next to "Join waitlist".
+- **Descriptions are Markdown**: studio and class `description` use `**bold**`, `* item` lists and
+  `[links](https://...)` [c7:19, 30]. Both apps render them as Markdown.
+- No new write calls: the only POST is `POST /v52/booking/offline/done` [c7:26].
+
+Capture 7 also covers opening a booked class and inviting a friend to it (Oct 2026):
 - **Class attendees** `GET /v52/booking?class_id=<id>&include_user=true&include_message=true&include_class_dynamic_prices=true&deleted=false&limit=30` [c7:160] -> `{"bookings":[...],"metadata":{...}}`. Members with "Bruce Studios Social" on carry `user_id` and `user{id,first_name,photo,photo_valid,social,city_id,display_name}` (`display_name` was null). The others have neither `user_id` nor `user`; the original app shows them as a grey "Hidden" avatar. The caller's own booking carries their full user record. This is the "who's booked" row on the class page (the invite button, then the attendees).
 - **Class invite** `POST /v52/class/<id>/invite` [c7:168] body `{"user_ids":[<friend user id>],"locale":"en"}` -> `{"invited":[<user>]}`. It is the class page's "Invite" button: a sheet titled with the class name lists the user's friends ("Contacts") with check marks and an "Invite friends" button. The membership invite codes (`GET /v52/booking/voucher`) are a separate feature under the account menu. Note that the response returns each invitee's **full private user record** (email, phone, national identity number, calendar secret, payment references); the apps ignore the response body.
 - **Class notice banner**: the class detail's embedded studio has `alerts[]` when requested with `include_studio_alerts=true&exclude_studio_expired_alerts=true` [c7:157]. Each alert has `id,type,order,message,start_date,end_date,start_day,end_day,show_on_web`. `type` is `INFO` or `CRITICAL`; the original shows the critical one as a red banner at the top of the class page. An `INFO` alert that ended months earlier was still returned, so clients filter by `start_date`/`end_date`. The studio detail request the app sent on this screen [c7:158] did not ask for alerts.

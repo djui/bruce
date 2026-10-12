@@ -153,7 +153,7 @@ struct SheetContainer: View {
 
     var detents: Set<PresentationDetent> {
         switch root {
-        case .menu, .quickCheckIn: return [.medium, .large]
+        case .menu, .quickCheckIn, .similarClasses: return [.medium, .large]
         case .bookingRules: return [.fraction(0.82), .large]
         default: return [.large]
         }
@@ -208,6 +208,7 @@ struct SheetScreen: View {
         case .login: LoginView()
         case .checkIn: CheckInScanner()
         case .info(let title): PlaceholderPage(title: title)
+        case .parakey(let id): ParakeySheet(studioId: id)
         case .search: EmptyView()
         case .selectCity: SelectCitySheet()
         case .newArea: NewAreaSheet()
@@ -231,6 +232,8 @@ struct SheetScreen: View {
         case .push: PushSettingsView()
         case .pushInfo: TextInfoSheet(title: "Push settings", paragraphs: Copy.pushInfo)
         case .quickCheckIn: QuickCheckInSheet()
+        case .similarClasses(let id): SimilarClassesSheet(classId: id)
+        case .area(let id): AreaMapSheet(areaId: id)
         }
     }
 }

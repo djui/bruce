@@ -21,6 +21,7 @@ dark setting on GitHub; every screen is in [`docs/screenshots/`](docs/screenshot
 <picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-explore-light.webp"><img src="docs/screenshots/iphone-explore-dark.webp" width="200" alt="Explore tab listing studios with filter chips"></picture>
 <picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-studio-light.webp"><img src="docs/screenshots/iphone-studio-dark.webp" width="200" alt="Studio page with Show ticket, opening status and facilities"></picture>
 <picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-detail-light.webp"><img src="docs/screenshots/iphone-detail-dark.webp" width="200" alt="Class page with booking windows and a Book button"></picture>
+<picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-similar-light.webp"><img src="docs/screenshots/iphone-similar-dark.webp" width="200" alt="Similar classes sheet for a fully booked class"></picture>
 <picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-quickcheckin-light.webp"><img src="docs/screenshots/iphone-quickcheckin-dark.webp" width="200" alt="Quick check-in sheet suggesting the last visited studio"></picture>
 <picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-drawarea-light.webp"><img src="docs/screenshots/iphone-drawarea-dark.webp" width="200" alt="Map with a hand-drawn custom area"></picture>
 <picture><source media="(prefers-color-scheme: light)" srcset="docs/screenshots/iphone-mybookings-light.webp"><img src="docs/screenshots/iphone-mybookings-dark.webp" width="200" alt="My classes with two bookings"></picture>
@@ -48,11 +49,22 @@ My classes tabs, with class and studio pages and account sheets.
 - **Log in** with your Bruce Studios email and password. Only the session tokens are kept, in the Keychain.
 - **Explore** all live studios (about 700 in Sweden) and the city-wide class schedule, with category,
   tier, Wellness and favourite filters, search, a map, and **custom areas**: draw an outline on the map and
-  filter studios and classes to it. As in the official app, areas stay on the device.
+  filter studios and classes to it. Long-press (iOS) or right-click (macOS) an area to show it on the map,
+  rename it or delete it. As in the official app, areas stay on the device.
+  Class rows mark Wellness classes, show a "Waitlist" pill when you are on the waitlist and "Fully
+  booked" otherwise, and show the faces of friends who booked the class;
+  lists say "Filter active" at the end while filters apply. Deleted classes are hidden, as in the official app.
+- **Parakey doors**: studios whose doors open with the Parakey app say so on the class and studio pages,
+  with a sheet that shows whether your account is linked and opens Parakey.
 - **Book, cancel and join waitlists** through a booking-rules sheet that shows the "book until",
-  "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked.
+  "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked. A fully booked class also offers **Similar classes**: nearby classes
+  around the same time, as swipeable cards.
 - **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
   plan's limit at the studio. A class over your limit shows its drop-in price ("Buy for SEK 220").
+- **Descriptions and alerts:** studio and class descriptions are rendered as Markdown (bold, lists, links).
+  Active alerts (e.g. "Women only") show in red; alerts have a start and an optional end, and expired ones
+  are hidden. **Translate** turns descriptions and alerts into your device language with Apple's
+  on-device Translation framework (iOS, macOS 15+); no online translation service is used.
 - **Check in** by scanning the studio's door QR code with the camera, or with one tap from a suggestion
   (a booked class whose check-in window is open, the nearest studio, or the last one you visited).
   Every check-in asks for confirmation first.
@@ -141,7 +153,7 @@ Simulator builds need no signing setup. To run on a device, copy `Config/Local.x
 `BRUCE_DEMO=1` runs either app with fictional placeholder data: no API calls, no remote images, and no
 map tiles except on the custom-area drawing map, which needs Apple Maps to draw on. Book, cancel and check-in only change local state. `BRUCE_SCREEN=<name>` opens a
 specific screen (`explore`, `classes`, `studio`, `detail`, `checkin`, `friends`, `myclasses`, `account`,
-`settings`, `welcome`, `mybookings`, …; the full list is in [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)).
+`settings`, `welcome`, `mybookings`, `similar`, `alerts`, `area`, …; the full list is in [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)).
 Demo mode is not reachable from the UI.
 
 ```sh
@@ -214,6 +226,8 @@ so they are **not** included in this repository. Examples in the docs use placeh
 - Location (iOS, when in use) is used on the device for distances and the check-in suggestion. The
   approximate coordinates are sent to Bruce's home-screen endpoint for "Nearby gyms", as the official app
   does.
+- Translation uses Apple's Translation framework, which translates on the device. The system may download
+  a language model the first time; the texts themselves are not sent to any translation service.
 - Cached studio lists, images and custom areas are stored locally in the app's caches and Application
   Support folders.
 - No personal data is hard-coded. Demo data is fictional.

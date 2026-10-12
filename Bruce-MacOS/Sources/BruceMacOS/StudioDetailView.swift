@@ -49,13 +49,19 @@ struct StudioDetailView: View {
     var hasClasses: Bool { studio?.hasClasses == true || !(m.studioClasses[studioId] ?? []).isEmpty }
     var classes: [BruceAPI.BruceClass] { (m.studioClasses[studioId] ?? []).sorted { $0.startTime < $1.startTime } }
 
-    /// Notice banner from studio `alerts[].message` (e.g. door/kiosk instructions).
+    /// Active studio alerts (`alerts[]`: start date passed, end date missing or still ahead), in red.
     @ViewBuilder var notice: some View {
-        if let msg = studio?.notice {
-            Text(msg).font(.system(size: 15, weight: .light)).multilineTextAlignment(.center)
-                .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity)
-                .background(RoundedRectangle(cornerRadius: 12).fill(Theme.sectionGrey))
-                .padding(.horizontal, Theme.gutter).padding(.vertical, 16)
+        let msgs = Alerts.active(studio?.alerts)
+        if !msgs.isEmpty {
+            VStack(spacing: 8) {
+                ForEach(Array(msgs.enumerated()), id: \.offset) { _, msg in
+                    Text(msg).font(.system(size: 15)).foregroundStyle(Theme.strikeRed).multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding(.horizontal, 18).padding(.vertical, 14).frame(maxWidth: .infinity)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.sectionGrey))
+            .padding(.horizontal, Theme.gutter).padding(.vertical, 16)
         }
     }
 
@@ -87,7 +93,8 @@ struct StudioDetailView: View {
                         Button { m.push(.classDetail(c.id)) } label: {
                             ClassRow(time: BruceDate.time(c.start), duration: c.durationMinutes.map { "\($0) min" } ?? "",
                                      title: c.title, studio: studio?.name ?? "", meta: c.instructor ?? "",
-                                     badge: m.standby(forClass: c.id) != nil ? "Waitlist" : nil, classId: c.id)
+                                     badge: m.waitlistBadge(c.id), full: (c.availableSpots ?? 1) <= 0,
+                                     wellness: m.isWellness(studioId: c.studioId), classId: c.id)
                         }
                         .buttonStyle(.plain)
                     }
@@ -108,6 +115,9 @@ struct StudioDetailView: View {
             notice
             photoCarousel
             actionButton.padding(.horizontal, Theme.gutter).padding(.top, 16)
+            if let studio, studio.usesParakey {
+                ParakeyRow(studio: studio, forClass: false).padding(.horizontal, Theme.gutter).padding(.top, 16)
+            }
             VStack(alignment: .leading, spacing: 6) {
                 Text(studio?.name ?? "").font(.system(size: 17, weight: .semibold))
                 HStack(spacing: 4) {

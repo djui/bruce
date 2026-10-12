@@ -33,7 +33,7 @@ This is the real app; demo mode exists only for screenshots and tests and is nev
 Launch argument `-BRUCE_DEMO 1` (also in the scheme, disabled) or env `BRUCE_DEMO=1`. No API calls, no remote images, no map tiles; book, cancel and check-in only
 change local state. `BRUCE_SCREEN=<name>` opens a screen directly (same names as macOS: `explore`, `classes`,
 `detail`, `studio`, `checkin`, `myclasses`, `friends`, `notifications`, `menu`, `account`, `settings`,
-`rules`, `booked`, `filter`, `search`, `welcome`, …):
+`rules`, `booked`, `filter`, `search`, `welcome`, `parakey`, …):
 
 ```sh
 xcrun simctl install booted build/…/BruceiOS.app
@@ -84,7 +84,8 @@ never stores the password. No personal data is hard-coded.
   - "Draw" captures a freehand outline (finger on iOS, mouse drag on macOS), simplified with
     Douglas–Peucker to at most 50 points and shown as a lime overlay.
   - Saved areas become chips. Selecting one filters studios (point in polygon on their coordinates) and
-    classes (by their studio). Long-press (iOS) or right-click (macOS) → Delete, with a confirmation.
+    classes (by their studio). Long-press (iOS) or right-click (macOS) → Show on map (the outline, the
+    number of studios inside, "Filter by this area"), Rename, or Delete (with a confirmation).
   - Code: `Shared/BruceCore/Areas.swift` (`AreaStore`, `LocalAreaStore`).
 - **Search** is the tab bar's bottom accessory, a glass field.
   - iOS 26.1+: shown only on the Home and Explore roots. On iOS 26.0 an accessory can't be limited per tab,

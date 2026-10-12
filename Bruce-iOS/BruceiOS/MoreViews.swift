@@ -183,6 +183,8 @@ struct SettingsView: View {
                 VStack(spacing: 4) {
                     Text("\(appDisplayName) \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
                     Text("Unofficial client. Not affiliated with Bruce Studios.")
+                    Link("djui.github.io/bruce", destination: URL(string: "https://djui.github.io/bruce/")!)
+                        .font(.system(size: 13, weight: .semibold)).tint(Theme.limeInk)
                 }
                 .font(.system(size: 13)).foregroundStyle(Theme.secondary).frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)

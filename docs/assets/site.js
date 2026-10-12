@@ -10,6 +10,7 @@
     { id: 'explore', label: 'Explore', alt: 'Explore tab listing studios with ratings, categories and distances, plus filter chips.' },
     { id: 'studio', label: 'Studio', alt: 'Studio page with a Show ticket button, opening status, facilities and description.' },
     { id: 'detail', label: 'Class', alt: 'Class page with book, check-in and cancel times and a lime Book button.' },
+    { id: 'similar', label: 'Similar classes', alt: 'A fully booked class with the Similar classes sheet: nearby classes around the same time as swipeable cards.' },
     { id: 'rules', label: 'Booking rules', alt: 'Booking rules sheet listing late check-in and cancellation times, a Book button and the strike notice.' },
     { id: 'quickcheckin', label: 'Quick check-in', alt: 'Quick check-in sheet suggesting the last visited studio with a Check in button.' },
     { id: 'drawarea', label: 'Custom area', alt: 'Map of Stockholm with a hand-drawn lime area outline and Clear, Draw and Save buttons.' },
