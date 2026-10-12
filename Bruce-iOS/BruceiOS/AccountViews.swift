@@ -290,42 +290,65 @@ struct PaymentMethodsView: View {
 
 struct StatisticsView: View {
     @Environment(AppModel.self) var m
-    var byMonth: [(String, Int)] {
-        var d: [String: Int] = [:]
-        for a in m.aggregate { d[String(String(a.day).prefix(6)), default: 0] += a.count }
-        return d.sorted { $0.key > $1.key }.map { k, v in
-            let date = BruceDate.calendar.date(from: DateComponents(year: Int(k.prefix(4)), month: Int(k.suffix(2)), day: 1))
-            return (BruceDate.format(date, "MMMM yyyy"), v)
-        }
-    }
+    @State private var visits: [BruceAPI.Visit]?
+    @State private var month = BruceDate.calendar.dateInterval(of: .month, for: Date())?.start ?? Date()
+
     var body: some View {
-        List {
-            Section {
-                GlassEffectContainer {
-                    HStack(spacing: 12) {
-                        stat("Total visits", m.aggregate.reduce(0) { $0 + $1.count })
-                        stat("This month", m.aggregate.filter { String($0.day).hasPrefix(BruceDate.format(Date(), "yyyyMM")) }.reduce(0) { $0 + $1.count })
+        let shown = (visits ?? []).filter { $0.date.map { BruceDate.calendar.isDate($0, equalTo: month, toGranularity: .month) } == true }
+        ScrollView {
+            LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                VisitBarChart(months: m.monthlyVisits, selection: $month).padding(.top, 12).padding(.bottom, 28)
+                ForEach(groupedByDay(shown, date: \.date).reversed(), id: \.0) { day, list in
+                    Section {
+                        ForEach(Array(list.sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }.enumerated()), id: \.1.id) { i, v in
+                            if i > 0 { Divider().padding(.leading, Theme.gutter + 72) }
+                            VisitRow(v: v)
+                        }
+                    } header: {
+                        SectionHeaderBar(text: BruceDate.dayHeader(day))
                     }
                 }
-                .listRowInsets(EdgeInsets()).listRowBackground(Color.clear)
-            }
-            Section("Visits per month") {
-                ForEach(byMonth, id: \.0) { k, v in
-                    HStack { Text(k); Spacer(); Text("\(v) visit\(v == 1 ? "" : "s")").foregroundStyle(Theme.secondary) }
+                if visits == nil {
+                    ProgressView().padding(.top, 30)
+                } else if shown.isEmpty {
+                    EmptyState(system: "figure.walk", text: "No visits in \(BruceDate.format(month, "MMMM")).")
                 }
-                if byMonth.isEmpty { Text("No visits yet.").foregroundStyle(Theme.secondary) }
             }
         }
         .sheetChrome("Statistics")
-        .task { await m.loadAggregate() }
+        .task { await load() }
+        .refreshable { await load() }
     }
-    func stat(_ t: String, _ v: Int) -> some View {
-        VStack(spacing: 6) {
-            Text("\(v)").font(.system(size: 36, weight: .black).width(.expanded))
-            Text(t).font(.system(size: 13, weight: .medium)).foregroundStyle(Theme.secondary)
+
+    func load() async {
+        async let a: Void = m.loadAggregate()
+        visits = await m.fetchVisitHistory()
+        await a
+    }
+}
+
+/// A past visit as the original lists it: time (and length for a class), title, studio, area | instructor.
+struct VisitRow: View {
+    @Environment(AppModel.self) var m
+    let v: BruceAPI.Visit
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(BruceDate.time(v.date)).font(.system(size: 17, weight: .semibold)).monospacedDigit()
+                if let d = v.durationMinutes { Text("\(d) min").font(.system(size: 15)).foregroundStyle(Theme.secondary) }
+            }
+            .frame(width: 58, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(v.title).font(.system(size: 17, weight: .semibold)).lineLimit(2)
+                Text(m.studioName(for: v)).font(.system(size: 15)).lineLimit(1)
+                let meta = m.visitMeta(v)
+                if !meta.isEmpty { Text(meta).font(.system(size: 15)).foregroundStyle(Theme.secondary).lineLimit(1) }
+            }
+            .foregroundStyle(Theme.ink)
+            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity).padding(.vertical, 20)
-        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+        .padding(.vertical, 14).padding(.horizontal, Theme.gutter)
+        .accessibilityElement(children: .combine)
     }
 }
 

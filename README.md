@@ -87,7 +87,9 @@ My classes tabs, with class and studio pages and account sheets.
 - **Notifications** open the class they are about (or its studio, strikes or membership). Each icon shows what happened
   (free spot, reminder, check-in, cancellation, studio message, strike, block…) and a corner badge for whether it is about
   a class, a studio or Bruce itself, lime for good news and red for bad.
-- **Friends' classes**, bookmarks, favourites, statistics, membership, credits, strikes,
+- **Statistics** as in the official app: a bar chart of visits per month, and below it every visit of the
+  selected month by day (class or solo training, studio, area and instructor).
+- **Friends' classes**, bookmarks, favourites, membership, credits, strikes,
   receipts, and notification and social settings.
 - **Fast:** studios stream in page by page, then load in parallel and are cached on disk. Class days load
   in parallel time windows, and images are cached and downsampled. Measurements are in the

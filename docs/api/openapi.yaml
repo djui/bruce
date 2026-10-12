@@ -330,7 +330,11 @@ paths:
     get:
       tags: [Booking]
       summary: Booking counts per day
-      x-evidence: ["70"]
+      description: |
+        Drives the Statistics bar chart (visits per month, summed from the days). The visit list under it is
+        `GET /booking` with `user_id`, `include_class`, `include_class_studio` and no time window, keeping the
+        bookings with `checked_in_at` (the official app's list request is not captured).
+      x-evidence: ["70", "c3:396"]
       parameters: [{ $ref: "#/components/parameters/userId" }]
       responses:
         "200": { description: "`{booking_aggregates:[{day,count}]}`" }
