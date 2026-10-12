@@ -104,6 +104,9 @@ struct ExploreView: View {
                 ForEach(m.chipCategories) { c in
                     chip(selected: m.exploreCategories.contains(c.id)) { Text(c.title ?? "") } action: { m.toggleCategory(c.id) }
                 }
+                // "···" at the end of the row opens the filter panel (all categories and filters).
+                chip(selected: false) { Image(systemName: "ellipsis").font(.system(size: 18, weight: .bold)) } action: { m.filterOpen = true }
+                    .help("More filters")
             }
             .padding(.horizontal, Theme.gutter)
         }
@@ -159,6 +162,7 @@ struct ExploreView: View {
                     }
                     .buttonStyle(.plain)
                 }
+                if !studios.isEmpty && m.activeFilterCount > 0 { FilterActiveFooter() }
                 if studios.isEmpty {
                     Text(m.studios.isEmpty ? "Loading studios…" : "No studios match.").foregroundStyle(Theme.secondary).padding(.top, 40)
                 }
@@ -181,10 +185,12 @@ struct ExploreView: View {
                                          duration: c.durationMinutes.map { "\($0) min" } ?? "",
                                          title: c.title, studio: st?.name ?? "",
                                          meta: [st?.vicinity, c.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | "),
-                                         badge: m.standbys.contains { $0.class?.id == c.id } ? "Waitlist" : nil, classId: c.id)
+                                         badge: m.isOnWaitlist(c.id) ? "On waitlist" : nil, full: (c.availableSpots ?? 1) <= 0,
+                                         wellness: m.isWellness(studioId: c.studioId), classId: c.id)
                             }
                             .buttonStyle(.plain)
                         }
+                        if !classes.isEmpty && (m.activeFilterCount > 0 || fromHour > 0 || toHour < 24) { FilterActiveFooter() }
                         if classes.isEmpty {
                             Text(!m.isLoggedIn ? "Log in to see classes." : m.classesLoadingDay != nil ? "Loading classes…" : "No classes.")
                                 .foregroundStyle(Theme.secondary).padding(.top, 40)

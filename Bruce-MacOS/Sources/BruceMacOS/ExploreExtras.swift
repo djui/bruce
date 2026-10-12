@@ -46,6 +46,8 @@ struct FilterPanel: View {
     @Environment(AppModel.self) var m
     @State private var showAllCategories = false
     @State private var pendingDelete: SavedArea?
+    @State private var renaming: SavedArea?
+    @State private var newName = ""
 
     var allCategories: [BruceAPI.Category] { m.sortedCategories }
 
@@ -82,10 +84,15 @@ struct FilterPanel: View {
                     section("Area", link: ("Change city", { m.present(.selectCity) })) {
                         FlowLayout {
                             PanelChip(title: "Entire \(m.cityName)", selected: m.selectedAreaId == nil) { m.selectedAreaId = nil }
-                            // Saved areas (local, see Shared/BruceCore/Areas.swift); right-click → Delete (confirmed).
+                            // Saved areas (local, see Shared/BruceCore/Areas.swift); right-click → Show on map, Rename, Delete (confirmed).
                             ForEach(m.cityAreas) { a in
                                 PanelChip(title: a.name, selected: m.selectedAreaId == a.id) { m.selectedAreaId = m.selectedAreaId == a.id ? nil : a.id }
-                                    .contextMenu { Button("Delete area…", role: .destructive) { pendingDelete = a } }
+                                    .contextMenu {
+                                        Button("Show on map") { m.present(.area(a.id)) }
+                                        Button("Rename…") { newName = a.name; renaming = a }
+                                        Divider()
+                                        Button("Delete area…", role: .destructive) { pendingDelete = a }
+                                    }
                             }
                             PanelChip(title: "+", selected: false) { m.present(.newArea) }
                         }
@@ -108,6 +115,11 @@ struct FilterPanel: View {
             Button("Delete", role: .destructive) { Task { await m.deleteArea(a.id) } }
             Button("Cancel", role: .cancel) {}
         } message: { _ in Text("The area is removed from your saved areas.") }
+        .alert("Rename area", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } }), presenting: renaming) { a in
+            TextField("Name", text: $newName)
+            Button("Save") { Task { await m.renameArea(a.id, to: newName) } }
+            Button("Cancel", role: .cancel) {}
+        }
     }
 
     func section<C: View>(_ title: String, link: (String, () -> Void)? = nil, @ViewBuilder content: () -> C) -> some View {

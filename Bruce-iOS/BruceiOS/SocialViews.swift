@@ -26,7 +26,7 @@ struct FriendsView: View {
                             Section(header: SectionHeaderBar(text: BruceDate.dayHeader(day))) {
                                 ForEach(list, id: \.0.id) { _, u, c in
                                     NavigationLink(value: Route.classDetail(c.id)) {
-                                        ClassRow(c: c, showMenu: false,
+                                        ClassRow(c: c, showMenu: false, showFriends: false,
                                                  trailing: AnyView(Avatar(fileId: u?.photo, initials: u?.initials ?? "?", size: 40)))
                                     }
                                     .buttonStyle(.plain)
@@ -73,7 +73,7 @@ struct MyClassesView: View {
                         else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } }) }
                     case 1:
                         if m.standbys.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
-                        else { list(m.standbys.compactMap { s in s.class.map { (s.id, $0, nil) } }, badge: "Waitlist") }
+                        else { list(m.standbys.compactMap { s in s.class.map { (s.id, $0, nil) } }, badge: "On waitlist") }
                     default:
                         if m.bookmarkedClasses.isEmpty { EmptyState(system: "bookmark", text: "No bookmarked classes yet.") }
                         else { list(m.bookmarkedClasses.map { ($0.id, $0, nil) }) }

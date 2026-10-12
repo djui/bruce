@@ -43,6 +43,7 @@ struct SavedArea: Codable, Identifiable, Hashable {
 protocol AreaStore: Sendable {
     func list() async throws -> [SavedArea]
     func create(_ area: SavedArea) async throws -> SavedArea
+    func update(_ area: SavedArea) async throws -> SavedArea
     func delete(_ id: UUID) async throws
 }
 
@@ -64,6 +65,11 @@ actor LocalAreaStore: AreaStore {
         try JSONEncoder().encode(all).write(to: url, options: .atomic)
         return area
     }
+    func update(_ area: SavedArea) async throws -> SavedArea {
+        let all = try await list().map { $0.id == area.id ? area : $0 }
+        try JSONEncoder().encode(all).write(to: url, options: .atomic)
+        return area
+    }
     func delete(_ id: UUID) async throws {
         let all = try await list().filter { $0.id != id }
         try JSONEncoder().encode(all).write(to: url, options: .atomic)
@@ -76,6 +82,10 @@ actor MemoryAreaStore: AreaStore {
     init(_ initial: [SavedArea] = []) { areas = initial }
     func list() async throws -> [SavedArea] { areas }
     func create(_ area: SavedArea) async throws -> SavedArea { areas.append(area); return area }
+    func update(_ area: SavedArea) async throws -> SavedArea {
+        if let i = areas.firstIndex(where: { $0.id == area.id }) { areas[i] = area }
+        return area
+    }
     func delete(_ id: UUID) async throws { areas.removeAll { $0.id == id } }
 }
 
@@ -115,6 +125,13 @@ enum PolygonMath {
     }
 
     /// Rectangle polygon for a visible map region (Save without drawing).
+    /// Bounding box (centre and span in degrees) with some padding, for fitting a map camera to an area.
+    static func bounds(_ pts: [GeoPoint], padding: Double = 1.3) -> (centerLat: Double, centerLon: Double, latDelta: Double, lonDelta: Double)? {
+        guard let minLat = pts.map(\.lat).min(), let maxLat = pts.map(\.lat).max(),
+              let minLon = pts.map(\.lon).min(), let maxLon = pts.map(\.lon).max() else { return nil }
+        return ((minLat + maxLat) / 2, (minLon + maxLon) / 2, max((maxLat - minLat) * padding, 0.005), max((maxLon - minLon) * padding, 0.005))
+    }
+
     static func rectangle(centerLat: Double, centerLon: Double, latDelta: Double, lonDelta: Double) -> [GeoPoint] {
         let n = centerLat + latDelta / 2, s = centerLat - latDelta / 2
         let w = centerLon - lonDelta / 2, e = centerLon + lonDelta / 2
@@ -133,6 +150,16 @@ extension AppModel {
               let addr = s.studioAddresses?.first(where: { $0.main == true })?.address ?? s.studioAddresses?.first?.address,
               let lat = addr.latitude, let lon = addr.longitude else { return false }
         return a.contains(lat: lat, lon: lon)
+    }
+
+    /// Studios of the area's city whose main address lies inside the area.
+    func studios(in area: SavedArea) -> [BruceAPI.Studio] {
+        studios.filter { s in
+            guard s.cityId == nil || s.cityId == area.cityId,
+                  let addr = s.studioAddresses?.first(where: { $0.main == true })?.address ?? s.studioAddresses?.first?.address,
+                  let lat = addr.latitude, let lon = addr.longitude else { return false }
+            return area.contains(lat: lat, lon: lon)
+        }
     }
 
     func loadAreas() async {
@@ -158,6 +185,19 @@ extension AppModel {
             if selectedAreaId == id { selectedAreaId = nil }
         } catch { flash("Could not delete the area") }
     }
+
+    func renameArea(_ id: UUID, to name: String) async {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty, var a = areas.first(where: { $0.id == id }), a.name != n else { return }
+        a.name = n
+        do {
+            let saved = try await areaStore.update(a)
+            if let i = areas.firstIndex(where: { $0.id == id }) { areas[i] = saved }
+            flash("Area renamed to \u{201C}\(n)\u{201D}")
+        } catch { flash("Could not rename the area") }
+    }
+
+    func area(_ id: UUID) -> SavedArea? { areas.first { $0.id == id } }
 
     var nextAreaName: String { "My area \(cityAreas.count + 1)" }
 }
