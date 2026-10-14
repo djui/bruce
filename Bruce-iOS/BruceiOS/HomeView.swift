@@ -36,11 +36,6 @@ struct HomeView: View {
         .toolbar {
             ToolbarItemGroup(placement: .topBarTrailing) {
                 // All toolbar icons use the label colour; only the dots are red.
-                Button { m.present(.quickCheckIn) } label: {
-                    Image(systemName: "viewfinder").overlay(alignment: .topTrailing) {
-                        if !m.openWindowTargets.isEmpty { Circle().fill(Theme.red).frame(width: 8, height: 8).offset(x: 3, y: -2) }
-                    }
-                }
                 Button { m.present(.notifications) } label: {
                     Image(systemName: "bell").overlay(alignment: .topTrailing) {
                         if m.unreadNotifications { Circle().fill(Theme.red).frame(width: 8, height: 8).offset(x: 1, y: -1) }
