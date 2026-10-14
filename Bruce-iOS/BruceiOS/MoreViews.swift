@@ -171,6 +171,7 @@ struct SettingsView: View {
                     InfoRow(title: "Push notifications", subtitle: "Reminders and studio news", chevron: false)
                 }
             }
+            HealthSyncSection()
             Section {
                 NavigationLink(value: SheetRoute.info("Terms and conditions")) { Text("Terms and conditions") }
                 NavigationLink(value: SheetRoute.info("Privacy policy")) { Text("Privacy policy") }
@@ -206,6 +207,45 @@ struct SettingsView: View {
         guard let uid = m.userId, let secret = m.user?.secret, !secret.isEmpty else { m.flash("Calendar link not available"); return }
         UIPasteboard.general.string = "webcal://api.bruce.app/v52/user/\(uid)/calendar/\(secret).ics"
         m.flash("Calendar link copied. Add it in Settings › Calendar › Accounts › Add Subscribed Calendar")
+    }
+}
+
+/// Apple Health export (HealthSync.swift): attended classes and gym visits as workouts.
+struct HealthSyncSection: View {
+    @Environment(AppModel.self) var m
+    @State private var health = HealthSync.shared
+    var body: some View {
+        Section {
+            Toggle(isOn: Binding(get: { health.enabled }, set: { on in Task { await health.setEnabled(on, model: m) } })) {
+                InfoRow(title: "Apple Health", subtitle: subtitle, chevron: false)
+            }
+            .disabled(!health.available || health.syncing)
+            if health.enabled {
+                Toggle(isOn: Binding(get: { health.includeSolo }, set: { on in Task { await health.setIncludeSolo(on, model: m) } })) {
+                    InfoRow(title: "Include solo training", subtitle: "Gym visits as \(WorkoutExport.soloMinutes) min strength workouts", chevron: false)
+                }
+                Button {
+                    Task { await health.sync(model: m, force: true) }
+                } label: {
+                    HStack {
+                        Text("Sync now")
+                        Spacer()
+                        if health.syncing { ProgressView() }
+                    }
+                }
+                .disabled(health.syncing)
+            }
+        } footer: {
+            Text("Past classes become workouts with type, time and estimated calories (from class type, duration and your weight in Health).")
+        }
+    }
+
+    var subtitle: String {
+        if !health.available { return "Not available on this device" }
+        if health.syncing { return "Syncing…" }
+        if let r = health.lastResult { return r }
+        if health.enabled, let d = health.lastSync { return "Synced \(d.formatted(.relative(presentation: .named)))" }
+        return "Save past classes as workouts"
     }
 }
 

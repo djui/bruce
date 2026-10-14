@@ -112,6 +112,11 @@ never stores the password. No personal data is hard-coded.
 - **Challenges** (`Challenges.swift`): Friends › Challenges, from our server (`/challenges`, see the project's
   server contract). Invites can be accepted or declined; a push with `challengeId` opens the challenge. Joining stores
   the Bruce login on our server; with the auto-book server off the app explains that once first.
+- **Apple Health** (`HealthSync.swift`, mapping in `Shared/BruceCore/WorkoutExport.swift`): Settings › Apple Health
+  writes past visits as `HKWorkout`s through `HKWorkoutBuilder` (activity type from `WorkoutKind.classify`, active
+  energy from the kind's MET value × minutes × the latest Health weight). `HKMetadataKeySyncIdentifier`
+  `bruce-visit-<id>` makes a re-export replace, exported ids are also kept in UserDefaults, and visits overlapping
+  another source's workout by half are skipped. Syncs after launch and on every return to the foreground.
 - **Wrapped**: the year so far as full-screen story cards (`Wrapped.swift`, `WrappedViews.swift`), from Statistics or
   the Menu.
 
