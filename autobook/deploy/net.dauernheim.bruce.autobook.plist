@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- launchd agent: one tick every 300 s. scripts/install-launchd.sh fills in the __PLACEHOLDERS__. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>net.dauernheim.bruce.autobook</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/sh</string>
+    <string>__AUTOBOOK_DIR__/scripts/macos-tick.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>NODE</key>
+    <string>__NODE__</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>300</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Library/Logs/bruce-autobook.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Library/Logs/bruce-autobook.log</string>
+</dict>
+</plist>

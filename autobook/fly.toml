@@ -1,0 +1,21 @@
+# Fly.io: a single always-on machine without an HTTP service (nothing listens on a port).
+# Deploy from autobook/:  see README.md
+app = "bruce-autobook-CHANGE-ME"
+primary_region = "arn"   # Stockholm
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  AUTOBOOK_STATE = "/data/autobook-state.json"
+
+[mounts]
+  source = "autobook_data"
+  destination = "/data"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
+
+# Secrets: fly secrets set BRUCE_ACCESS_TOKEN=... BRUCE_USER_ID=... AUTOBOOK_CONFIG="$(cat autobook.config.json)"
+#          [AUTOBOOK_NOTIFY_URL=https://ntfy.sh/<secret-topic>]

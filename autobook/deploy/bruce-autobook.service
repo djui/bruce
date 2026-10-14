@@ -1,0 +1,22 @@
+# systemd unit for a VPS. Install: see README.md ("VPS with systemd").
+[Unit]
+Description=Bruce Studios autobook (weekly class auto-booking)
+Wants=network-online.target time-sync.target
+After=network-online.target time-sync.target
+
+[Service]
+Type=simple
+# BRUCE_ACCESS_TOKEN=..., BRUCE_USER_ID=..., optional AUTOBOOK_NOTIFY_URL=... (chmod 600)
+EnvironmentFile=/etc/bruce-autobook/env
+ExecStart=/usr/bin/node /opt/bruce-autobook/src/node/cli.ts run --config /etc/bruce-autobook/autobook.config.json --state /var/lib/bruce-autobook/state.json
+Restart=on-failure
+RestartSec=30
+DynamicUser=yes
+StateDirectory=bruce-autobook
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

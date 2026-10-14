@@ -1,0 +1,27 @@
+{
+  "rules": [
+    {
+      "name": "Thursday boxing",
+      "studio_id": 135,
+      "title": "Boxning",
+      "weekday": "thu",
+      "time": "18:00",
+      "waitlist_if_full": true
+    },
+    {
+      "name": "Sunday morning series",
+      "studio_id": 6614,
+      "master_id": 1234567,
+      "weekday": "sun",
+      "time": "10:30",
+      "waitlist_if_full": false
+    }
+  ],
+  "options": {
+    "tick_seconds": 300,
+    "lead_ms": 2000,
+    "retry_interval_ms": 1000,
+    "retry_window_seconds": 60,
+    "catch_up": true
+  }
+}

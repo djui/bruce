@@ -39,6 +39,7 @@ dark setting on GitHub; every screen is in [`docs/screenshots/`](docs/screenshot
 | **Brüce for iPhone** ([`Bruce-iOS/`](Bruce-iOS/README.md)) | iOS 26+ app built with Liquid Glass throughout |
 | **BruceMacOS** ([`Bruce-MacOS/`](Bruce-MacOS/README.md)) | Phone-sized SwiftUI app for macOS 14+, run with `swift run` |
 | **BruceCore** ([`Shared/BruceCore/`](Shared/BruceCore)) | Code shared by both apps: API client, models, Keychain session, app state, booking rules, demo data |
+| **autobook** ([`autobook/`](autobook/README.md)) | Optional server-side scanner that books your weekly classes the moment their booking window opens (Node service for a VPS/Fly.io, Cloudflare Worker, or macOS launchd job) |
 | **API map** ([`API.md`](API.md), [`openapi.yaml`](openapi.yaml), [`swagger.html`](swagger.html)) | The Bruce Studios v52 API as observed from the official iOS app 14.4.2 |
 
 ## Features
@@ -132,6 +133,7 @@ A 390×780 phone-sized window that recreates the mobile app on the Mac, includin
 │   ├── Package.swift
 │   ├── Sources/BruceMacOS/ macOS views; Shared -> ../../../Shared/BruceCore (symlink)
 │   └── Support/Info.plist  Embedded for the camera permission prompt
+├── autobook/               TypeScript auto-booking scanner (Node / Cloudflare Worker / launchd), see its README
 └── Bruce-iOS/              Xcode project for the iPhone app "Brüce"
     ├── BruceiOS.xcodeproj  Folder-synchronised groups; also compiles ../Shared/BruceCore
     ├── BruceiOS/           iOS views and assets

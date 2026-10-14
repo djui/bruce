@@ -1,0 +1,29 @@
+# Cloudflare Worker: one tick every 5 minutes (see README.md, "Cloudflare Worker").
+name = "bruce-autobook"
+main = "src/worker/worker.ts"
+compatibility_date = "2025-09-01"
+workers_dev = false
+
+[triggers]
+crons = ["*/5 * * * *"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "bruce-autobook"
+# Paste the id printed by `npx wrangler d1 create bruce-autobook`.
+database_id = "00000000-0000-0000-0000-000000000000"
+
+[vars]
+# Paid plan: raise to e.g. "1000". Free plan allows 50 subrequests per invocation in total.
+AUTOBOOK_SUBREQUEST_BUDGET = "40"
+AUTOBOOK_DRY_RUN = "0"
+# The rules as JSON (same format as autobook.config.example.json). Not secret, but personal:
+# you can also store it as a secret instead (`npx wrangler secret put AUTOBOOK_CONFIG`) and delete it here.
+AUTOBOOK_CONFIG = '''
+{"rules": [{"name": "Thursday boxing", "studio_id": 135, "title": "Boxning", "weekday": "thu", "time": "18:00", "waitlist_if_full": true}]}
+'''
+
+# Secrets (never in this file):
+#   npx wrangler secret put BRUCE_ACCESS_TOKEN
+#   npx wrangler secret put BRUCE_USER_ID
+#   npx wrangler secret put AUTOBOOK_NOTIFY_URL   (optional)
