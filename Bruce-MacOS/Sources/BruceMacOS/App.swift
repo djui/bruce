@@ -1,6 +1,7 @@
 import SwiftUI
 
 import AppKit
+import AppIntents
 
 /// `swift run` starts a bare executable that is not a foreground app, so keystrokes
 /// stay in the terminal. Promote it to a regular app and make its window key.
@@ -18,8 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 @main
 struct BruceMacOSApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var model: AppModel
     @StateObject private var location = LocationProvider()
+    init() {
+        let m = AppModel()
+        _model = State(initialValue: m)
+        AppDependencyManager.shared.add(dependency: m)   // Shortcuts (Intents.swift)
+    }
     var body: some Scene {
         WindowGroup("Brüce (unofficial)") {
             RootView()

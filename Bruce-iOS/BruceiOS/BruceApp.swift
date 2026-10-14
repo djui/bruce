@@ -1,12 +1,18 @@
 import SwiftUI
+import AppIntents
 
 @main
 struct BruceiOSApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel()
+    @State private var model: AppModel
     @StateObject private var ui = UIState()
     @StateObject private var location = LocationProvider()
     @Environment(\.scenePhase) private var phase
+    init() {
+        let m = AppModel()
+        _model = State(initialValue: m)
+        AppDependencyManager.shared.add(dependency: m)   // Siri / Shortcuts (Intents.swift)
+    }
     var body: some Scene {
         WindowGroup {
             RootView().environment(model).environmentObject(ui).environmentObject(location)
