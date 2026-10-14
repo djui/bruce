@@ -25,6 +25,8 @@ enum SheetRoute: Hashable {
     case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts, visitLimit(Int)
     case bookingRules(Int), classInvite(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
     case similarClasses(Int), area(UUID), parakey(Int)
+    /// Auto-book rules and the optional server (AutoBook.swift).
+    case autoBook
     /// "Rate class" dialog for a booking id (POST /v52/review [c8:467]).
     case review(Int)
 }
@@ -129,6 +131,11 @@ final class AppModel {
     var classesByDay: [Date: [BruceAPI.BruceClass]] = [:]
     var classesLoadingDay: Date?
     var bookings: [BruceAPI.Booking] = []
+    /// Auto-book (AutoBook.swift): weekly rules, their upcoming classes, and the last server sync problem.
+    var autoBookRules: [AutoBookRule] = AppModel.demo ? [] : AutoBook.loadRules()
+    var autoBookUpcoming: [AutoBookOccurrence] = []
+    var autoBookServerNote: String?
+    @ObservationIgnored var autoBookTask: Task<Void, Never>?
     var standbys: [BruceAPI.ClassHolder] = []
     /// Waitlist entries that turned into bookings. The API drops a promoted entry from `GET /v52/standby` (its
     /// `booking_id` stays null) and the booking appears in `GET /v52/booking` [c7:80, 64]; the original keeps
@@ -588,6 +595,7 @@ final class AppModel {
         } else if AppModel.demo { demoLoggedOut = true }
         bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
+        Task { await refreshAutoBook() }   // logged out: stops the booker and clears its notifications
         dismissSheets()
     }
 
@@ -609,6 +617,7 @@ final class AppModel {
         sneakPeek = false
         bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
+        Task { await refreshAutoBook() }   // logged out: stops the booker and clears its notifications
         resetLoadedData()
         status = "Your session expired. Please log in again."
         sheets = [.login]
@@ -623,7 +632,7 @@ final class AppModel {
     }
 
     /// Logged in with a token. `access_token_expires_at` is deliberately ignored (see `expireSession`).
-    private var tokenUsable: Bool { !AppModel.demo && !token.isEmpty }
+    var tokenUsable: Bool { !AppModel.demo && !token.isEmpty }
 
     // MARK: Loading (read-only GETs)
 
@@ -640,6 +649,8 @@ final class AppModel {
         async let f: Void = loadVisits()
         async let g: Void = loadAllFavorites()
         _ = await (a, b, c, d, e, f, g)
+        await refreshAutoBook()   // after loadMine: booked classes are skipped
+        await syncAutoBookServer()   // hands a new login and push token to the server
     }
 
     /// Studio list: cached copy instantly, then a fast streamed refresh (see FastLoading.swift).
@@ -1010,6 +1021,7 @@ final class AppModel {
     func refreshOnForeground() async {
         guard tokenUsable, !loading, Date().timeIntervalSince(mineLoadedAt ?? .distantPast) > 30 else { return }
         await loadMine()
+        await refreshAutoBook()
     }
     @ObservationIgnored private var mineLoadedAt: Date?
 

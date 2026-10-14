@@ -1,0 +1,16 @@
+name = "bruce-autobook"
+main = "src/worker.js"
+compatibility_date = "2026-09-01"
+
+# Every minute; the worker only calls Bruce for each user every 5th minute (scan) and in the minute before a class opens.
+[triggers]
+crons = ["* * * * *"]
+
+# Created with: npx wrangler d1 create bruce-autobook. The table is created on first use.
+[[d1_databases]]
+binding = "DB"
+database_name = "bruce-autobook"
+database_id = "39f77894-b4c9-4842-b8be-256aa1e353c4"
+
+[vars]
+APNS_TOPIC = "net.dauernheim.bruce"

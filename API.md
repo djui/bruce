@@ -68,6 +68,17 @@ Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-
 - Cancel (capture 2): `DELETE /v52/booking/<BOOKING_ID>` [c2:120] body `{"locale":"en","include_user":true}` -> 200 `{"booking":{id,deleted:true,deleted_at,class_id,...,user{...}}}` (soft delete). Booking 84 -> cancelled in 120 (same id).
 - Re-reads after book/cancel: `GET /v52/booking`, `/v52/booking/aggregate`, `/v52/studio/user_visit_limit`, `/v52/class/<id>` [c2:93-129].
 
+## Booking windows (measured 2026-10-14)
+From the logged-in class objects of captures 1-6 (6,453 classes) plus an unauthenticated crawl of 22 days of Stockholm classes (8,606 classes).
+- Booking opens at `bookable_earliest_time` = `start_time - bookable_earliest` (seconds); the identity held for all 6,389 classes that have a window (64 have none, `null`). There is no daily release time: the open moment is the class's own start time of day, N days earlier.
+- `bookable_earliest` is 604800 (7 days) for 96.8% of classes. Exceptions: 6 days (Barry's, `mariana_tek`), 14 days (Acid Training, `mana_app`), 4 days (CrossFit Södermalm), 5 days (CrossFit Nordic `brp`, Träningslabbet `wondr`), 10 days (The Workout Plan), 3 days (duCalme). Example: `bookable_earliest:604800`, `bookable_earliest_time:"2026-10-05T09:30:00Z"`, `start_time:"2026-10-12T09:30:00Z"`, `bookable_latest:600`, `unbookable_latest:43200`.
+- Classes are listed about 14 days ahead (most are created 14 days before start), before they can be booked, with `available_spots == spots`. The official app's per-studio query sends `bookable_earliest_before=<now>` to hide them.
+- The unauthenticated `GET /v52/class` returns a cut-down class (31 keys) without `bookable_earliest`, `bookable_earliest_time`, `master_id`, `integration_type` or `user_attendance_info`; `include_*` flags do not add them. Logged-in responses have 62 keys.
+- Series: `master_id` is set on about 80% of classes and identifies a weekly class (2,767 of 2,768 weekly series share one); one master can cover several time slots, so a weekly slot is `master_id` + weekday + local start time. `recurring_id`/`recurring_index`/`integration_recurring_id` are almost never set; `is_master` is filtered out by the list query.
+- Small classes fill fast after opening: e.g. a 2-spot class within 0.9 h, 3-5 spot classes within 2-3 h.
+- No failed `POST /v52/booking` was captured (no "too early" or limit error body). Limits show as flags in `user_attendance_info` (`booking_limit_reached`, `visit_limit_reached`), and `GET /v52/studio/user_visit_limit` has a `SIMULTANEOUS` limit (3 BASE / 4 BLACK / 5 EPIC) besides the monthly ones.
+- Auto-book (both apps, and the optional server in `server/`) uses these rules: a rule is studio + weekday + local time + `master_id` (or title), resolved to concrete classes over the next 15 days, booked at `bookable_earliest_time` (start - 7 days when missing) with retries for 20 s.
+
 ## Check-in (confirmed, capture 1 only; no check-in in captures 2-8)
 `POST /v52/studio/check_in` [163]
 ```json

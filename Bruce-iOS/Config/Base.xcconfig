@@ -16,4 +16,7 @@ CURRENT_PROJECT_VERSION = 1
 
 IPHONEOS_DEPLOYMENT_TARGET = 26.0
 
+// Push notifications from the auto-book server (server/README.md).
+CODE_SIGN_ENTITLEMENTS = Config/BruceiOS.entitlements
+
 #include? "Local.xcconfig"

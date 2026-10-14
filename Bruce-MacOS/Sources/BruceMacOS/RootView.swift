@@ -186,6 +186,7 @@ struct SheetHost: View {
         case .similarClasses(let id): SimilarClassesSheet(classId: id)
         case .area(let id): AreaMapSheet(areaId: id)
         case .review(let id): ReviewSheet(bookingId: id)
+        case .autoBook: AutoBookView()
         }
     }
 }
