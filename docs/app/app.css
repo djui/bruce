@@ -12,6 +12,7 @@
   --fill: rgba(120, 120, 128, 0.12);
   --fill-2: rgba(120, 120, 128, 0.2);
   --glass: rgba(255, 255, 255, 0.72);
+  --toast-bg: #212121;
   --glass-edge: rgba(0, 0, 0, 0.06);
   --lime: #ccf03a;
   --on-lime: #000000;
@@ -35,7 +36,7 @@
     --bg: #000000; --bg-2: #1c1c1e; --bg-3: #2c2c2e;
     --label: #ffffff; --label-2: rgba(235, 235, 245, 0.64); --label-3: rgba(235, 235, 245, 0.32);
     --sep: rgba(84, 84, 88, 0.55); --fill: rgba(120, 120, 128, 0.24); --fill-2: rgba(120, 120, 128, 0.36);
-    --glass: rgba(44, 44, 46, 0.66); --glass-edge: rgba(255, 255, 255, 0.08);
+    --glass: rgba(44, 44, 46, 0.66); --glass-edge: rgba(255, 255, 255, 0.08); --toast-bg: #3d3d3d;
     --teal: #40c8e0; --orange: #ff9f0a; --red: #ff453a; --star: #ffd60a;
     --shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
     --map-filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
@@ -47,7 +48,7 @@
   --bg: #000000; --bg-2: #1c1c1e; --bg-3: #2c2c2e;
   --label: #ffffff; --label-2: rgba(235, 235, 245, 0.64); --label-3: rgba(235, 235, 245, 0.32);
   --sep: rgba(84, 84, 88, 0.55); --fill: rgba(120, 120, 128, 0.24); --fill-2: rgba(120, 120, 128, 0.36);
-  --glass: rgba(44, 44, 46, 0.66); --glass-edge: rgba(255, 255, 255, 0.08);
+  --glass: rgba(44, 44, 46, 0.66); --glass-edge: rgba(255, 255, 255, 0.08); --toast-bg: #3d3d3d;
   --teal: #40c8e0; --orange: #ff9f0a; --red: #ff453a; --star: #ffd60a;
   --shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
   --map-filter: invert(1) hue-rotate(180deg) brightness(0.9) contrast(0.9);
@@ -429,9 +430,9 @@ details.card[open] summary { margin-bottom: 10px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 #toast {
   position: fixed; z-index: 100; top: calc(12px + env(safe-area-inset-top, 0px)); left: 50%; transform: translate(-50%, -140%);
-  max-width: min(460px, calc(100% - 32px)); padding: 12px 18px; border-radius: 22px; font-size: 15px; font-weight: 600;
-  background: var(--glass); border: 1px solid var(--glass-edge); box-shadow: var(--shadow);
-  -webkit-backdrop-filter: blur(24px) saturate(1.8); backdrop-filter: blur(24px) saturate(1.8);
+  max-width: min(500px, calc(100% - 32px)); padding: 13px 16px; border-radius: 16px; font-size: 15px; font-weight: 600;
+  /* Solid dark card, so it can't be mistaken for the glass buttons. */
+  background: var(--toast-bg); color: #fff; box-shadow: 0 6px 28px rgba(0, 0, 0, 0.25);
   transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.3, 1.2), visibility 0.3s; pointer-events: none; visibility: hidden;
 }
 #toast.show { transform: translate(-50%, 0); visibility: visible; }
