@@ -16,4 +16,8 @@ CURRENT_PROJECT_VERSION = 1
 
 IPHONEOS_DEPLOYMENT_TARGET = 26.0
 
+// Key of the auto-book server (server/, API_KEY there). Set it in Config/Local.xcconfig, never here:
+// the repository is public. Empty = enter it in the app (Menu > Auto-book).
+AUTOBOOK_SERVER_KEY =
+
 #include? "Local.xcconfig"

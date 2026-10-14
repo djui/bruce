@@ -210,17 +210,41 @@ enum AutoBook {
 
 // MARK: - Optional server (server/README.md)
 
-/// The server's address and key. The key is a shared secret set on the server (`API_KEY`), kept in the Keychain.
+/// The server's address and key. The address is built in (`defaultURL`); the key is a shared secret set on the
+/// server (`API_KEY`). It comes from the Keychain (entered in the app, or stored there by a setup script) or from
+/// the iOS build setting `AUTOBOOK_SERVER_KEY` in the git-ignored Config/Local.xcconfig, never from the repository.
 enum AutoBookServer {
+    static let defaultURL = "https://bruce-autobook.uwe-af1.workers.dev"
     static var url: String {
-        get { UserDefaults.standard.string(forKey: "autoBookServerURL") ?? "" }
-        set { UserDefaults.standard.set(newValue.trimmingCharacters(in: .whitespacesAndNewlines), forKey: "autoBookServerURL") }
+        get { UserDefaults.standard.string(forKey: "autoBookServerURL").flatMap { $0.isEmpty ? nil : $0 } ?? defaultURL }
+        set {
+            let v = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            UserDefaults.standard.set(v == defaultURL ? nil : v, forKey: "autoBookServerURL")
+        }
     }
     static var key: String {
-        get { TokenStore.secret("autobook-server-key") ?? "" }
+        get {
+            TokenStore.secret("autobook-server-key")
+                ?? (Bundle.main.object(forInfoDictionaryKey: "AutoBookServerKey") as? String).flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 }
+                ?? ""
+        }
         set { TokenStore.setSecret("autobook-server-key", newValue.trimmingCharacters(in: .whitespacesAndNewlines)) }
     }
     static var isConfigured: Bool { URL(string: url)?.host != nil && !key.isEmpty }
+    /// "Let the server book for me": on by default once a server is configured; the app then hands it the login.
+    static var booksForMe: Bool {
+        get { UserDefaults.standard.object(forKey: "autoBookServerBooks") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "autoBookServerBooks") }
+    }
+    /// Which access token the server last got (a hash, so a new login is sent again and the same one is not).
+    static var sentTokenHash: Int? {
+        get { UserDefaults.standard.object(forKey: "autoBookServerTokenHash") as? Int }
+        set { UserDefaults.standard.set(newValue, forKey: "autoBookServerTokenHash") }
+    }
+    static func tokenHash(_ t: String) -> Int {
+        // Stable across launches (Swift's hashValue is seeded per process).
+        t.utf8.reduce(5381) { ($0 &* 33) &+ Int($1) }
+    }
 
     struct Status: Decodable {
         struct Entry: Decodable, Hashable { let classId: Int; let title: String?; let at: String?; let outcome: String? }
@@ -297,10 +321,26 @@ extension AppModel {
         }
     }
 
+    /// Pushes the rules and, while "Let the server book for me" is on, the current login (only when it changed).
     func syncAutoBookServer() async {
-        guard !AppModel.demo, AutoBookServer.isConfigured else { return }
-        do { try await AutoBookServer.push(autoBookRules); autoBookServerNote = nil }
-        catch { autoBookServerNote = "Server sync failed: \(error.localizedDescription)" }
+        guard !AppModel.demo, tokenUsable, AutoBookServer.isConfigured else { return }
+        do {
+            try await AutoBookServer.push(autoBookRules)
+            if AutoBookServer.booksForMe, let s = session, AutoBookServer.sentTokenHash != AutoBookServer.tokenHash(s.accessToken) {
+                try await AutoBookServer.sendSession(s)
+                AutoBookServer.sentTokenHash = AutoBookServer.tokenHash(s.accessToken)
+            }
+            autoBookServerNote = nil
+        } catch { autoBookServerNote = "Server sync failed: \(error.localizedDescription)" }
+    }
+
+    /// The "Let the server book for me" switch.
+    func setServerBooksForMe(_ on: Bool) async {
+        AutoBookServer.booksForMe = on
+        AutoBookServer.sentTokenHash = nil
+        if on { await syncAutoBookServer(); return }
+        do { try await AutoBookServer.removeSession(); autoBookServerNote = nil }
+        catch { autoBookServerNote = "Server: \(error.localizedDescription)" }
     }
 
     /// Next opening for a rule, if one of its classes is known.

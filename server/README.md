@@ -21,9 +21,10 @@ so the server knows next week's class a week before it opens.
 ## What it stores
 
 In a KV namespace: your rules (studio, weekday, time, class series), the list of upcoming classes and a short
-log, and, **only after you tap "Let the server book for me" in the app**, your Bruce access token and user id.
+log, and, while "Let the server book for me" is on in the app (the default once a server is set up), your Bruce
+access token and user id.
 Bruce's server does not expire access tokens in practice (see API.md "Refresh"), so whoever can read the KV
-namespace can use your account until you log out of Bruce. "Remove my login" in the app deletes it, and a
+namespace can use your account until you log out of Bruce. Switching "Let the server book for me" off deletes it, and a
 401 from Bruce deletes it too. The HTTP API is protected by a key you choose (`API_KEY`).
 
 ## Set up
@@ -37,8 +38,13 @@ npx wrangler secret put NTFY_TOPIC             # optional: a private, hard-to-gu
 npx wrangler deploy
 ```
 
-Then in the app: Menu › Auto-book › Server, enter the worker URL (`https://bruce-autobook.<you>.workers.dev`)
-and the key, tap **Save and sync rules**, then **Let the server book for me**.
+The apps have the author's worker address built in (`AutoBookServer.defaultURL` in
+`Shared/BruceCore/AutoBook.swift`); change it for your own deployment, or override it in the app (Menu › Auto-book ›
+Server address and key). The key never goes into the repository: put it in the git-ignored
+`Bruce-iOS/Config/Local.xcconfig` as `AUTOBOOK_SERVER_KEY = …` (built into your iOS build), and for the Mac app run
+`security add-generic-password -U -s net.dauernheim.BruceMacOS -a autobook-server-key -w <key>` (or type it in the
+app). With address and key in place the app syncs your rules and hands the server your login by itself;
+"Let the server book for me" in Menu › Auto-book switches that off and removes the login from the server.
 
 Cost: within the Workers free plan (1,440 cron runs and a few hundred KV writes a day).
 

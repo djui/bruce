@@ -9,6 +9,8 @@ struct AutoBookView: View {
     @State private var serverKey = AutoBookServer.key
     @State private var server: AutoBookServer.Status?
     @State private var working = false
+    @State private var booksForMe = AutoBookServer.booksForMe
+    @State private var showServerFields = !AutoBookServer.isConfigured
 
     var body: some View {
         Form {
@@ -23,26 +25,25 @@ struct AutoBookView: View {
             } header: { Text("Every week") } footer: { Text(AutoBookCopy.howItWorks) }
 
             Section {
-                TextField("https://bruce-autobook.example.workers.dev", text: $serverURL)
-                    .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                SecureField("Server key", text: $serverKey)
-                Button("Save and sync rules") {
-                    AutoBookServer.url = serverURL; AutoBookServer.key = serverKey
-                    run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
-                }
-                .disabled(serverURL.isEmpty || serverKey.isEmpty)
                 if AutoBookServer.isConfigured {
-                    Button(server?.hasSession == true ? "Send current login again" : "Let the server book for me") {
-                        guard let s = m.session else { return }
-                        run { try await AutoBookServer.sendSession(s) }
-                    }
-                    if server?.hasSession == true {
-                        Button("Remove my login from the server", role: .destructive) { run { try await AutoBookServer.removeSession() } }
-                    }
+                    Toggle("Let the server book for me", isOn: Binding(get: { booksForMe }, set: { on in
+                        booksForMe = on
+                        run { await m.setServerBooksForMe(on); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                    }))
+                    if let s = server { serverSummary(s) }
                 }
                 if let n = m.autoBookServerNote { Text(n).foregroundStyle(Theme.red).font(.system(size: 14)) }
-                if let s = server { serverSummary(s) }
-            } header: { Text("Server (optional)") } footer: { Text(AutoBookCopy.server) }
+                DisclosureGroup("Server address and key", isExpanded: $showServerFields) {
+                    TextField(AutoBookServer.defaultURL, text: $serverURL)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
+                    SecureField("Server key", text: $serverKey)
+                    Button("Save and sync") {
+                        AutoBookServer.url = serverURL; AutoBookServer.key = serverKey
+                        run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                    }
+                    .disabled(serverURL.isEmpty || serverKey.isEmpty)
+                }
+            } header: { Text("Server") } footer: { Text(AutoBookCopy.server) }
         }
         .disabled(working)
         .sheetChrome("Auto-book")
@@ -74,7 +75,7 @@ struct AutoBookView: View {
     func run(_ op: @escaping () async throws -> Void) {
         working = true
         Task {
-            do { try await op(); m.flash("Server updated") } catch { m.flash(error.localizedDescription) }
+            do { try await op() } catch { m.flash(error.localizedDescription) }
             await loadServer()
             working = false
         }
@@ -88,7 +89,7 @@ struct ServerError: LocalizedError {
 
 enum AutoBookCopy {
     static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. When it opens you get a notification with a Book button, and the app books by itself while it is open. Swipe to remove a class. Cancelling an auto-booked class does not rebook it."
-    static let server = "Books even when your phone is locked or offline. The server checks every five minutes and every minute shortly before a class opens. It only books after you let it, and it then keeps your Bruce login until you remove it. See server/README.md in the project."
+    static let server = "Books even when your phone is locked or offline: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes the login from the server."
 }
 
 /// Class page toggle.

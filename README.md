@@ -67,8 +67,8 @@ My classes tabs, with class and studio pages and account sheets.
   fixed time before it starts (7 days for almost all classes), so the apps know the moment in advance. The
   Mac app books by itself at that moment while it runs; the iPhone shows a notification at that moment
   whose **Book** button books from the lock screen (and books by itself while the app is open). An optional
-  small server ([`server/`](server/README.md), a Cloudflare Worker) books even when no device is awake; it
-  only gets your Bruce login when you send it from the app. Menu › Auto-book lists the classes and the
+  small server ([`server/`](server/README.md), a Cloudflare Worker) books even when no device is awake; once
+  it is set up, the app syncs your classes and login to it by itself (one switch turns that off). Menu › Auto-book lists the classes and the
   server settings.
 - **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
   plan's limit at the studio. A class over your limit shows its drop-in price ("Buy for SEK 220").

@@ -8,6 +8,8 @@ struct AutoBookView: View {
     @State private var serverKey = AutoBookServer.key
     @State private var server: AutoBookServer.Status?
     @State private var working = false
+    @State private var booksForMe = AutoBookServer.booksForMe
+    @State private var showServerFields = !AutoBookServer.isConfigured
 
     var body: some View {
         VStack(spacing: 0) {
@@ -29,28 +31,33 @@ struct AutoBookView: View {
                     }
                     note(AutoBookCopy.howItWorks)
 
-                    header("SERVER (OPTIONAL)")
+                    header("SERVER")
                     VStack(alignment: .leading, spacing: 10) {
-                        TextField("https://bruce-autobook.example.workers.dev", text: $serverURL).textFieldStyle(.roundedBorder)
-                        SecureField("Server key", text: $serverKey).textFieldStyle(.roundedBorder)
-                        HStack {
-                            Button("Save and sync rules") {
-                                AutoBookServer.url = serverURL; AutoBookServer.key = serverKey
-                                run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                        if AutoBookServer.isConfigured {
+                            HStack {
+                                Text("Let the server book for me").font(.system(size: 17, weight: .medium))
+                                Spacer()
+                                BlackToggle(isOn: Binding(get: { booksForMe }, set: { on in
+                                    booksForMe = on
+                                    run { await m.setServerBooksForMe(on); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                                }))
                             }
-                            .disabled(serverURL.isEmpty || serverKey.isEmpty)
-                            if AutoBookServer.isConfigured {
-                                Button(server?.hasSession == true ? "Send current login again" : "Let the server book for me") {
-                                    guard let s = m.session else { return }
-                                    run { try await AutoBookServer.sendSession(s) }
-                                }
-                                if server?.hasSession == true {
-                                    Button("Remove my login") { run { try await AutoBookServer.removeSession() } }
-                                }
-                            }
+                            if let s = server { serverSummary(s) }
                         }
                         if let n = m.autoBookServerNote { Text(n).foregroundStyle(.red).font(.system(size: 14)) }
-                        if let s = server { serverSummary(s) }
+                        DisclosureGroup("Server address and key", isExpanded: $showServerFields) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                TextField(AutoBookServer.defaultURL, text: $serverURL).textFieldStyle(.roundedBorder)
+                                SecureField("Server key", text: $serverKey).textFieldStyle(.roundedBorder)
+                                Button("Save and sync") {
+                                    AutoBookServer.url = serverURL; AutoBookServer.key = serverKey
+                                    run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                                }
+                                .disabled(serverURL.isEmpty || serverKey.isEmpty)
+                            }
+                            .padding(.top, 8)
+                        }
+                        .font(.system(size: 15, weight: .light))
                     }
                     .padding(.horizontal, Theme.gutter).padding(.top, 12)
                     note(AutoBookCopy.server)
@@ -98,7 +105,7 @@ struct AutoBookView: View {
     func run(_ op: @escaping () async throws -> Void) {
         working = true
         Task {
-            do { try await op(); m.flash("Server updated") } catch { m.flash(error.localizedDescription) }
+            do { try await op() } catch { m.flash(error.localizedDescription) }
             await loadServer()
             working = false
         }
@@ -112,7 +119,7 @@ struct ServerError: LocalizedError {
 
 enum AutoBookCopy {
     static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. While this app is running (and the Mac is awake) it books the class the moment it opens. Cancelling an auto-booked class does not rebook it."
-    static let server = "Books even when no device is awake. The server checks every five minutes and every minute shortly before a class opens. It only books after you let it, and it then keeps your Bruce login until you remove it. See server/README.md in the project."
+    static let server = "Books even when no device is awake: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes the login from the server."
 }
 
 /// Class page toggle.

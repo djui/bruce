@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDisplayName</key>
 	<string>$(APP_DISPLAY_NAME)</string>
+	<key>AutoBookServerKey</key>
+	<string>$(AUTOBOOK_SERVER_KEY)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 </dict>
