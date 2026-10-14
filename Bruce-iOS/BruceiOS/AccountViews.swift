@@ -9,6 +9,7 @@ struct MenuSheet: View {
         ("person.crop.circle", "Account", .account),
         ("gearshape", "Settings", .settings),
         ("calendar.badge.clock", "Auto-book", .autoBook),
+        ("target", "Monthly goals", .goals),
         ("person.2", "Invite friends", .invite),
         ("gift", "Redeem voucher", .voucher),
         ("bubble.left.and.bubble.right", "Support", .support),
@@ -19,7 +20,7 @@ struct MenuSheet: View {
                 ForEach(rows.indices, id: \.self) { i in
                     let r = rows[i]
                     Button {
-                        if r.1 == "Account" && !m.isLoggedIn { m.sheets = [.login] } else { m.sheets = [r.2] }
+                        if (r.1 == "Account" || r.1 == "Monthly goals") && !m.isLoggedIn { m.sheets = [.login] } else { m.sheets = [r.2] }
                     } label: {
                         Label {
                             Text(r.1).font(.system(size: 17, weight: .medium)).foregroundStyle(Theme.ink)
@@ -30,6 +31,7 @@ struct MenuSheet: View {
                 }
             }
         }
+        .safeAreaInset(edge: .top) { if m.isLoggedIn { WrappedBanner().padding(.horizontal, Theme.gutter).padding(.top, 4) } }
         .scrollContentBackground(.hidden)
         .sheetChrome("Menu")
     }
@@ -298,6 +300,12 @@ struct StatisticsView: View {
         let shown = (visits ?? []).filter { $0.date.map { BruceDate.calendar.isDate($0, equalTo: month, toGranularity: .month) } == true }
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
+                WrappedBanner().padding(.horizontal, Theme.gutter).padding(.top, 8)
+                NavigationLink(value: SheetRoute.goals) {
+                    InfoRow(title: "\(BruceDate.format(Date(), "MMMM")) goals", subtitle: goalsSubtitle)
+                        .padding(.horizontal, Theme.gutter).padding(.vertical, 12)
+                }
+                .buttonStyle(.plain)
                 VisitBarChart(months: m.monthlyVisits, selection: $month).padding(.top, 12).padding(.bottom, 28)
                 ForEach(groupedByDay(shown, date: \.date).reversed(), id: \.0) { day, list in
                     Section {
@@ -318,12 +326,18 @@ struct StatisticsView: View {
         }
         .sheetChrome("Statistics")
         .task { await load() }
-        .refreshable { await load() }
+        .refreshable { await load(force: true) }
     }
 
-    func load() async {
+    var goalsSubtitle: String {
+        guard !m.goals.isEmpty else { return "Set a monthly goal" }
+        let g = m.goalsMonth()
+        return "\(g.done) of \(g.target) · \(g.status)"
+    }
+
+    func load(force: Bool = false) async {
         async let a: Void = m.loadAggregate()
-        visits = await m.fetchVisitHistory()
+        visits = await m.fetchVisitHistory(force: force)
         await a
     }
 }
