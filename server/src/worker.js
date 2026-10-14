@@ -12,6 +12,15 @@
 // Bruce user (login, rules, push device tokens, state). Optional `ALLOWED_USERS` (comma-separated Bruce user ids)
 // limits who may use the server. Push: APNs token auth (`APNS_KEY` .p8 contents, `APNS_KEY_ID`, `APNS_TEAM_ID`,
 // `APNS_TOPIC` = app bundle id). HTTP API: see ../README.md.
+//
+// Challenges with friends, goal reminders and Wrapped percentiles (tables from ../migrations): a daily cron reads each
+// stored user's booking history and keeps per-day counts in `daily_counts` (plus per-visit detail while the user is
+// in a challenge). The pure logic is in ./insights.js.
+
+import {
+  localDay, addDays, monthStart, visitsFromBookings, dailyRows, fromDetail, goalReminders, challengePeriod, challengeStats,
+  cleanChallenge, cohortValues, percentiles, PERCENTILE_METRICS,
+} from "./insights.js";
 
 const API = "https://api.bruce.app";
 const USER_AGENT = "Bruce/14.4.2_538 (iOS27.0.0; Apple)";
@@ -32,6 +41,16 @@ const WATCH_FAR_EVERY_MIN = 5;
 /// After a failed booking attempt on a free spot the watch waits this long, and is dropped after MAX_WATCH_FAILS.
 const WATCH_RETRY_MS = 5 * 60_000;
 const MAX_WATCH_FAILS = 5;
+/// The daily history refresh (challenges, goal reminders, Wrapped percentiles); must match a cron in wrangler.toml.
+export const DAILY_CRON = "30 2 * * *";
+/// Bruce requests (booking pages of 30) one daily run may spend; users not refreshed today go first. The Workers free
+/// plan allows 50 subrequests per invocation; set DAILY_BUDGET higher on a paid plan.
+const DAILY_BUDGET = 45;
+/// At most this many pages (30 bookings each) for one user's first read (year to date, or since a challenge began).
+const BACKFILL_PAGES = 40;
+const MAX_INVITES = 20;
+const MAX_GOALS = 10;
+const SHARE_URL = "https://djui.github.io/bruce/app/#challenge/";
 
 // MARK: Time in Europe/Stockholm
 
@@ -137,6 +156,45 @@ export async function fetchClass(token, classId) {
 
 export class LoggedOut extends Error {}
 
+const bookingTime = (b) => {
+  for (const t of [b.class?.start_time, b.checked_in_at, b.created_at]) { const ms = t ? Date.parse(t) : NaN; if (Number.isFinite(ms)) return ms; }
+  return NaN;
+};
+
+/**
+ * The user's bookings back to `fromMs`, newest first (the order of the booking list [c7:64]), paged by `next_cursor`
+ * like the apps' Statistics list. Stops at a page that is entirely older than `fromMs`, at the end, or after `maxPages`
+ * (then `complete` is false).
+ */
+export async function fetchBookings(token, userId, fromMs, maxPages = BACKFILL_PAGES) {
+  const bookings = [];
+  let cursor, pages = 0, complete = false;
+  while (pages < maxPages) {
+    const query = [["user_id", String(userId)], ["limit", "30"], ["deleted", "false"], ["include_class", "true"],
+                   ["include_class_studio", "true"], ["include_class_categories", "true"], ["locale", "en"]];
+    if (cursor) query.push(["next_cursor", cursor]);
+    const res = await bruce("GET", "/v52/booking", token, { query });
+    pages++;
+    if (res.status === 401) throw new LoggedOut();
+    if (!res.ok) throw new Error(`bookings HTTP ${res.status}`);
+    const r = await res.json();
+    const page = r.bookings ?? [];
+    bookings.push(...page);
+    cursor = r.metadata?.pagination?.next_cursor;
+    if (!cursor || !page.length || page.every((b) => !(bookingTime(b) >= fromMs))) { complete = true; break; }
+  }
+  return { bookings, pages, complete };
+}
+
+/** The caller's Bruce friends as `{ id, name }` (`GET /v52/friend`, as the apps' Friends tab). */
+export async function fetchFriends(token, userId) {
+  const res = await bruce("GET", "/v52/friend", token, { query: [["user_id", String(userId)], ["include_friend_user", "true"], ["locale", "en"]] });
+  if (res.status === 401) throw new LoggedOut();
+  if (!res.ok) throw new Error(`friends HTTP ${res.status}`);
+  return ((await res.json()).friends ?? []).map((f) => f.friend_user).filter((u) => u?.id)
+    .map((u) => ({ id: u.id, name: String(u.first_name ?? u.display_name ?? "").slice(0, 60) }));
+}
+
 function errorMessage(text, status) {
   try { const e = JSON.parse(text).errors?.[0]; if (e?.message || e?.code) return e.message || e.code; } catch {}
   return `HTTP ${status}`;
@@ -197,7 +255,7 @@ async function apnsToken(env, now = Date.now()) {
 export const apnsConfigured = (env) => !!(env.APNS_KEY && env.APNS_KEY_ID && env.APNS_TEAM_ID && env.APNS_TOPIC);
 
 /** Sends one alert to each device; returns the devices Apple says are gone (to drop them). */
-export async function push(env, devices, title, body, data = {}) {
+export async function push(env, devices, title, body, data = {}, category = "AUTOBOOK_RESULT") {
   if (!apnsConfigured(env) || !devices.length) return [];
   const jwt = await apnsToken(env);
   const gone = [];
@@ -207,7 +265,7 @@ export async function push(env, devices, title, body, data = {}) {
       const res = await fetch(`https://${host}/3/device/${d.token}`, {
         method: "POST",
         headers: { authorization: `bearer ${jwt}`, "apns-topic": env.APNS_TOPIC, "apns-push-type": "alert", "apns-priority": "10" },
-        body: JSON.stringify({ aps: { alert: { title, body }, sound: "default", category: "AUTOBOOK_RESULT" }, ...data }),
+        body: JSON.stringify({ aps: { alert: { title, body }, sound: "default", category }, ...data }),
       });
       if (res.status === 410 || (res.status === 400 && /BadDeviceToken|DeviceTokenNotForTopic/.test(await res.text()))) gone.push(d.token);
       else if (!res.ok) console.log("apns", res.status, await res.text());
@@ -218,18 +276,23 @@ export async function push(env, devices, title, body, data = {}) {
 
 // MARK: Users (D1)
 
-let schemaReady = false;
+// `users` predates migrations and is created on first use; challenges, participants and daily_counts come from
+// ../migrations (npx wrangler d1 migrations apply bruce-autobook --remote).
+const schemaReady = new WeakSet();
 async function db(env) {
-  if (!schemaReady) {
+  if (!schemaReady.has(env.DB)) {
     await env.DB.prepare(`CREATE TABLE IF NOT EXISTS users (
       user_id INTEGER PRIMARY KEY, access_token TEXT NOT NULL, rules TEXT NOT NULL DEFAULT '[]',
       devices TEXT NOT NULL DEFAULT '[]', state TEXT NOT NULL DEFAULT '{}', updated_at TEXT)`).run();
-    schemaReady = true;
+    schemaReady.add(env.DB);
   }
   return env.DB;
 }
 
-const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null, watches: [] });
+// statsFrom/statsAt/detailFrom: how far back daily_counts (and its detail) are filled and when they were last read;
+// goals: goals with "Reminder when behind" (PUT /me/goals); goalPings: when each goal last pushed a reminder.
+const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null, watches: [],
+                            goals: [], goalPings: {}, statsFrom: null, statsAt: null, detailFrom: null });
 
 function rowToUser(r) {
   return { userId: r.user_id, session: { access_token: r.access_token, user_id: r.user_id },
@@ -251,6 +314,32 @@ async function saveUser(env, u) {
 
 async function deleteUser(env, userId) {
   await (await db(env)).prepare("DELETE FROM users WHERE user_id = ?").bind(userId).run();
+}
+
+/** Writes only the history fields of a user's state, so the daily refresh does not undo the minute cron's changes. */
+async function saveStats(env, u) {
+  const s = u.state;
+  await (await db(env)).prepare(`UPDATE users SET state = json_set(state, '$.statsFrom', ?1, '$.statsAt', ?2, '$.detailFrom', ?3,
+      '$.goalPings', json(?4)), devices = ?5 WHERE user_id = ?6`)
+    .bind(s.statsFrom, s.statsAt, s.detailFrom, JSON.stringify(s.goalPings ?? {}), JSON.stringify(u.devices), u.userId).run();
+}
+
+async function inChallenge(env, userId) {
+  return !!(await (await db(env)).prepare("SELECT 1 AS x FROM participants WHERE user_id = ? AND status = 'accepted' LIMIT 1").bind(userId).first());
+}
+
+/**
+ * Keeps a user's row (and login) only while the server has something to do for them: auto-book rules, waitlist
+ * watches, goal reminders, a push device or a challenge. Otherwise the row and the stored history go.
+ */
+async function keepOrDelete(env, u) {
+  if (u.rules.length || u.state.watches.length || u.state.goals?.length || u.devices.length || (await inChallenge(env, u.userId))) {
+    await saveUser(env, u);
+    return true;
+  }
+  await deleteUser(env, u.userId);
+  await (await db(env)).prepare("DELETE FROM daily_counts WHERE user_id = ?").bind(u.userId).run();
+  return false;
 }
 
 // MARK: Cron
@@ -364,6 +453,74 @@ export async function tick(env, now) {
   }));
 }
 
+// MARK: History (daily cron): challenges, goal reminders, Wrapped percentiles
+
+/**
+ * Re-reads one user's booking history into `daily_counts`. The first read goes back to January 1 (or the start of the
+ * user's earliest challenge); later reads only the last few days (a check-in can be recorded late) and, with goal
+ * reminders, the current month. Per-visit detail is stored only while the user is in a challenge. Sends due goal
+ * reminders. Returns the number of Bruce requests made. Throws LoggedOut if Bruce rejects the login.
+ */
+export async function refreshHistory(env, u, now, { maxPages = BACKFILL_PAGES, fetchFn = fetchBookings } = {}) {
+  const DB = await db(env);
+  const s = u.state;
+  const today = localDay(now);
+  const yearStart = `${today.slice(0, 4)}-01-01`;
+  const first = await DB.prepare(`SELECT MIN(c.start_day) AS start FROM challenges c JOIN participants p ON p.challenge_id = c.id
+      WHERE p.user_id = ? AND p.status = 'accepted'`).bind(u.userId).first();
+  const challengeStart = first?.start ?? null;
+  const detail = challengeStart != null;
+  const want = challengeStart && challengeStart < yearStart ? challengeStart : yearStart;
+  const full = !s.statsFrom || s.statsFrom > want || (detail && (!s.detailFrom || s.detailFrom > want));
+  let from = full ? want : [want, addDays(localDay(Date.parse(s.statsAt)), -3)].sort()[1];
+  if (s.goals?.length && monthStart(today) < from) from = monthStart(today);
+  const [y, m, d] = from.split("-").map(Number);
+  const { bookings, pages, complete } = await fetchFn(u.session.access_token, u.userId, localMidnight(y, m, d), maxPages);
+  let visits = visitsFromBookings(bookings, now);
+  // A cut-off read (page budget) only replaces the days it fully covers.
+  if (!complete && visits.length) from = [from, addDays(visits[visits.length - 1].day, 1)].sort()[1];
+  visits = visits.filter((v) => v.day >= from);
+  const insert = DB.prepare(`INSERT INTO daily_counts (user_id, day, visits, classes, dropins, minutes, checkins, checkin_minutes, studios, detail)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)`);
+  await DB.batch([
+    DB.prepare("DELETE FROM daily_counts WHERE user_id = ? AND day >= ?").bind(u.userId, from),
+    ...dailyRows(visits, { detail }).map((r) => insert.bind(u.userId, r.day, r.visits, r.classes, r.dropins, r.minutes, r.checkins,
+                                                            r.checkin_minutes, JSON.stringify(r.studios), r.detail ? JSON.stringify(r.detail) : null)),
+  ]);
+  if (full && complete) { s.statsFrom = want; s.detailFrom = detail ? want : null; }
+  if (!detail) s.detailFrom = null;
+  s.statsAt = new Date(now).toISOString();
+  // Goal reminders: this month's checked-in visits are in `visits` (from <= the 1st when there are goals).
+  s.goalPings = Object.fromEntries(Object.entries(s.goalPings ?? {}).filter(([id]) => s.goals?.some((g) => g.id === id)));
+  for (const r of goalReminders(s.goals, visits, today, s.goalPings, now)) {
+    const gone = await push(env, u.devices, "Behind on your goal", `${r.goal.title}: ${r.count} of ${r.goal.target} so far, ${r.daysLeft} days left.`,
+                            { goalId: r.goal.id }, "GOAL_REMINDER");
+    u.devices = u.devices.filter((x) => !gone.includes(x.token));
+    s.goalPings[r.goal.id] = now;
+  }
+  return pages;
+}
+
+/** The daily cron: refreshes users not yet refreshed today, least recently refreshed first, within DAILY_BUDGET. */
+export async function daily(env, now, { fetchFn = fetchBookings } = {}) {
+  const { results } = await (await db(env)).prepare("SELECT * FROM users").all();
+  const users = results.map(rowToUser).sort((a, b) => String(a.state.statsAt ?? "").localeCompare(String(b.state.statsAt ?? "")));
+  let budget = +(env.DAILY_BUDGET ?? DAILY_BUDGET);
+  const today = localDay(now);
+  for (const u of users) {
+    if (budget <= 0) break;
+    if (u.state.statsAt && localDay(Date.parse(u.state.statsAt)) === today) continue;
+    try {
+      budget -= await refreshHistory(env, u, now, { maxPages: Math.min(budget, BACKFILL_PAGES), fetchFn });
+      await saveStats(env, u);
+    } catch (e) {
+      if (!(e instanceof LoggedOut)) { console.log("history failed:", u.userId, e.message); continue; }
+      await push(env, u.devices, "Brüce paused", "Your Bruce login expired. Open Brüce to continue.");
+      await deleteUser(env, u.userId);
+    }
+  }
+}
+
 // MARK: HTTP API
 
 // The web app calls this server from the browser; it authenticates with headers, not cookies, so any origin is fine.
@@ -386,7 +543,7 @@ async function watchRoute(request, env, classId) {
   if (request.method === "DELETE") {
     u.state.watches = u.state.watches.filter((w) => w.classId !== classId);
     // Keep the row only while it has something to do.
-    if (!u.rules.length && !u.state.watches.length && !u.devices.length) await deleteUser(env, auth.userId); else await saveUser(env, u);
+    await keepOrDelete(env, u);
     return json({ ok: true, watches: u.state.watches.length });
   }
   const existing = u.state.watches.find((w) => w.classId === classId);
@@ -412,7 +569,7 @@ export async function authenticate(request, env) {
   const res = await bruce("GET", `/v52/user/${userId}`, token, { query: [["locale", "en"]] }).catch(() => null);
   if (!res?.ok) return null;
   const body = await res.json().catch(() => null);
-  return body?.user?.id === userId ? { userId, token } : null;
+  return body?.user?.id === userId ? { userId, token, name: String(body.user.first_name ?? body.user.display_name ?? "").slice(0, 60) } : null;
 }
 
 function cleanRules(rules) {
@@ -425,16 +582,221 @@ function cleanDevice(d) {
   return { token: d.token.toLowerCase(), env: d.env === "sandbox" ? "sandbox" : "production" };
 }
 
+// MARK: Challenges, goals and percentiles (HTTP)
+
+const newId = () => {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
+  return [...crypto.getRandomValues(new Uint8Array(12))].map((b) => abc[b % abc.length]).join("");
+};
+
+const rowToChallenge = (r) => ({ id: r.id, ownerId: r.owner_id, title: r.title, metric: r.metric, target: r.target ?? null,
+  category: r.category ?? null, categoryTitle: r.category_title ?? null, start: r.start_day, end: r.end_day,
+  repeatMonthly: !!r.repeat_monthly, createdAt: r.created_at });
+
+async function loadChallenge(DB, id) {
+  const r = await DB.prepare("SELECT * FROM challenges WHERE id = ?").bind(id).first();
+  if (!r) return null;
+  const { results } = await DB.prepare("SELECT user_id, name, status FROM participants WHERE challenge_id = ? ORDER BY joined_at IS NULL, joined_at, user_id").bind(id).all();
+  return { ch: rowToChallenge(r), participants: results.map((p) => ({ userId: p.user_id, name: p.name, status: p.status })) };
+}
+
+function summary({ ch, participants }, userId, today) {
+  const me = participants.find((p) => p.userId === userId);
+  return { ...ch, ownerName: participants.find((p) => p.userId === ch.ownerId)?.name ?? null, myStatus: me?.status ?? null,
+           participants, period: challengePeriod(ch, today), shareUrl: SHARE_URL + ch.id };
+}
+
+/** The caller's row with their current login, created if needed (joining a challenge stores the login, auto-book or not). */
+async function rememberLogin(env, auth) {
+  const u = (await getUser(env, auth.userId)) ?? { userId: auth.userId, rules: [], devices: [], state: emptyState() };
+  u.session = { access_token: auth.token, user_id: auth.userId };
+  await saveUser(env, u);
+  return u;
+}
+
+/** Reads the user's history in the background (after joining a challenge), within the request's own budget. */
+function backfill(env, ctx, u) {
+  ctx.waitUntil(refreshHistory(env, u, Date.now()).then(() => saveStats(env, u)).catch((e) => console.log("backfill failed:", u.userId, e.message)));
+}
+
+async function pushTo(env, userId, title, body, data, category) {
+  const u = await getUser(env, userId);
+  if (!u?.devices.length) return;
+  const gone = await push(env, u.devices, title, body, data, category);
+  if (gone.length) { u.devices = u.devices.filter((d) => !gone.includes(d.token)); await saveUser(env, u); }
+}
+
+function cleanGoals(goals) {
+  return goals.filter((g) => g && g.remind !== false).slice(0, MAX_GOALS).map((g) => ({
+    id: String(g.id ?? "").slice(0, 64), title: String(g.title ?? "Goal").slice(0, 80),
+    category: g.category == null || g.category === "" ? null : String(g.category).slice(0, 40),
+    studioId: Number.isInteger(g.studioId) ? g.studioId : null, target: Math.max(1, Math.min(200, Math.round(+g.target) || 1)),
+  })).filter((g) => g.id);
+}
+
+/** `/challenges...`, `GET /wrapped/percentiles`, `PUT /me/goals` (see ../README.md). */
+async function insightsRoute(request, env, ctx, path) {
+  const auth = await authenticate(request, env);
+  if (!auth) return json({ error: "unauthorized" }, 401);
+  const DB = await db(env);
+  const now = Date.now();
+  const today = localDay(now);
+  const route = `${request.method} ${path.replace(/^\/challenges\/[^/]+/, "/challenges/:id")}`;
+  const id = path.split("/")[2];
+
+  // Keep the stored login current: the daily cron reads history with it.
+  const known = await getUser(env, auth.userId);
+  if (known && known.session.access_token !== auth.token) { known.session.access_token = auth.token; await saveUser(env, known); }
+
+  switch (route) {
+    case "PUT /me/goals": {
+      const body = await request.json().catch(() => ({}));
+      if (!Array.isArray(body.goals)) return json({ error: "goals must be an array" }, 400);
+      const goals = cleanGoals(body.goals);
+      if (!goals.length && !known) return json({ ok: true, goals: 0 });
+      const u = known ?? (await rememberLogin(env, auth));
+      u.state.goals = goals;
+      await keepOrDelete(env, u);
+      if (goals.length && !u.state.statsAt) backfill(env, ctx, u);
+      return json({ ok: true, goals: goals.length });
+    }
+
+    case "GET /wrapped/percentiles": {
+      const q = new URL(request.url).searchParams;
+      const year = /^\d{4}$/.test(q.get("year") ?? "") ? q.get("year") : today.slice(0, 4);
+      const mine = Object.fromEntries(PERCENTILE_METRICS.filter((k) => q.has(k)).map((k) => [k, Number(q.get(k))]));
+      const { results } = await DB.prepare(`SELECT user_id, day, checkins, checkin_minutes, studios FROM daily_counts
+          WHERE day >= ? AND day <= ? AND user_id != ? AND checkins > 0`).bind(`${year}-01-01`, `${year}-12-31`, auth.userId).all();
+      const cohort = cohortValues(results);
+      return json({ year: +year, cohort: cohort.length, percentiles: percentiles(cohort, mine) });
+    }
+
+    case "POST /challenges": {
+      const body = await request.json().catch(() => ({}));
+      const c = cleanChallenge(body, today);
+      if (c.error) return json({ error: c.error }, 400);
+      let friends;
+      try { friends = await fetchFriends(auth.token, auth.userId); } catch { return json({ error: "Bruce is not answering" }, 502); }
+      const wanted = new Set((Array.isArray(body.invite) ? body.invite : []).map(Number));
+      const invitees = friends.filter((f) => wanted.has(f.id) && f.id !== auth.userId).slice(0, MAX_INVITES);
+      const chId = newId();
+      const at = new Date(now).toISOString();
+      await DB.batch([
+        DB.prepare(`INSERT INTO challenges (id, owner_id, title, metric, target, category, category_title, start_day, end_day, repeat_monthly, created_at)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`)
+          .bind(chId, auth.userId, c.title, c.metric, c.target, c.category, c.categoryTitle, c.start, c.end, c.repeatMonthly ? 1 : 0, at),
+        DB.prepare("INSERT INTO participants (challenge_id, user_id, name, status, invited_by, joined_at) VALUES (?, ?, ?, 'accepted', NULL, ?)")
+          .bind(chId, auth.userId, auth.name, at),
+        ...invitees.map((f) => DB.prepare("INSERT INTO participants (challenge_id, user_id, name, status, invited_by, joined_at) VALUES (?, ?, ?, 'invited', ?, NULL)")
+          .bind(chId, f.id, f.name, auth.userId)),
+      ]);
+      const u = await rememberLogin(env, auth);
+      backfill(env, ctx, u);
+      const loaded = await loadChallenge(DB, chId);
+      const label = challengePeriod(loaded.ch, today).label;
+      await Promise.all(invitees.map((f) => pushTo(env, f.id, `${auth.name || "A friend"} challenged you`, `${c.title} · ${label}. Tap to accept.`,
+                                                   { challengeId: chId }, "CHALLENGE_INVITE")));
+      return json({ challenge: summary(loaded, auth.userId, today) }, 201);
+    }
+
+    case "GET /challenges": {
+      const { results } = await DB.prepare(`SELECT c.id FROM challenges c JOIN participants p ON p.challenge_id = c.id
+          WHERE p.user_id = ? ORDER BY c.created_at DESC`).bind(auth.userId).all();
+      const challenges = [];
+      for (const r of results) { const l = await loadChallenge(DB, r.id); if (l) challenges.push(summary(l, auth.userId, today)); }
+      let usesBruce = [];
+      try {
+        const friendIds = new Set((await fetchFriends(auth.token, auth.userId)).map((f) => f.id));
+        const { results: rows } = await DB.prepare("SELECT user_id FROM users").all();
+        usesBruce = rows.map((r) => r.user_id).filter((x) => friendIds.has(x));
+      } catch (e) { console.log("friends failed:", e.message); }
+      return json({ challenges, usesBruce });
+    }
+
+    case "GET /challenges/:id": {
+      const l = await loadChallenge(DB, id);
+      if (!l) return json({ error: "challenge not found" }, 404);
+      if (!l.participants.some((p) => p.userId === auth.userId)) {
+        // Share-link preview: no names besides the owner, no numbers.
+        let joinable = false;
+        try { joinable = (await fetchFriends(auth.token, auth.userId)).some((f) => f.id === l.ch.ownerId); } catch {}
+        const { id: cid, title, metric, target, categoryTitle } = l.ch;
+        return json({ challenge: { id: cid, title, metric, target, categoryTitle, period: challengePeriod(l.ch, today),
+                                   ownerName: summary(l, auth.userId, today).ownerName,
+                                   participantCount: l.participants.filter((p) => p.status === "accepted").length }, joinable });
+      }
+      const accepted = l.participants.filter((p) => p.status === "accepted").map((p) => p.userId);
+      const { results } = await DB.prepare(`SELECT user_id, day, detail FROM daily_counts WHERE day >= ? AND day <= ? AND detail IS NOT NULL
+          AND user_id IN (${accepted.map(() => "?").join(",") || "NULL"})`).bind(l.ch.start, today, ...accepted).all();
+      const visitsByUser = new Map();
+      for (const r of results) {
+        const list = visitsByUser.get(r.user_id) ?? [];
+        for (const d of JSON.parse(r.detail)) list.push(fromDetail(d, r.day));
+        visitsByUser.set(r.user_id, list);
+      }
+      const stats = challengeStats(l.ch, l.participants, visitsByUser, auth.userId, today);
+      return json({ challenge: summary(l, auth.userId, today), leaderboard: stats.leaderboard, months: stats.months,
+                    updatedAt: known?.state.statsAt ?? null });
+    }
+
+    case "POST /challenges/:id/accept":
+    case "POST /challenges/:id/join": {
+      const l = await loadChallenge(DB, id);
+      if (!l) return json({ error: "challenge not found" }, 404);
+      const me = l.participants.find((p) => p.userId === auth.userId);
+      if (!me && route.endsWith("/accept")) return json({ error: "you are not invited to this challenge" }, 403);
+      if (!me) {
+        // Share link: only the owner's Bruce friends may join (friends see each other's visits).
+        let friends;
+        try { friends = await fetchFriends(auth.token, auth.userId); } catch { return json({ error: "Bruce is not answering" }, 502); }
+        if (!friends.some((f) => f.id === l.ch.ownerId)) return json({ error: "only friends of the creator can join" }, 403);
+        if (l.participants.length > MAX_INVITES) return json({ error: "this challenge is full" }, 409);
+      }
+      if (me?.status !== "accepted") {
+        await DB.prepare(`INSERT INTO participants (challenge_id, user_id, name, status, invited_by, joined_at) VALUES (?1, ?2, ?3, 'accepted', NULL, ?4)
+            ON CONFLICT(challenge_id, user_id) DO UPDATE SET status = 'accepted', name = CASE WHEN ?3 = '' THEN name ELSE ?3 END, joined_at = ?4`)
+          .bind(id, auth.userId, auth.name, new Date(now).toISOString()).run();
+        const u = await rememberLogin(env, auth);
+        backfill(env, ctx, u);
+        if (l.ch.ownerId !== auth.userId) {
+          await pushTo(env, l.ch.ownerId, `${auth.name || "A friend"} joined ${l.ch.title}`, "Your challenge has a new rival.", { challengeId: id }, "CHALLENGE_INVITE");
+        }
+      }
+      return json({ ok: true, challenge: summary(await loadChallenge(DB, id), auth.userId, today) });
+    }
+
+    case "POST /challenges/:id/leave": {
+      const l = await loadChallenge(DB, id);
+      if (!l || !l.participants.some((p) => p.userId === auth.userId)) return json({ ok: true });
+      await DB.prepare("DELETE FROM participants WHERE challenge_id = ? AND user_id = ?").bind(id, auth.userId).run();
+      if (!l.participants.some((p) => p.userId !== auth.userId && p.status === "accepted")) {
+        await DB.batch([DB.prepare("DELETE FROM participants WHERE challenge_id = ?").bind(id), DB.prepare("DELETE FROM challenges WHERE id = ?").bind(id)]);
+      }
+      if (!(await inChallenge(env, auth.userId))) {
+        // "Leave anytime; your numbers are deleted": the per-visit detail goes with the last challenge.
+        await DB.prepare("UPDATE daily_counts SET detail = NULL WHERE user_id = ?").bind(auth.userId).run();
+        if (known) { known.state.detailFrom = null; await keepOrDelete(env, known); }
+      }
+      return json({ ok: true });
+    }
+  }
+  return json({ error: "not found" }, 404);
+}
+
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(tick(env, event.scheduledTime));
+    ctx.waitUntil(event.cron === DAILY_CRON ? daily(env, event.scheduledTime) : tick(env, event.scheduledTime));
   },
 
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
     const route = `${request.method} ${pathname.replace(/\/+$/, "")}`;
     if (request.method === "OPTIONS") return json({}, 204);
-    const watch = pathname.replace(/\/+$/, "").match(/^\/me\/waitlist\/(\d+)$/);
+    const path = pathname.replace(/\/+$/, "");
+    if (path === "/challenges" || path.startsWith("/challenges/") || path === "/wrapped/percentiles" || route === "PUT /me/goals") {
+      return insightsRoute(request, env, ctx, path);
+    }
+    const watch = path.match(/^\/me\/waitlist\/(\d+)$/);
     if (watch && (request.method === "PUT" || request.method === "DELETE")) return watchRoute(request, env, +watch[1]);
     if (!["PUT /me", "GET /me", "DELETE /me", "POST /me/test-push"].includes(route)) return json({ error: "not found" }, 404);
     const auth = await authenticate(request, env);
@@ -461,9 +823,19 @@ export default {
                       upcoming: (u?.state.upcoming ?? []).map(opens),
                       waitlist: (u?.state.watches ?? []).map((w) => ({ classId: w.classId, title: w.title, start: new Date(w.start).toISOString() })), log: u?.state.log ?? [], devices: u?.devices.length ?? 0 });
       }
-      case "DELETE /me":
+      case "DELETE /me": {
+        // Auto-book off: forget rules, watches and goals. The login stays while the user is in a challenge.
+        const u = await getUser(env, auth.userId);
+        if (u && (await inChallenge(env, auth.userId))) {
+          u.rules = [];
+          Object.assign(u.state, { upcoming: [], watches: [], goals: [], goalPings: {} });
+          await saveUser(env, u);
+          return json({ ok: true, kept: "challenges" });
+        }
         await deleteUser(env, auth.userId);
+        await (await db(env)).prepare("DELETE FROM daily_counts WHERE user_id = ?").bind(auth.userId).run();
         return json({ ok: true });
+      }
       case "POST /me/test-push": {
         const u = await getUser(env, auth.userId);
         if (!u?.devices.length || !apnsConfigured(env)) return json({ error: "no device or push not configured" }, 409);

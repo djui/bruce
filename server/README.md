@@ -1,4 +1,4 @@
-# Auto-book server
+# Auto-book and challenges server
 
 A small [Cloudflare Worker](https://developers.cloudflare.com/workers/) that books the weekly classes of every app
 user who switches it on, the moment their booking window opens, and tells them with an Apple push. The apps work
@@ -34,6 +34,39 @@ Bruce does not book waitlisters itself: a "Free spot" notification only tells th
 - Each user's watches are separate and use that user's own login. Web users have no push device, so they see the
   result in My classes.
 
+## Challenges with friends
+
+Bruce does not show friends' past visits, so challenges need the server: each participant's row holds their login,
+and a **daily cron** (02:30 UTC) reads every stored user's `GET /v52/booking` history.
+
+- A challenge has a goal (most classes, most visits, most minutes, or "everyone hits N"), a period (fixed days, or
+  repeating month after month), optionally one category (a Bruce category id, or `gym` for drop-ins), and friends.
+- **Everything counts**, deduplicated: class bookings (checked in or not, once the class has started), check-ins and
+  drop-in gym visits. The same class counts once; a drop-in at the same studio within 3 hours of a class there is
+  that class's door check-in; two drop-ins at one studio on one day are one visit. A drop-in counts 60 minutes.
+- Only the creator's Bruce friends can be invited (checked with `GET /v52/friend`), and **each friend accepts each
+  challenge separately**. Nothing of a friend is read or shown before they accept. Invitees with Brüce on their
+  iPhone get a push; anyone can be sent the share link `https://djui.github.io/bruce/app/#challenge/<id>`, which
+  shows a preview and lets friends of the creator join.
+- **Friends see everything** in a challenge they share: totals, class types and studios, recent visits and how many
+  classes they did together, plus monthly stats.
+- Leaving deletes your per-visit detail (if you are in no other challenge). A challenge without accepted
+  participants is deleted.
+
+The history is kept per user and day in `daily_counts` (`server/migrations/0001_challenges.sql`): counts for every
+stored user, and per-visit detail (class, studio, categories) only while they are in a challenge. The first read
+goes back to January 1 (or the start of the earliest challenge); later reads cover only the last few days. One daily
+run spends at most `DAILY_BUDGET` (45) Bruce requests, least recently refreshed users first, so on the free plan a
+few dozen users are refreshed per day.
+
+**Goal reminders** (optional): the apps keep monthly goals on the device; goals with "Reminder when behind" are sent
+with `PUT /me/goals`, and the daily run pushes "Behind on your goal" from day 8 of the month when checked-in visits
+are behind pace, at most once a week per goal.
+
+**Wrapped percentiles**: `GET /wrapped/percentiles` compares the year-to-date numbers the app computed with the
+other stored users (checked-in visits, minutes, studios, longest weekly streak) and returns only percentiles, and
+nothing when fewer than 5 other users have data.
+
 ## Users and what is stored
 
 There is no shared key. The app signs in with the user's own Bruce login (`X-Access-Token` and `X-User-Id`
@@ -43,8 +76,10 @@ changes their own data. Set `ALLOWED_USERS` (comma-separated Bruce user ids) to 
 One row per user in a D1 table: the Bruce access token (to book with), the rules (studio, weekday, time, class
 series), push device tokens, upcoming classes and a short log. Bruce's server does not expire access tokens in
 practice (see API.md "Refresh"), so whoever can read the database can use those accounts until they log out of
-Bruce. Switching "Let the server book for me" off in the app deletes the user's row; a 401 from Bruce deletes it
-too (and pushes "Auto-book paused"; the app sends the new login on its next start).
+Bruce. Switching "Let the server book for me" off in the app deletes the user's row, unless they are in a challenge:
+then only the rules, watches and goals go and the login stays (joining a challenge stores it, auto-book on or off).
+A 401 from Bruce deletes the row too (and pushes "Auto-book paused"; the app sends the new login on its next start).
+Challenge, participant and history tables: see "Challenges with friends" above.
 
 ## Set up
 
@@ -55,12 +90,15 @@ npx wrangler d1 create bruce-autobook          # paste the database_id into wran
 npx wrangler secret put APNS_KEY               # contents of the APNs AuthKey_XXXXXXXXXX.p8
 npx wrangler secret put APNS_KEY_ID            # its Key ID
 npx wrangler secret put APNS_TEAM_ID           # Apple team id
+npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts
 npx wrangler deploy
 ```
 
 `APNS_TOPIC` (the app's bundle id, `net.dauernheim.bruce`) is set in `wrangler.toml`. The APNs key comes from
 developer.apple.com › Certificates, IDs & Profiles › Keys (enable "Apple Push Notifications service"); without it
-everything works except the push. The table is created on first use.
+everything works except the push. The `users` table is created on first use; the other tables come from
+`migrations/` (apply them before deploying a version that uses them). The cron triggers in `wrangler.toml` are every
+minute (auto-book) and daily at 02:30 UTC (history; keep it equal to `DAILY_CRON` in `src/worker.js`).
 
 The apps have the author's worker address built in (`AutoBookServer.defaultURL` in `Shared/BruceCore/AutoBook.swift`);
 change it for your own deployment, or override it in the app (Menu › Auto-book › Server address). With the
@@ -77,14 +115,24 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 |---|---|---|
 | `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"}}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`) |
 | `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices}` |
-| `DELETE /me` | | Deletes the user's row |
+| `DELETE /me` | | Deletes the user's row and history; in a challenge it keeps the login and clears rules, watches and goals |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |
 | `POST /me/test-push` | | Sends a test push to the user's devices |
+| `PUT /me/goals` | `{"goals":[{"id","title","category","studioId","target","remind"}]}` | Stores the goals with `remind` for "Behind on your goal" pushes (max 10; `[]` clears) |
+| `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366), invites friends by push → 201 `{challenge}` |
+| `GET /challenges` | | `{challenges:[…], usesBruce:[userId]}`: the caller's challenges and invites, and which friends use the server |
+| `GET /challenges/<id>` | | Participants: `{challenge, leaderboard:[{userId,name,status,rank,score,visits,classes,dropins,minutes,studios,topStudio,topClass,categories,together,lastVisit,done,daily,recent}], months:[{month,label,entries}], updatedAt}`; others: a preview `{challenge, joinable}` |
+| `POST /challenges/<id>/accept` | | Accepts an invite; stores the login and reads the history |
+| `POST /challenges/<id>/join` | | Joins from the share link (friends of the creator only, else 403) |
+| `POST /challenges/<id>/leave` | | Leaves; deletes the per-visit detail when in no other challenge |
+| `GET /wrapped/percentiles?year=&visits=&minutes=&studios=&streak=` | | `{year, cohort, percentiles:{visits,…}}` (0-100 = share of other users below), `percentiles: null` under 5 users |
 
 ## Develop
 
 ```sh
-npm test            # node --test, no dependencies
+npm test            # node --test, no dependencies (D1 is stood in by node:sqlite with the real migrations)
+npx wrangler d1 migrations apply bruce-autobook --local
 npx wrangler dev --test-scheduled   # then curl "http://localhost:8787/__scheduled?cron=*+*+*+*+*"
+                                    # daily run: curl "http://localhost:8787/__scheduled?cron=30+2+*+*+*"
 ```
