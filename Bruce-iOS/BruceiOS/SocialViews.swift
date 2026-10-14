@@ -3,6 +3,8 @@ import SwiftUI
 /// Friends' upcoming classes: GET /v52/booking?friends=true, joined with GET /v52/friend.
 struct FriendsView: View {
     @Environment(AppModel.self) var m
+    /// Classes · Challenges · Friends.
+    @State private var segment = 0
 
     var items: [(BruceAPI.FriendBooking, BruceAPI.UserLite?, BruceAPI.BruceClass)] {
         m.friendsBookings.compactMap { b in
@@ -16,32 +18,82 @@ struct FriendsView: View {
         ScrollView {
             if !m.isLoggedIn {
                 EmptyState(system: "person.2", text: "Log in to see what your friends are training.")
-            } else if items.isEmpty {
-                EmptyState(system: "person.2", text: "Your friends' upcoming classes will show up here.")
             } else {
-                VStack(alignment: .leading, spacing: 0) {
-                    friendStrip
-                    LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
-                        ForEach(groupedByDay(items, date: { $0.2.start }), id: \.0) { day, list in
-                            Section(header: SectionHeaderBar(text: BruceDate.dayHeader(day))) {
-                                ForEach(list, id: \.0.id) { _, u, c in
-                                    NavigationLink(value: Route.classDetail(c.id)) {
-                                        ClassRow(c: c, showMenu: false, showFriends: false,
-                                                 trailing: AnyView(Avatar(fileId: u?.photo, initials: u?.initials ?? "?", size: 40)))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
+                LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                        switch segment {
+                        case 1: ChallengesSegment()
+                        case 2: friendList
+                        default: classes
                         }
+                    } header: {
+                        UnderlineTabs(titles: ["Classes", "Challenges", "Friends"],
+                                      badges: [items.isEmpty ? nil : String(items.count),
+                                               m.pendingChallengeInvites.isEmpty ? nil : String(m.pendingChallengeInvites.count), nil],
+                                      selection: $segment)
+                        .padding(.top, 8)
+                        .background(Theme.background)
                     }
                 }
             }
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .bruceTitle("Friends")
-        .toolbar { MainToolbarButtons() }
-        .task { await m.loadSocial() }
-        .refreshable { await m.loadSocial() }
+        .toolbar {
+            // The tab's own action goes before the shared Notifications/Menu capsule (see MainToolbarButtons).
+            if m.isLoggedIn {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { m.present(.newChallenge) } label: { Image(systemName: "plus") }.accessibilityLabel("New challenge")
+                }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            }
+            MainToolbarButtons()
+        }
+        .task { await m.loadSocial(); await m.loadChallenges() }
+        .refreshable { await m.loadSocial(); await m.loadChallenges() }
+        .onAppear { if m.demoFriendsTab != 0 { segment = m.demoFriendsTab; m.demoFriendsTab = 0 } }
+    }
+
+    @ViewBuilder var classes: some View {
+        if items.isEmpty {
+            EmptyState(system: "person.2", text: "Your friends' upcoming classes will show up here.")
+        } else {
+            friendStrip
+            ForEach(groupedByDay(items, date: { $0.2.start }), id: \.0) { day, list in
+                SectionHeaderBar(text: BruceDate.dayHeader(day))
+                ForEach(list, id: \.0.id) { _, u, c in
+                    NavigationLink(value: Route.classDetail(c.id)) {
+                        ClassRow(c: c, showMenu: false, showFriends: false,
+                                 trailing: AnyView(Avatar(fileId: u?.photo, initials: u?.initials ?? "?", size: 40)))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+    }
+
+    /// Bruce friends; "Uses Brüce" when they have a row on our server (they can join challenges).
+    @ViewBuilder var friendList: some View {
+        if m.friends.isEmpty {
+            EmptyState(system: "person.2", text: "Add friends in the Bruce app to see them here.")
+        } else {
+            VStack(spacing: 0) {
+                ForEach(m.friends) { f in
+                    HStack(spacing: 14) {
+                        Avatar(fileId: f.friendUser?.photo, initials: f.friendUser?.initials ?? "", size: 44)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(f.friendUser?.fullName ?? "").font(.system(size: 16, weight: .semibold))
+                            if let id = f.friendUser?.id, m.usesBruce.contains(id) {
+                                Text("Uses Brüce").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                            }
+                        }
+                        Spacer()
+                    }
+                    .padding(.horizontal, Theme.gutter).padding(.vertical, 10)
+                }
+            }
+            .padding(.top, 8)
+        }
     }
 
     var friendStrip: some View {
@@ -66,6 +118,7 @@ struct MyClassesView: View {
 
     var body: some View {
         ScrollView {
+            if m.isLoggedIn { GoalsCompactCard() }
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
                     switch tab {

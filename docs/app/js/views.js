@@ -5,6 +5,9 @@ import * as St from './store.js';
 import { S } from './store.js';
 import { classRow, classList, photoCard, underlineTabs, chip, empty, loading, sectionHeader, avatar, toast, makeMap } from './ui.js';
 import { openNotifications, openMenu, openReview, openScanner, openTicket, checkInFlow } from './sheets.js';
+import { forYouHTML, forYouClick } from './foryou.js';
+import { challengesHTML, challengesClick, openNewChallenge, loadIfAllowed } from './challenges.js';
+import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
  *  Menu, which end every tab's header (on wide screens they live in the sidebar instead). */
@@ -40,6 +43,7 @@ export const Home = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
     el.innerHTML = header('Home') + '<div id="home-body">' + loading() + '</div>';
+    el.addEventListener('click', (e) => forYouClick(e, (id) => link('home', 'class', id)));
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
   },
   refresh() {
@@ -59,6 +63,7 @@ export const Home = {
       html += '<h2 class="sec-title">Next up</h2><div class="list">' + classRow(next.class, link('home', 'class', next.class.id), { meta: dayHeader(next.class.start_time), selected: sel && sel.id === next.class.id }) + '</div>' +
         (open ? '<button class="btn lime" data-checkin="' + next.class.studio_id + '">' + icon('checkSeal') + ' Check in at ' + esc(open.t.name) + '</button>' : '');
     }
+    html += forYouHTML((id) => link('home', 'class', id), sel);
     const spot = sec('SPOTLIGHT');
     if (spot && spot.items.length) {
       html += '<h2 class="sec-title">' + esc((spot.title || 'Spotlight').toUpperCase()) + '</h2><div class="hscroll spotlight">' + spot.items.map((it) => photoCard({
@@ -296,8 +301,16 @@ function targetRow(t) {
 export const Friends = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
-    el.innerHTML = header('Friends') + '<div id="fr-body">' + loading() + '</div>';
+    this.tab = ctx.params.get('tab') || this.tab || 'classes';
+    el.innerHTML = header('Friends', '<span id="fr-head"></span>') + '<div id="fr-tabs" class="sticky-tools"></div><div id="fr-body">' + loading() + '</div>';
+    el.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-ftab]');
+      if (t) { this.tab = t.dataset.ftab; const d = this.ctx.detail; location.hash = '#/friends' + (d && d.kind !== 'challenge' ? '/' + d.kind + '/' + d.id : '') + '?tab=' + this.tab; return; }
+      if (e.target.closest('[data-fnew]')) { openNewChallenge(); return; }
+      challengesClick(e, () => this.refresh());
+    });
     St.loadSocial().then(() => this.refresh());
+    loadIfAllowed();
     this.refresh();
   },
   refresh() {
@@ -306,13 +319,29 @@ export const Friends = {
     const sel = this.ctx.detail;
     const items = S.friendsBookings.filter((x) => x.class && new Date(x.class.start_time) > Date.now() - 3600000)
       .sort((a, c) => a.class.start_time.localeCompare(c.class.start_time));
+    const pending = St.pendingInvites().length;
+    $('#fr-head', this.el).innerHTML = this.tab === 'challenges' ? '<button class="glass-btn" data-fnew aria-label="New challenge">' + icon('plus') + '</button>' : '';
+    $('#fr-tabs', this.el).innerHTML = underlineTabs([{ key: 'classes', title: 'Classes', badge: items.length || '' },
+      { key: 'challenges', title: 'Challenges', badge: pending || '' }, { key: 'friends', title: 'Friends', badge: S.friends.length || '' }], this.tab, 'data-ftab');
+    const tabs = $('#fr-tabs .utabs', this.el);
+    if (tabs && pending) tabs.querySelector('[data-ftab="challenges"] .count').classList.add('alert');
+    if (this.tab === 'challenges') { b.innerHTML = challengesHTML(sel && sel.kind === 'challenge' ? sel : null); return; }
+    if (this.tab === 'friends') {
+      const uses = new Set((S.challenges && S.challenges.usesBruce) || []);
+      b.innerHTML = S.friends.length ? '<div class="list">' + S.friends.map((f) => {
+        const u = f.friend_user || {};
+        return '<div class="trow">' + avatar(u, 44) + '<div class="grow"><b>' + esc([u.first_name, u.last_name].filter(Boolean).join(' ')) + '</b>' +
+          (S.challenges ? '<p class="muted">' + (uses.has(u.id) ? 'Uses Brüce' : 'Not on Brüce yet') + '</p>' : '') + '</div></div>';
+      }).join('') + '</div><p class="muted small note">Friends come from the Bruce app. Challenge them from the Challenges tab.</p>' : empty('friends', 'Add friends in the Bruce app to see what they train.');
+      return;
+    }
     let html = '';
     if (S.friends.length) {
       html += '<div class="hscroll friends">' + S.friends.map((f) => '<div class="friend">' + avatar(f.friend_user, 58) + '<span>' + esc((f.friend_user || {}).first_name || '') + '</span></div>').join('') + '</div>';
     }
     if (!items.length) { b.innerHTML = html + empty('friends', S.friends.length ? "Your friends' upcoming classes will show up here." : 'Add friends in the Bruce app to see what they train.'); return; }
     html += byDay(items, (x) => x.class.start_time).map((g) => sectionHeader(dayHeader(g.iso)) + g.items.map((x) =>
-      classRow(x.class, link('friends', 'class', x.class.id), { friends: false, selected: sel && sel.id === x.class.id, trailing: avatar(St.friendUser(x.user_id), 40) })).join('')).join('');
+      classRow(x.class, link('friends', 'class', x.class.id) + '?tab=classes', { friends: false, selected: sel && sel.id === x.class.id, trailing: avatar(St.friendUser(x.user_id), 40) })).join('')).join('');
     b.innerHTML = html;
   },
 };
@@ -324,7 +353,10 @@ export const Mine = {
     this.el = el; this.ctx = ctx;
     this.tab = ctx.params.get('tab') || this.tab || 'bookings';
     el.innerHTML = header('My classes', '<span class="glass-pill count-pill" id="mine-count"></span>') + '<div id="mine-tabs" class="sticky-tools"></div><div id="mine-body">' + loading() + '</div>';
-    el.addEventListener('click', (e) => { const t = e.target.closest('[data-mtab]'); if (t) { this.tab = t.dataset.mtab; this.refresh(); } });
+    el.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-mtab]'); if (t) { this.tab = t.dataset.mtab; this.refresh(); return; }
+      if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); }
+    });
     St.loadMine().then(() => this.refresh()).catch((e) => toast(e.message));
     St.loadReviewable();
     this.refresh();
@@ -344,7 +376,7 @@ export const Mine = {
     const list = { bookings, waitlist: waits, bookmarks: marks }[this.tab].sort((a, c) => a.start_time.localeCompare(c.start_time));
     const msg = { bookings: ['mine', 'You have no bookings.'], waitlist: ['bell', "You're not on any waitlists."], bookmarks: ['bookmark', 'No bookmarked classes yet.'] }[this.tab];
     const rv = this.tab === 'bookings' ? St.pendingReviews() : [];
-    b.innerHTML = rv.map((r) => '<div class="card prompt">' + icon('star') + '<div class="grow"><b>Rate ' + esc(r.class.title) + '</b><p class="muted">' + esc(dayHeader(r.class.start_time)) + '</p></div><button class="btn lime sm" data-review="' + r.id + '">Rate</button></div>').join('') +
+    b.innerHTML = (this.tab === 'bookings' ? goalsCardHTML() : '') + rv.map((r) => '<div class="card prompt">' + icon('star') + '<div class="grow"><b>Rate ' + esc(r.class.title) + '</b><p class="muted">' + esc(dayHeader(r.class.start_time)) + '</p></div><button class="btn lime sm" data-review="' + r.id + '">Rate</button></div>').join('') +
       (list.length ? classList(list, (c) => link('mine', 'class', c.id) + '?tab=' + this.tab, { selectedId: sel && sel.id }) : empty(msg[0], msg[1]));
   },
 };

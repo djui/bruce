@@ -33,7 +33,10 @@ This is the real app; demo mode exists only for screenshots and tests and is nev
 Launch argument `-BRUCE_DEMO 1` (also in the scheme, disabled) or env `BRUCE_DEMO=1`. No API calls, no remote images, no map tiles; book, cancel and check-in only
 change local state. `BRUCE_SCREEN=<name>` opens a screen directly (same names as macOS: `explore`, `classes`,
 `detail`, `studio`, `checkin`, `myclasses`, `friends`, `notifications`, `menu`, `account`, `settings`,
-`rules`, `booked`, `filter`, `search`, `welcome`, `parakey`, …):
+`rules`, `booked`, `filter`, `search`, `welcome`, `parakey`, …). The insight features add `foryou` (all picks),
+`places`, `editplace`, `goals`, `goalscard` (My classes with the goals card), `newgoal`, `challenges` (Friends ›
+Challenges), `challenge`, `challengemember` (a participant's detail), `newchallenge`, `wrapped` and `wrappedshare`
+(the last story card; `BRUCE_WRAPPED_CARD=<n>` starts Wrapped at card n); demo mode fakes the server's challenge and percentile answers:
 
 ```sh
 xcrun simctl install booted build/…/BruceiOS.app
@@ -92,6 +95,25 @@ never stores the password. No personal data is hard-coded.
     so it shows everywhere.
   - Typing switches to Explore and overlays the results. ✕ clears the search and returns to the
     originating page, with its state intact.
+
+## For you, goals, challenges, Wrapped
+
+- **For you** (Home): the next ~2 days of classes at the studios you visit most and the ones near your places
+  (`loadStudioClasses`, a few requests), ranked on the phone by `Shared/BruceCore/Recommendations.swift`
+  (`Recommender`, pure): your history from `GET /v52/booking` (titles, categories, studios, time slots), friends'
+  bookings, and travel time from your places. The straight-line distance with per-mode speeds prefilters; MapKit
+  `MKDirections.calculateETA` refines the closest ~12 studios (`CommuteETA`, cached for a week; transit falls back to the
+  estimate). Reasons show as chips. **Settings › Places & commute** stores home, work (with workdays), the commute mode,
+  max detour, the work-time window and "Use friends' bookings" on the device only (UserDefaults); addresses come from
+  `MKLocalSearchCompleter` or the current location.
+- **Monthly goals** (`Goals.swift`): per category and month, counted from checked-in visits this month (deduped with
+  the contract's visit rule, `VisitDedupe`). A card on My classes, the goals page under Statistics and the Menu.
+  "Reminder when behind" sends the reminding goals to our server (`PUT /me/goals`) only while the auto-book server is on.
+- **Challenges** (`Challenges.swift`): Friends › Challenges, from our server (`/challenges`, see the project's
+  server contract). Invites can be accepted or declined; a push with `challengeId` opens the challenge. Joining stores
+  the Bruce login on our server; with the auto-book server off the app explains that once first.
+- **Wrapped**: the year so far as full-screen story cards (`Wrapped.swift`, `WrappedViews.swift`), from Statistics or
+  the Menu.
 
 ## Check-in
 

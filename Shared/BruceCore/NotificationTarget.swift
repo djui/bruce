@@ -82,3 +82,31 @@ extension AppModel {
         return studios.first { $0.name.lowercased() == tail }
     }
 }
+
+/// Where a push from our server leads: a challenge invite (`CHALLENGE_INVITE`, payload `challengeId`) or a goal
+/// reminder (`GOAL_REMINDER`, payload `goalId`).
+enum PushTarget: Equatable {
+    case challenge(String)
+    case goals
+
+    init?(userInfo: [AnyHashable: Any]) {
+        if let id = userInfo["challengeId"] as? String, !id.isEmpty { self = .challenge(id); return }
+        if userInfo["goalId"] != nil { self = .goals; return }
+        return nil
+    }
+}
+
+extension AppModel {
+    func open(_ target: PushTarget) {
+        dismissSheets()
+        switch target {
+        case .challenge(let id):
+            tab = .friends
+            stacks[.friends] = [.challenge(id)]
+            Task { await loadChallenges(); await loadChallenge(id) }
+        case .goals:
+            tab = .myClasses
+            stacks[.myClasses] = [.goals]
+        }
+    }
+}

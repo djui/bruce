@@ -122,6 +122,7 @@ export async function renderClass(el, id, ctx) {
   function watchToggle(c, standby, started, booking) {
     const full = c.available_spots != null && c.available_spots <= 0;
     if (started || booking || !(full || standby || S.watches.has(c.id))) return '';
+    if (!St.serverOn() && !S.watches.has(c.id)) return '';   // our server is switched off in Settings
     return '<div class="card"><label class="toggle"><span>Book when a spot opens<small class="muted">' +
       (standby ? 'The auto-book server books it the moment a waitlist spot is free. Open My classes to see the result.' : 'Joins the waitlist, then the auto-book server books it the moment a spot is free.') +
       '</small></span><input type="checkbox" data-watch' + (S.watches.has(c.id) ? ' checked' : '') + '><i></i></label></div>';

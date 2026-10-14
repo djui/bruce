@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { d1 as memoryDB } from "./d1.js";
 import worker, { localParts, localMidnight, matches, opensAt, scanPlan, book, tick, tickUser, watchWaitlists, LoggedOut } from "../src/worker.js";
 
 const rule = { id: "r1", studioId: 6614, masterId: 77, title: "Reformer", weekday: 3, minuteOfDay: 18 * 60 };
@@ -56,24 +57,6 @@ test("book retries until the window opens", async () => {
   assert.equal(JSON.parse(calls[0].body).class_id, 1);
   assert.equal(calls[0].headers["X-Access-Token"], "t");
 });
-
-// A tiny in-memory stand-in for the D1 binding, enough for the queries the worker makes.
-function memoryDB(rows = []) {
-  const t = new Map(rows.map((r) => [r.user_id, { rules: "[]", devices: "[]", state: "{}", ...r }]));
-  return { t, prepare(sql) {
-    let args = [];
-    const stmt = {
-      bind(...a) { args = a; return stmt; },
-      async run() {
-        if (sql.startsWith("INSERT")) t.set(args[0], { user_id: args[0], access_token: args[1], rules: args[2], devices: args[3], state: args[4] });
-        if (sql.startsWith("DELETE")) t.delete(args[0]);
-      },
-      async first() { return t.get(args[0]) ?? null; },
-      async all() { return { results: [...t.values()] }; },
-    };
-    return stmt;
-  } };
-}
 
 const userRow = (state, extra = {}) => ({ user_id: 42, access_token: "t", rules: JSON.stringify([rule]), state: JSON.stringify(state), ...extra });
 const upcoming = (opens) => [{ classId: 1, title: "Reformer", start: Date.parse(cls.start_time), opens }];

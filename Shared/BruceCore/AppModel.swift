@@ -16,6 +16,12 @@ enum Route: Hashable {
     case studio(Int)
     case categories
     case category(Int)
+    /// Home "For you": all recommended classes (Recommendations.swift).
+    case forYou
+    /// Monthly goals (Goals.swift), from My classes.
+    case goals
+    /// A challenge with friends by server id (Challenges.swift).
+    case challenge(String)
 }
 
 enum SheetRoute: Hashable {
@@ -29,6 +35,12 @@ enum SheetRoute: Hashable {
     case autoBook
     /// "Rate class" dialog for a booking id (POST /v52/review [c8:467]).
     case review(Int)
+    /// Settings › Places & commute (Recommendations.swift), and editing one place (nil = add).
+    case places, editPlace(UUID?)
+    /// Monthly goals (from Statistics) and the goal editor (nil = new goal).
+    case goals, editGoal(UUID?)
+    /// New challenge with friends (Challenges.swift).
+    case newChallenge
 }
 
 @MainActor
@@ -69,6 +81,10 @@ final class AppModel {
     var demoCategoryTab = 0
     var demoStudioTab = 0
     var demoMyClassesTab = 0
+    var demoFriendsTab = 0
+    /// Demo: participant detail to open on the challenge page / Wrapped card to start at (99 = the last).
+    var demoChallengeMember: Int?
+    var demoWrappedCard = 0
 
     // Session & safety
     var session: Session? = AppModel.demo ? nil : TokenStore.resolve()
@@ -181,6 +197,29 @@ final class AppModel {
     var social: Bool?
     var payments: [BruceAPI.Payment] = []
     var aggregate: [BruceAPI.DayCount] = []
+    /// Checked-in visit history (Statistics.swift `fetchVisitHistory`), shared by Statistics, goals,
+    /// recommendations and Wrapped. nil until first read.
+    var visitHistory: [BruceAPI.Visit]?
+    @ObservationIgnored var visitHistoryLoadedAt = Date.distantPast
+    @ObservationIgnored var visitHistoryTask: Task<[BruceAPI.Visit], Never>?
+    /// Home "For you" (Recommendations.swift): saved places and commute settings (device only) and the ranked picks.
+    var recSettings: RecSettings = AppModel.demo ? .demo : RecSettings.load()
+    var recommendations: [Recommendation] = []
+    var recommendationsLoading = false
+    @ObservationIgnored var recommendTask: Task<Void, Never>?
+    /// MapKit travel minutes by `Recommender.travelKey` (iOS), kept for the app's lifetime.
+    @ObservationIgnored var travelOverrides: [String: Int] = [:]
+    /// Monthly goals (Goals.swift), device only.
+    var goals: [MonthlyGoal] = AppModel.demo ? MonthlyGoal.demo : MonthlyGoal.load()
+    /// Challenges with friends (Challenges.swift), from the auto-book server.
+    var challenges: [ChallengeSummary] = []
+    var challengeDetails: [String: ChallengeDetail] = [:]
+    /// Bruce friends who have a row on our server ("Uses Brüce").
+    var usesBruce: Set<Int> = []
+    var challengesError: String?
+    var challengesLoaded = false
+    /// Brüce Wrapped full-screen story (Wrapped.swift).
+    var wrappedOpen = false
     /// tier code -> (annual, monthly) SEK/month from GET /v52/membership/info (öre / 100).
     var planPrices: [String: (annual: Int, monthly: Int)] = [:]
     var membershipCommitmentMonths: Int? = nil
@@ -602,6 +641,7 @@ final class AppModel {
         } else if AppModel.demo { demoLoggedOut = true }
         bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
+        visitHistory = nil; recommendations = []; challenges = []; challengeDetails = [:]; usesBruce = []; challengesLoaded = false
         Task { await refreshAutoBook() }   // logged out: stops the booker and clears its notifications
         dismissSheets()
     }
@@ -624,6 +664,7 @@ final class AppModel {
         sneakPeek = false
         bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
+        visitHistory = nil; recommendations = []; challenges = []; challengeDetails = [:]; usesBruce = []; challengesLoaded = false
         Task { await refreshAutoBook() }   // logged out: stops the booker and clears its notifications
         resetLoadedData()
         status = "Your session expired. Please log in again."

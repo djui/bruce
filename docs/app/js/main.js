@@ -1,12 +1,15 @@
 // Entry point: login, layout (tab bar on phones, sidebar and side-by-side panes on wide screens) and the router.
-// Routes: #/<tab>[/class|studio/<id>][?query], tab = home | explore | checkin | friends | mine.
-import { $, $$, esc, icon, setZone } from './util.js';
+// Routes: #/<tab>[/class|studio|challenge/<id>][?query], tab = home | explore | checkin | friends | mine.
+// Share links: #challenge/<id> opens the challenge in Friends (after logging in when needed).
+import { $, $$, esc, icon, setZone, ls } from './util.js';
 import { Bruce, session } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import { Home, Explore, CheckIn, Friends, Mine, wireCommon, placeholderPane } from './views.js';
 import { renderClass, renderStudio } from './detail.js';
 import { toast, fitTitle } from './ui.js';
+import { renderChallenge } from './challenges.js';
+import { challengeIdFromHash, challengeRoute } from './links.js';
 import { openNotifications, openMenu } from './sheets.js';
 
 const TABS = [
@@ -24,7 +27,8 @@ function parse() {
   const [path, query] = h.split('?');
   const parts = path.split('/').filter(Boolean);
   const tab = TABS.some((t) => t[0] === parts[0]) ? parts[0] : null;
-  const detail = parts[1] === 'class' || parts[1] === 'studio' ? { kind: parts[1], id: +parts[2] } : null;
+  const detail = parts[1] === 'class' || parts[1] === 'studio' ? { kind: parts[1], id: +parts[2] }
+    : parts[1] === 'challenge' && parts[2] ? { kind: 'challenge', id: decodeURIComponent(parts[2]) } : null;
   return { tab, detail, query: query || '', params: new URLSearchParams(query || '') };
 }
 
@@ -45,6 +49,11 @@ function badges() {
 }
 
 function route() {
+  const shared = challengeIdFromHash(location.hash);
+  if (shared) {
+    if (!S.auth) { ls.set('bruce.pendingChallenge', shared); renderLogin(); return; }
+    location.replace(challengeRoute(shared)); return;
+  }
   if (!S.auth) { renderLogin(); return; }
   document.body.classList.remove('logged-out');
   const r = parse();
@@ -81,6 +90,7 @@ function route() {
     if (!isWide() && r.detail) window.scrollTo(0, 0);
     if (r.detail && r.detail.kind === 'class') renderClass(el, r.detail.id, ctx);
     else if (r.detail && r.detail.kind === 'studio') renderStudio(el, r.detail.id, ctx);
+    else if (r.detail && r.detail.kind === 'challenge') renderChallenge(el, r.detail.id, ctx);
     else if (isWide()) placeholderPane(el, r.tab);
   }
   current = Object.assign(current, { tab: r.tab, query: r.query, detail: r.detail });
@@ -97,6 +107,7 @@ function renderLogin() {
   main.innerHTML = '<section class="login">' +
     '<img class="login-icon" src="icon-rounded.png" width="96" height="96" alt="">' +
     '<h1 class="screen-title">BRÜCE</h1><p class="tagline">BOOK. TRAIN. CHECK IN.</p>' +
+    (ls.get('bruce.pendingChallenge', null) ? '<div class="card notice-card">' + icon('trophy') + '<p><b>A friend challenged you.</b> Log in with your Bruce account first, then you continue to the challenge.</p></div>' : '') +
     '<form id="login-form" class="card form" autocomplete="on">' +
     '<label><span>Email</span><input type="email" name="email" autocomplete="username" required></label>' +
     '<label><span>Password</span><input type="password" name="password" autocomplete="current-password" required></label>' +
@@ -143,7 +154,11 @@ function start() {
   St.applySession();
   main.innerHTML = '<div class="loading">Loading…</div>';
   $('#demo-flag').hidden = !St.isDemo();
-  St.bootstrap().finally(() => { current.tab = null; route(); });
+  St.bootstrap().finally(() => {
+    const pending = ls.get('bruce.pendingChallenge', null);
+    if (pending) { ls.del('bruce.pendingChallenge'); location.replace(challengeRoute(pending)); }
+    current.tab = null; route();
+  });
 }
 
 session.onUnauthorized = () => { toast('Your session ended. Please log in again.'); logout(); };
@@ -162,4 +177,4 @@ $('#side-actions').addEventListener('click', (e) => {
 $('#demo-flag').addEventListener('click', () => logout());
 wireCommon(document.body);
 chrome();
-if (S.auth) start(); else renderLogin();
+if (S.auth) start(); else route();   // route() also remembers a shared challenge link for after the login

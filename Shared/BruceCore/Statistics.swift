@@ -11,22 +11,27 @@ extension BruceAPI {
         let studioId: Int?
         let checkedInAt: String?
         var deleted: Bool? = nil
+        /// The booked class (nil for a drop-in check-in).
+        var classId: Int? = nil
         var visitClass: VisitClass? = nil
         enum CodingKeys: String, CodingKey {
             case id, deleted
-            case studioId = "studio_id", checkedInAt = "checked_in_at", visitClass = "class"
+            case studioId = "studio_id", checkedInAt = "checked_in_at", visitClass = "class", classId = "class_id"
         }
 
         struct VisitClass: Decodable, Hashable {
+            var id: Int? = nil
             var title: String? = nil
             var opening: Bool? = nil
             var startTime: String? = nil
             var endTime: String? = nil
             var instructor: String? = nil
             var studio: StudioLite? = nil
+            /// `include_class_categories=true` (goals and recommendations match visits by category).
+            var classCategories: [ClassCategory]? = nil
             enum CodingKeys: String, CodingKey {
-                case title, opening, instructor, studio
-                case startTime = "start_time", endTime = "end_time"
+                case id, title, opening, instructor, studio
+                case startTime = "start_time", endTime = "end_time", classCategories = "class_categories"
             }
         }
 
@@ -47,6 +52,10 @@ extension BruceAPI {
             guard !isSolo, let s = classStart, let e = classEnd else { return nil }
             return Int(e.timeIntervalSince(s) / 60)
         }
+        /// Class category ids of a class visit (empty for solo visits).
+        var categoryIds: [Int] { isSolo ? [] : (visitClass?.classCategories ?? []).compactMap(\.categoryId) }
+        /// The studio of the visit (the class's studio, else the check-in studio).
+        var studioRef: Int? { visitClass?.studio?.id ?? studioId }
         /// Same `**` stripping as `BruceClass.instructor`.
         var instructor: String? {
             let s = visitClass?.instructor?.replacingOccurrences(of: "**", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -64,7 +73,7 @@ extension BruceAPI {
         for _ in 0..<maxPages {
             var q: [(String, String)] = [
                 ("user_id", String(userId)), ("limit", "30"), ("deleted", "false"),
-                ("include_class", "true"), ("include_class_studio", "true"), ("locale", "en"),
+                ("include_class", "true"), ("include_class_studio", "true"), ("include_class_categories", "true"), ("locale", "en"),
             ]
             if let cursor { q.append(("next_cursor", cursor)) }
             let r = try decode(R.self, try await send(makeRequest("GET", "v52/booking", query: q, token: token)))
@@ -118,11 +127,26 @@ extension AppModel {
         return [area, v.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | ")
     }
 
-    /// Visit history for the Statistics screen (not kept on the model: only that screen uses it).
-    func fetchVisitHistory() async -> [BruceAPI.Visit] {
-        if AppModel.demo { return Self.demoVisits }
+    /// Visit history (Statistics, goals, recommendations, Wrapped), read once and kept on the model
+    /// (`visitHistory`); `force` re-reads it. Concurrent callers share one request series.
+    @discardableResult
+    func fetchVisitHistory(force: Bool = false) async -> [BruceAPI.Visit] {
+        if AppModel.demo {
+            if visitHistory == nil { visitHistory = Self.demoVisits }
+            return visitHistory ?? []
+        }
         guard !token.isEmpty, let uid = userId else { return [] }
-        return (try? await BruceAPI.fetchVisits(token: token, userId: uid)) ?? []
+        if !force, let v = visitHistory, Date().timeIntervalSince(visitHistoryLoadedAt) < 600 { return v }
+        if let t = visitHistoryTask { return await t.value }
+        let tok = token
+        let t = Task { () -> [BruceAPI.Visit] in
+            if let got = try? await BruceAPI.fetchVisits(token: tok, userId: uid) { visitHistory = got; visitHistoryLoadedAt = Date() }
+            return visitHistory ?? []
+        }
+        visitHistoryTask = t
+        let v = await t.value
+        visitHistoryTask = nil
+        return v
     }
 
     static var demoVisits: [BruceAPI.Visit] {
@@ -139,7 +163,7 @@ extension AppModel {
           "studio":{"id":1724,"name":"STC Rosenlundsparken","vicinity":"Södermalm"}}},
          {"id":4,"studio_id":1724,"checked_in_at":"\(at(2, 7, 51))"}]
         """
-        return ((try? JSONDecoder().decode([BruceAPI.Visit].self, from: Data(json.utf8))) ?? [])
+        return (((try? JSONDecoder().decode([BruceAPI.Visit].self, from: Data(json.utf8))) ?? []) + demoYearVisits)
             .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 }

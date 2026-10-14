@@ -266,7 +266,7 @@ enum AutoBookServer {
         let waitlist: [Watch]?
     }
 
-    private static func request(_ method: String, _ path: String, session: Session, body: Any? = nil) throws -> URLRequest {
+    static func request(_ method: String, _ path: String, session: Session, body: Any? = nil) throws -> URLRequest {
         guard let base = URL(string: url), base.host != nil, let uid = session.userId else { throw BruceAPI.APIError.notLoggedIn }
         var req = URLRequest(url: base.appendingPathComponent(path))
         req.httpMethod = method
@@ -397,12 +397,14 @@ extension AppModel {
         guard !autoBookRules.isEmpty || AutoBookServer.deviceToken != nil else { return }
         do { try await AutoBookServer.sync(autoBookRules, session: s); autoBookServerNote = nil }
         catch { autoBookServerNote = "Server sync failed: \(error.localizedDescription)" }
+        await syncGoalReminders()   // goals that remind when behind (Goals.swift); skipped when unchanged
     }
 
     /// The "Let the server book for me" switch.
     func setServerBooksForMe(_ on: Bool) async {
         AutoBookServer.booksForMe = on
         if on { await syncAutoBookServer(); await refreshAutoBook(); return }
+        UserDefaults.standard.removeObject(forKey: "goalReminderSync")   // DELETE /me clears the server's goals too
         guard let s = session else { return }
         do { try await AutoBookServer.remove(session: s); autoBookServerNote = nil }
         catch { autoBookServerNote = "Server: \(error.localizedDescription)" }

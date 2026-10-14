@@ -163,6 +163,9 @@ struct SettingsView: View {
                     InfoRow(title: "Social", subtitle: (m.social ?? true) ? "Everyone can see your profile" : "Only friends can see your profile", chevron: false)
                 }
                 LocationSettingsRow()
+                NavigationLink(value: SheetRoute.places) {
+                    InfoRow(title: "Places & commute", subtitle: m.recSettings.places.isEmpty ? "For you picks by travel time" : m.recSettings.places.map(\.name).joined(separator: ", "), chevron: false)
+                }
                 Button { copyCalendarURL() } label: { InfoRow(title: "Calendar subscription", subtitle: "Subscribe to your bookings in Calendar") }
                 NavigationLink(value: SheetRoute.push) {
                     InfoRow(title: "Push notifications", subtitle: "Reminders and studio news", chevron: false)

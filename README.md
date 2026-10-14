@@ -99,6 +99,22 @@ My classes tabs, with class and studio pages and account sheets.
   a class, a studio or Bruce itself, lime for good news and red for bad.
 - **Statistics** as in the official app: a bar chart of visits per month, and below it every visit of the
   selected month by day (class or solo training, studio, area and instructor).
+- **For you** (iPhone and web): Home ranks upcoming classes for you on the device, from the class lists, your
+  past visits, friends' bookings and the travel time from your saved places (Settings › Places & commute: home,
+  work with its days and hours, and how you get around; MapKit travel times on the iPhone, a distance estimate on
+  the web). Each pick says why ("2 friends going · 8 min from work · you do Yoga often"). Places never leave the
+  device.
+- **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
+  visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
+  device; with the server on, "Reminder when behind" sends a push.
+- **Challenges with friends** (iPhone and web, needs the [server](server/README.md#challenges-with-friends)):
+  most classes, visits or minutes, or everyone hits a number, for a month (optionally repeating) or a date range.
+  Friends are invited by push or a share link and each accepts separately; participants see each other's totals,
+  class types and studios, a leaderboard, daily and monthly stats.
+- **Brüce Wrapped** (iPhone and web): your year so far as full-screen animated story cards, any time of the year:
+  visits counting up, months, your class personality, favourite studio, top time of day, streak, the friend you
+  trained with most, how you compare with other Brüce users (anonymous percentiles from the server), and a share
+  image.
 - **Friends' classes**, bookmarks, favourites, membership, credits, strikes,
   receipts, and notification and social settings.
 - **Siri and Shortcuts** (App Intents): ask "What's my next class in Brüce", "Book a class in Brüce"
