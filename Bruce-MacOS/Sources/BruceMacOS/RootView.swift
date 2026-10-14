@@ -67,6 +67,8 @@ struct RootView: View {
         case .studio(let id): StudioDetailView(studioId: id)
         case .categories: CategoriesGridView()
         case .category(let id): CategoryView(categoryId: id)
+        // For you, goals and challenges are iPhone-only for now.
+        case .forYou, .goals, .challenge: PlaceholderPage(title: "Available in the iPhone app")
         }
     }
 }
@@ -187,6 +189,8 @@ struct SheetHost: View {
         case .area(let id): AreaMapSheet(areaId: id)
         case .review(let id): ReviewSheet(bookingId: id)
         case .autoBook: AutoBookView()
+        // Places, goals and challenges are iPhone-only for now.
+        case .places, .editPlace, .goals, .editGoal, .newChallenge: PlaceholderPage(title: "Available in the iPhone app")
         }
     }
 }

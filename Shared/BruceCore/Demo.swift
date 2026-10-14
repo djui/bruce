@@ -191,8 +191,24 @@ extension AppModel {
          {"id":9006,"title":"Morning Flow","photo":"xdz9eqgslqobguwuiqn8","distance":2400,"start_time":"\(at(1, 7, 0))","end_time":"\(at(1, 8, 0))","studio":{"id":1489,"name":"Example Yoga Studio"}}]
         """)
 
+        loadDemoInsights()
+        visitHistory = Self.demoVisits
+        Task { await refreshRecommendations() }
+
         // BRUCE_SCREEN=<name> opens a screen directly (for screenshots).
         switch AppModel.setting("BRUCE_SCREEN") ?? "" {
+        case "foryou": push(.forYou)
+        case "places": sheets = [.settings, .places]
+        case "editplace": sheets = [.settings, .places, .editPlace(recSettings.work?.id)]
+        case "goals": tab = .myClasses; push(.goals)
+        case "goalscard": tab = .myClasses
+        case "newgoal": tab = .myClasses; push(.goals); present(.editGoal(nil))
+        case "challenges": tab = .friends; demoFriendsTab = 1
+        case "challenge": tab = .friends; demoFriendsTab = 1; push(.challenge("demoOct"))
+        case "challengemember": tab = .friends; demoFriendsTab = 1; push(.challenge("demoOct")); demoChallengeMember = 7
+        case "newchallenge": tab = .friends; demoFriendsTab = 1; present(.newChallenge)
+        case "wrapped": wrappedOpen = true
+        case "wrappedshare": wrappedOpen = true; demoWrappedCard = 99
         case "explore": tab = .explore
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true

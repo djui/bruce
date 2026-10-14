@@ -266,7 +266,7 @@ enum AutoBookServer {
         let waitlist: [Watch]?
     }
 
-    private static func request(_ method: String, _ path: String, session: Session, body: Any? = nil) throws -> URLRequest {
+    static func request(_ method: String, _ path: String, session: Session, body: Any? = nil) throws -> URLRequest {
         guard let base = URL(string: url), base.host != nil, let uid = session.userId else { throw BruceAPI.APIError.notLoggedIn }
         var req = URLRequest(url: base.appendingPathComponent(path))
         req.httpMethod = method
