@@ -34,6 +34,16 @@ const studios = [
     studio_categories: [cat(7, 'Climbing')], studio_addresses: addr('Example quay 12', '120 30', 59.304, 18.1),
     visit_limit: { items: [{ label: 'BASE', limit: 4 }, { label: 'BLACK', limit: 8 }, { label: 'EPIC', limit: 0 }] },
     description: 'A placeholder climbing hall for the offline demo.' },
+  { id: 3001, name: 'Example Swim Hall', status: 'LIVE', vicinity: 'Södermalm', city_id: 1, qr_code_id: '3001',
+    photo: null, rating: { total: 64, average: 448 }, has_classes: true,
+    studio_categories: [cat(30, 'Swimming')], studio_addresses: addr('Example pool lane 2', '118 25', 59.3087, 18.0756),
+    visit_limit: { items: [{ label: 'BASE', limit: 0 }, { label: 'BLACK', limit: 0 }, { label: 'EPIC', limit: 0 }] },
+    description: 'A placeholder swim hall for the offline demo. Six 25 m lanes.' },
+  { id: 3002, name: 'Example Reformer Loft', status: 'LIVE', vicinity: 'Norrmalm', city_id: 1, qr_code_id: '3002',
+    photo: null, rating: { total: 102, average: 476 }, has_classes: true,
+    studio_categories: [cat(19, 'Pilates')], studio_addresses: addr('Example street 30', '111 57', 59.3352, 18.0628),
+    visit_limit: { items: [{ label: 'BASE', limit: 0 }, { label: 'BLACK', limit: 0 }, { label: 'EPIC', limit: 0 }] },
+    description: 'A placeholder reformer pilates studio for the offline demo.' },
 ];
 const templates = [
   [1489, 'Morning Flow', 7, 0, 60, 'Instructor D', 14, [2]],
@@ -47,6 +57,10 @@ const templates = [
   [1724, 'Hyrox Prep', 18, 45, 60, 'Instructor A', 18, [13]],
   [9520, 'Red Light', 19, 30, 30, null, 4, []],
   [1489, 'Yin Yoga', 20, 0, 60, 'Instructor C', 16, [2]],
+  [3002, 'Reformer', 7, 0, 50, 'Instructor J', 10, [19]],
+  [3002, 'Reformer', 12, 5, 45, 'Instructor J', 10, [19]],
+  [3001, 'Lap Swim', 12, 0, 45, null, 30, [30]],
+  [1724, 'Strength Circuit', 17, 45, 45, 'Instructor B', 3, [26]],
 ];
 const classes = {};
 for (let day = -1; day < 8; day++) {
@@ -75,7 +89,7 @@ classes[9950] = { id: 9950, studio_id: 1724, title: 'Strength Circuit', start_ti
 const categories = [
   { id: 1, title: 'Gym', photo: 'ulopoksuf88nlz90lmsz' }, { id: 2, title: 'Yoga', photo: 'mfrnofbzeqyucdflpasg' }, { id: 5, title: 'Meditation', photo: 'dgl20t8p7zqpugxw9ron' },
   { id: 7, title: 'Climbing' }, { id: 12, title: 'High-intensity', photo: 'k5pxisc2ienijh72umlm' }, { id: 13, title: 'Hyrox' },
-  { id: 19, title: 'Pilates', photo: 'xdz9eqgslqobguwuiqn8' }, { id: 25, title: 'Spa' }, { id: 26, title: 'Strength' },
+  { id: 19, title: 'Pilates', photo: 'xdz9eqgslqobguwuiqn8' }, { id: 25, title: 'Spa' }, { id: 26, title: 'Strength' }, { id: 30, title: 'Swimming' },
 ];
 const users = {
   1: { id: 1, first_name: 'Demo', last_name: 'User', email: 'demo@example.com', social: true },
@@ -95,6 +109,53 @@ const past = [
   { id: 303, user_id: 1, class_id: null, studio_id: 2001, checked_in_at: at(-6, 18, 10) },
   { id: 304, user_id: 1, class_id: null, studio_id: 1724, checked_in_at: at(-9, 6, 40) },
 ];
+// This year's history for Statistics, goals, For you and Wrapped: a seeded, made-up routine of early classes and
+// gym drop-ins (an Early Bird), with Friend One along for some of the classes.
+const pastClasses = {};
+const pastFriendBookings = [];
+{
+  let seed = 7;
+  const rnd = () => { seed = (seed * 16807) % 2147483647; return seed / 2147483647; };
+  const routine = [
+    // [studio, title, hour, minute, minutes, categories, chance on a weekday, chance on a weekend day, max per month]
+    [3002, 'Reformer', 7, 0, 50, [19], 0.2, 0.05, 9],
+    [1724, 'Full Body Strength', 7, 30, 45, [26], 0.12, 0, 6],
+    [3001, 'Lap Swim', 7, 0, 45, [30], 0.05, 0.12, 3],
+    [1724, 'High Intensity', 11, 30, 45, [12], 0.07, 0, 4],
+    [2001, 'Bouldering Basics', 17, 30, 90, [7], 0, 0.1, 2],
+    [1489, 'Hatha Flow', 18, 0, 75, [2], 0.03, 0, 1],
+  ];
+  const year = new Date().getFullYear();
+  const days = Math.floor((Date.now() - new Date(year, 0, 1)) / 86400000);
+  let id = 20000;
+  const perMonth = {};
+  for (let d = 0; d < days; d++) {
+    const day = new Date(year, 0, 1 + d);
+    const weekend = day.getDay() === 0 || day.getDay() === 6;
+    const off = Date.now() - day.getTime() < 2 * 86400000;   // the last two days are in `past` above
+    if (off) continue;
+    let did = false;
+    for (const [sid, title, h, m, len, cats, wd, we, max] of routine) {
+      const mk = day.getMonth() + ':' + title;
+      if (did || (perMonth[mk] || 0) >= max || rnd() > (weekend ? we : wd)) continue;
+      const start = new Date(day); start.setHours(h, m, 0, 0);
+      const cid = 30000 + id;
+      pastClasses[cid] = { id: cid, studio_id: sid, title, start_time: start.toISOString(), end_time: new Date(start.getTime() + len * 60000).toISOString(),
+        instructor: 'Instructor J', class_categories: cats.map((c) => ({ category_id: c })) };
+      past.push({ id: id++, user_id: 1, class_id: cid, studio_id: sid, checked_in_at: new Date(start.getTime() - 9 * 60000).toISOString(), review_id: 1 });
+      if (rnd() < 0.3) pastFriendBookings.push({ id: 60000 + id, user_id: 21, class_id: cid });
+      else if (rnd() < 0.1) pastFriendBookings.push({ id: 60000 + id, user_id: 22, class_id: cid });
+      perMonth[mk] = (perMonth[mk] || 0) + 1; did = true;
+    }
+    if (!did && !weekend && rnd() < 0.42) {
+      const at = new Date(day); at.setHours(6, 35 + Math.floor(rnd() * 20), 0, 0);
+      past.push({ id: id++, user_id: 1, class_id: null, studio_id: 1724, checked_in_at: at.toISOString() });
+    }
+  }
+}
+const klass = (id) => classes[id] || pastClasses[id];
+const monthOf = (iso) => (iso || '').slice(0, 7) === new Date().toISOString().slice(0, 7);
+
 const friendBookings = [
   { id: 801, user_id: 21, class_id: 9203 }, { id: 802, user_id: 22, class_id: 9210 }, { id: 803, user_id: 21, class_id: 9405 },
   { id: 804, user_id: 23, class_id: 9301 }, { id: 805, user_id: 22, class_id: 9507 },
@@ -162,11 +223,11 @@ export function handle(method, path, q, body) {
     if (q.studio_id) {
       const s = studios.find((x) => x.id === +q.studio_id);
       const item = s && s.visit_limit && s.visit_limit.items.find((i) => i.label === 'BLACK');
-      const used = past.filter((b) => b.studio_id === +q.studio_id).length;
+      const used = past.filter((b) => b.studio_id === +q.studio_id && monthOf(b.checked_in_at)).length;
       return ok({ limits: [{ type: 'STUDIO', total: item ? item.limit : 0, used, remaining: item && item.limit > 0 ? item.limit - used : 0, resets_at: at(18, 0, 0), items: s ? s.visit_limit.items : [] }] });
     }
     return ok({ limits: [
-      { type: 'MONTHLY', total: 0, used: past.length, remaining: 0, resets_at: at(18, 0, 0) },
+      { type: 'MONTHLY', total: 0, used: past.filter((b) => monthOf(b.checked_in_at)).length, remaining: 0, resets_at: at(18, 0, 0) },
       { type: 'WELLNESS_MONTHLY', total: 4, used: 1, remaining: 3, resets_at: at(18, 0, 0) },
       { type: 'SIMULTANEOUS', total: 4, used: bookings.length, remaining: 4 - bookings.length },
     ] });
@@ -201,18 +262,26 @@ export function handle(method, path, q, body) {
   }
   if (path === 'v52/booking/aggregate') {
     const out = [];
-    for (let i = 0; i < 9; i++) { const d = new Date(); d.setMonth(d.getMonth() - i, 5); out.push({ day: +d.toISOString().slice(0, 10).replace(/-/g, ''), count: [past.length, 9, 12, 7, 0, 4, 10, 8, 6][i] }); }
+    for (let i = 0; i < 9; i++) {
+      const d = new Date(); d.setMonth(d.getMonth() - i, 5);
+      const n = past.filter((b) => b.checked_in_at && b.checked_in_at.slice(0, 7) === d.toISOString().slice(0, 7)).length;
+      out.push({ day: +d.toISOString().slice(0, 10).replace(/-/g, ''), count: n || [0, 9, 12, 7, 0, 4, 10, 8, 6][i] });
+    }
     return ok({ booking_aggregates: out });
   }
   if (path === 'v52/booking' && G) {
-    const full = (b) => Object.assign({}, b, { class: b.class_id ? withStudio(classes[b.class_id]) : null });
+    const full = (b) => Object.assign({}, b, { class: b.class_id ? withStudio(klass(b.class_id)) : null });
     if (q.class_id) {
       const ids = bookings.filter((b) => b.class_id === +q.class_id).map((b) => ({ id: b.id, user_id: 1, user: users[1] }));
       friendBookings.filter((b) => b.class_id === +q.class_id).forEach((b) => ids.push({ id: b.id, user_id: b.user_id, user: users[b.user_id] }));
       ids.push({ id: 990 }, { id: 991 });
       return list('bookings', ids);
     }
-    if (q.friends) return list('bookings', friendBookings.map((b) => Object.assign({}, b, { class: withStudio(classes[b.class_id]) })));
+    if (q.friends) {
+      // Friends' bookings from a day on (yyyymmdd): the upcoming ones, plus this year's past ones when asked for.
+      const since = q.class_day_after && q.class_day_after < new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      return list('bookings', (since ? pastFriendBookings : []).concat(friendBookings).map((b) => Object.assign({}, b, { class: withStudio(klass(b.class_id)) })));
+    }
     if (q.reviewable) return list('bookings', past.filter((b) => b.class_id && !b.review_id).map(full));
     if (q.class_start_time_after) return list('bookings', bookings.map(full));
     return list('bookings', past.concat(bookings).map(full));
@@ -273,4 +342,124 @@ export function handle(method, path, q, body) {
   if (path === 'v52/payment/method') return ok({ payment_methods: [{ id: 1, name: 'Visa •••• 4242', type: 'CARD', expiration: 1228, default: true }] });
   if (path === 'v52/booking/voucher') return ok({ booking_vouchers: [{ id: 1, code: 'DEMO-FRIEND-1', used: false }, { id: 2, code: 'DEMO-FRIEND-2', used: true }] });
   return err(404, 'Not available in the demo: ' + path);
+}
+
+// ---------------------------------------------------------------- our server (challenges, percentiles, goals)
+// Fake answers in the shape of CONTRACT.md, so challenges and Wrapped percentiles work offline in the demo.
+
+const nameOf = (id) => (users[id] ? users[id].first_name + (id === 1 ? '' : ' ' + users[id].last_name) : 'Member');
+function monthPeriod(offset) {
+  const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + (offset || 0));
+  const y = d.getFullYear(), m = d.getMonth();
+  const key = (day) => y + '-' + String(m + 1).padStart(2, '0') + '-' + String(day).padStart(2, '0');
+  const days = new Date(y, m + 1, 0).getDate();
+  const today = offset ? 0 : new Date().getDate();
+  return { start: key(1), end: key(days), label: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }), day: today, days, daysLeft: offset ? days : days - today };
+}
+const demoChallenges = [
+  { id: 'demoMostCls1', title: 'Most classes', metric: 'classes', target: null, category: null, categoryTitle: null, repeatMonthly: true, ownerId: 21,
+    status: { 1: 'accepted', 21: 'accepted', 22: 'accepted', 23: 'accepted' }, base: { 21: 13, 1: 11, 22: 9, 23: 6 } },
+  { id: 'demoHits12x2', title: 'Everyone hits 12', metric: 'target', target: 12, category: null, categoryTitle: null, repeatMonthly: false, ownerId: 22,
+    status: { 22: 'accepted', 1: 'invited', 23: 'accepted' }, base: { 22: 8, 23: 12, 1: 0 } },
+];
+const demoUsesBruce = [21, 22];
+function summaryOf(c) {
+  const period = c.period || monthPeriod(0);
+  return {
+    id: c.id, title: c.title, metric: c.metric, target: c.target, category: c.category, categoryTitle: c.categoryTitle,
+    start: c.start || period.start, end: c.end || period.end, repeatMonthly: c.repeatMonthly, ownerId: c.ownerId, ownerName: nameOf(c.ownerId),
+    myStatus: c.status[1], participants: Object.keys(c.status).map((id) => ({ userId: +id, name: nameOf(+id), status: c.status[id] })),
+    period, shareUrl: 'https://djui.github.io/bruce/app/#challenge/' + c.id, createdAt: at(-14, 9, 0),
+  };
+}
+function daily(n, days, seed) {
+  const out = Array(days).fill(0);
+  for (let i = 0; i < n; i++) out[(i * 7 + seed * 3 + Math.floor(i / 3)) % days] += 1;
+  return out;
+}
+const STUDIO_ROT = [[3002, 'Reformer'], [1724, 'Full Body Strength'], [1489, 'Hatha Flow'], [2001, 'Bouldering Basics']];
+function entryFor(c, id, period) {
+  const accepted = c.status[id] === 'accepted';
+  const scale = Math.max(1, period.day) / 14;
+  const visits = accepted ? Math.max(0, Math.round((c.base[id] || 0) * scale)) : 0;
+  const classes = Math.max(0, visits - (id % 3));
+  const [sid, title] = STUDIO_ROT[id % STUDIO_ROT.length];
+  const days = Math.max(1, period.day);
+  return {
+    userId: id, name: id === 1 ? nameOf(1) : nameOf(id), status: c.status[id], rank: null, score: 0,
+    visits, classes, dropins: visits - classes, minutes: classes * 50 + (visits - classes) * 60, studios: accepted ? 1 + (id % 3) : 0,
+    topStudio: visits ? { id: sid, name: null, count: Math.ceil(visits / 2) } : null, topClass: classes ? { title, count: Math.ceil(classes / 2) } : null,
+    categories: classes ? [{ key: '19', count: Math.ceil(classes / 2) }, { key: 'gym', count: visits - classes }].filter((x) => x.count) : [],
+    together: id === 1 ? 0 : Math.min(visits, 8 - (id % 4) * 2),
+    lastVisit: visits ? at(id === 23 ? -6 : -(id % 2), 7, 0) : null, done: c.metric === 'target' && visits >= c.target,
+    daily: accepted ? daily(visits, days, id) : Array(days).fill(0),
+    recent: Array.from({ length: Math.min(visits, 6) }, (_, i) => ({ at: at(-i * 2 - (id % 2), 7, 0), kind: i % 3 === 2 ? 'dropin' : 'class',
+      title: i % 3 === 2 ? null : STUDIO_ROT[(id + i) % STUDIO_ROT.length][1], studioId: i % 3 === 2 ? 1724 : STUDIO_ROT[(id + i) % STUDIO_ROT.length][0], studio: null })),
+  };
+}
+function detailOf(c) {
+  const s = summaryOf(c);
+  const metric = { classes: 'classes', visits: 'visits', minutes: 'minutes', target: 'visits' }[c.metric];
+  const rows = Object.keys(c.status).map((id) => entryFor(c, +id, s.period));
+  rows.forEach((r) => { r.score = r[metric]; });
+  const acc = rows.filter((r) => r.status === 'accepted').sort((a, b) => b.score - a.score);
+  acc.forEach((r, i) => { r.rank = i && acc[i - 1].score === r.score ? acc[i - 1].rank : i + 1; });
+  const board = acc.concat(rows.filter((r) => r.status !== 'accepted'));
+  const months = [{ month: s.period.start.slice(0, 7), label: s.period.label, entries: acc.map((r) => ({ userId: r.userId, name: r.name, score: r.score, visits: r.visits, classes: r.classes, dropins: r.dropins, minutes: r.minutes })) }];
+  if (c.repeatMonthly) {
+    const prev = monthPeriod(-1);
+    months.push({ month: prev.start.slice(0, 7), label: prev.label, entries: acc.map((r, i) => {
+      const v = [17, 15, 12, 9][i] || 5;
+      return { userId: r.userId, name: r.name, score: c.metric === 'minutes' ? v * 52 : v, visits: v + 1, classes: v, dropins: 1, minutes: v * 52 };
+    }).sort((a, b) => b.score - a.score) });
+  }
+  return { challenge: s, leaderboard: board, months, updatedAt: at(0, 4, 30) };
+}
+
+export function handleServer(method, path, body) {
+  let m;
+  const ok2 = (b) => ({ status: 200, body: b });
+  const fail = (status, error) => ({ status, body: { error } });
+  if (path === '/challenges' && method === 'GET') return ok2({ challenges: demoChallenges.map(summaryOf), usesBruce: demoUsesBruce });
+  if (path === '/challenges' && method === 'POST') {
+    const status = { 1: 'accepted' };
+    (body.invite || []).filter((id) => users[id]).slice(0, 20).forEach((id) => { status[id] = 'invited'; });
+    const today = new Date();
+    const c = { id: 'demo' + Math.random().toString(36).slice(2, 10), title: body.title || 'Challenge', metric: body.metric, target: body.target || null,
+      category: body.category || null, categoryTitle: body.categoryTitle || null, repeatMonthly: !!body.repeatMonthly, ownerId: 1, status, base: { 1: 0 },
+      start: body.start, end: body.end };
+    if (!body.repeatMonthly) {
+      const s = new Date(body.start + 'T12:00:00'), e = new Date(body.end + 'T12:00:00');
+      const days = Math.round((e - s) / 86400000) + 1;
+      const day = Math.max(0, Math.min(days, Math.round((today - s) / 86400000) + 1));
+      c.period = { start: body.start, end: body.end, label: s.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) + ' – ' + e.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }), day, days, daysLeft: days - day };
+    }
+    demoChallenges.unshift(c);
+    return { status: 201, body: { challenge: summaryOf(c) } };
+  }
+  if ((m = path.match(/^\/challenges\/([\w-]+)\/(accept|join)$/)) && method === 'POST') {
+    let c = demoChallenges.find((x) => x.id === m[1]);
+    if (!c && m[2] === 'join') {
+      c = { id: m[1], title: 'Most minutes', metric: 'minutes', target: null, category: null, categoryTitle: null, repeatMonthly: true, ownerId: 23, status: { 23: 'accepted', 21: 'accepted' }, base: { 23: 10, 21: 7 } };
+      demoChallenges.unshift(c);
+    }
+    if (!c) return fail(404, 'Challenge not found');
+    c.status[1] = 'accepted'; c.base[1] = c.base[1] || 4;
+    return ok2({ ok: true, challenge: summaryOf(c) });
+  }
+  if ((m = path.match(/^\/challenges\/([\w-]+)\/leave$/)) && method === 'POST') {
+    const i = demoChallenges.findIndex((x) => x.id === m[1]);
+    if (i >= 0) { delete demoChallenges[i].status[1]; if (!Object.values(demoChallenges[i].status).includes('accepted') || demoChallenges[i].ownerId === 1) demoChallenges.splice(i, 1); }
+    return ok2({ ok: true });
+  }
+  if ((m = path.match(/^\/challenges\/([\w-]+)$/)) && method === 'GET') {
+    const c = demoChallenges.find((x) => x.id === m[1]);
+    if (c && c.status[1]) return ok2(detailOf(c));
+    // Someone else's challenge opened from a share link: the preview.
+    return ok2({ challenge: { id: m[1], title: 'Most minutes', metric: 'minutes', target: null, categoryTitle: null, period: monthPeriod(0), ownerName: nameOf(23), participantCount: 2 }, joinable: true });
+  }
+  if (path.startsWith('/wrapped/percentiles')) return ok2({ year: new Date().getFullYear(), cohort: 23, percentiles: { visits: 92, minutes: 88, studios: 70, streak: 79 } });
+  if (path === '/me/goals' && method === 'PUT') return ok2({ ok: true, goals: (body.goals || []).length });
+  if (path === '/me' && method === 'GET') return ok2({ waitlist: [] });
+  return fail(404, 'Not available in the demo: ' + path);
 }

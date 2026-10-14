@@ -146,6 +146,21 @@ const P = {
   yoga: '<circle cx="12" cy="5" r="1.8"/><path d="M4 12c3 0 5-1.5 8-1.5s5 1.5 8 1.5M12 10.5V15l-4 5M12 15l4 5"/>',
   spa: '<path d="M12 20c-4.5 0-7.5-3-7.5-7.5 3 0 5.5 1 7.5 3 2-2 4.5-3 7.5-3 0 4.5-3 7.5-7.5 7.5Z"/><path d="M12 15.5c-1.5-2-1.5-5.5 0-9.5 1.5 4 1.5 7.5 0 9.5Z"/>',
   building: '<path d="M5 21V4h9v17M14 9h5v12M3 21h18"/><path d="M8 7h3M8 11h3M8 15h3"/>',
+  bike: '<circle cx="5.5" cy="16.5" r="3.5"/><circle cx="18.5" cy="16.5" r="3.5"/><path d="M5.5 16.5 9 9h6l3.5 7.5M9 9l3 7.5h-1M14 5h2l-1 4"/>',
+  walk: '<circle cx="13" cy="4" r="2"/><path d="m9 21 2-6 3 3v3M7 12l3-4 4 1 3 4M11 15l1-5"/>',
+  tram: '<rect x="5" y="4" width="14" height="13" rx="3"/><path d="M5 11h14M8 21l2-4M16 21l-2-4"/><path d="M9 14h.01M15 14h.01"/>',
+  car: '<path d="M3 16v-3l2-5h14l2 5v3zM5 16v2M19 16v2"/><path d="M7.5 13h.01M16.5 13h.01"/>',
+  brief: '<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5h6v2M3 12.5h18"/>',
+  history: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/>',
+  flame: '<path d="M12 21.5c3.9 0 6.5-2.6 6.5-6.4 0-3.7-2.7-6-3.6-9.4-1.9 1.8-2.8 3.7-2.8 5.6-.9-.9-1.8-1.9-2-3.3-2 2.3-4.6 4.5-4.6 7.1 0 3.8 2.6 6.4 6.5 6.4Z"/>',
+  trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8M10 17h4"/>',
+  swim: '<path d="M2 18c2 0 2-1.5 4-1.5S8 18 10 18s2-1.5 4-1.5 2 1.5 4 1.5 2-1.5 4-1.5M2 14c2 0 2-1.5 4-1.5S8 14 10 14s2-1.5 4-1.5 2 1.5 4 1.5"/><circle cx="17" cy="6" r="2"/><path d="m6 11 4-4 4 3"/>',
+  target: '<circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r=".6"/>',
+  spark: '<path d="M12 2.5l2 6.8 6.8 2.7-6.8 2.7-2 6.8-2-6.8-6.8-2.7 6.8-2.7z"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
+  pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
+  trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+  location: '<path d="m4 11 16-7-7 16-2-7z"/>',
 };
 export const icon = (name, cls) => '<svg class="i' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (P[name] || '') + '</svg>';
 

@@ -1,6 +1,9 @@
 // App state and loaders, in the spirit of AppModel.swift: one shared store that views read and re-render from.
-import { Bruce, Autobook, session, DEFAULT_API } from './api.js';
-import { ls, setZone, dayKey, todayKey } from './util.js';
+import { Bruce, Autobook, Server, session, DEFAULT_API } from './api.js';
+import { ls, setZone, dayKey, todayKey, getZone } from './util.js';
+import { visitsFrom } from './visits.js';
+import { remindPayload, goalTitle } from './goals.js';
+import { DEFAULT_PREFS } from './recommend.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
 
@@ -20,6 +23,8 @@ export const S = {
   bookmarks: new Map(),                          // class id -> bookmark
   favorites: new Map(),                          // studio id -> favorite id
   friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null,
+  history: null,                                 // every booking of the user (GET /booking, all pages), raw
+  challenges: null,                              // {challenges, usesBruce} from our server
   limits: [], user: null, membership: null, block: null,
   classCache: new Map(),                         // "city:day" -> {at, classes}
   listeners: new Set(),
@@ -44,6 +49,7 @@ export function applySession() {
   session.userId = S.auth && S.auth.userId;
   session.demo = isDemo();
   session.base = S.settings.apiBase || DEFAULT_API;
+  session.server = S.settings.autoBookServer || null;
 }
 export function setAuth(a) {
   S.auth = a;
@@ -52,7 +58,7 @@ export function setAuth(a) {
 }
 export function clearData() {
   ['studios', 'studioDetails', 'classDetails', 'bookings', 'standbys', 'watches', 'bookmarks', 'favorites', 'classCache'].forEach((k) => S[k].clear());
-  Object.assign(S, { friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null, limits: [], user: null, membership: null, block: null, home: null, studiosLoading: null });
+  Object.assign(S, { history: null, historyLoading: null, challenges: null, friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null, limits: [], user: null, membership: null, block: null, home: null, studiosLoading: null });
 }
 
 export function slimStudio(s) {
@@ -246,3 +252,84 @@ export function recentTargets(visits) {
 export function todaysCheckIn(studioId) {
   return [...S.bookings.values()].find((b) => (b.studio_id || (b.class && b.class.studio_id)) === studioId && b.checked_in_at && dayKey(b.checked_in_at) === todayKey());
 }
+
+// ---------------------------------------------------------------- history, our server, places and goals
+
+/** All of the user's bookings (the same pages Statistics reads). Also fills `S.visits` (check-ins). */
+export function loadHistory(force) {
+  if (S.history && !force) return Promise.resolve(S.history);
+  if (S.historyLoading && !force) return S.historyLoading;
+  S.historyLoading = Bruce.visits().then((v) => {
+    S.history = v; S.visits = v.filter((x) => x.checked_in_at && !x.deleted);
+    S.historyLoading = null; emit();
+    return v;
+  }).catch((e) => { S.historyLoading = null; throw e; });
+  return S.historyLoading;
+}
+/** Deduped visits (visits.js) from the history: check-ins only for goals, everything for For you and Wrapped. */
+export function visitList(checkedInOnly) {
+  return visitsFrom(S.history || [], { zone: getZone(), checkedInOnly: !!checkedInOnly });
+}
+
+/** One day of city-wide classes, shared with Explore's cache. */
+export async function dayClasses(day) {
+  const key = S.settings.cityId + ':' + day;
+  const c = S.classCache.get(key);
+  if (c && c.done && Date.now() - c.at < 10 * 60000) return c.classes;
+  if (c && c.loading && c.promise) return c.promise;
+  const entry = { at: Date.now(), classes: [], loading: true, done: false };
+  entry.promise = Bruce.classes(day, { cityId: S.settings.cityId }).then((all) => {
+    entry.classes = all.slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
+    entry.done = true; entry.loading = false;
+    return entry.classes;
+  }).catch((e) => { S.classCache.delete(key); throw e; });
+  S.classCache.set(key, entry);
+  return entry.promise;
+}
+
+/** Our server (the auto-book server) is on unless switched off in Settings. Challenges always need it. */
+export const serverOn = () => S.settings.serverOn !== false;
+export async function loadChallenges() {
+  S.challenges = await Server.challenges();
+  emit();
+  return S.challenges;
+}
+export const pendingInvites = () => ((S.challenges && S.challenges.challenges) || []).filter((c) => c.myStatus === 'invited');
+
+const suffix = () => (isDemo() ? '.demo' : '');
+/** Saved places and commute preferences. Stored on this device only, never sent anywhere. */
+export function placesState() {
+  const demo = isDemo() ? {
+    places: [
+      { id: 'home', kind: 'home', name: 'Home', label: 'Near Example Swim Hall, Södermalm', lat: 59.3141, lon: 18.0712 },
+      { id: 'work', kind: 'work', name: 'Work', label: 'Near Example Reformer Loft, Norrmalm', lat: 59.3366, lon: 18.0604, workdays: [0, 1, 2, 3, 4] },
+    ],
+  } : { places: [] };
+  return Object.assign({}, DEFAULT_PREFS, demo, ls.get('bruce.places' + suffix(), {}));
+}
+export function savePlaces(p) { ls.set('bruce.places' + suffix(), p); S.forYouSig = null; emit(); }
+
+/** Monthly goals, stored on this device. */
+export function goals() {
+  return ls.get('bruce.goals' + suffix(), isDemo() ? [
+    { id: 'g-gym', category: 'gym', target: 12, studioId: null, remind: true },
+    { id: 'g-swim', category: '30', target: 2, studioId: null, remind: false },
+  ] : []);
+}
+export const catTitle = (id) => ((S.categories.find((c) => String(c.id) === String(id)) || {}).title || null);
+export function saveGoals(list) {
+  ls.set('bruce.goals' + suffix(), list);
+  emit();
+  syncGoals(list);
+}
+/** "Reminder when behind": hands goals with a reminder to our server (PUT /me/goals) when it is on. Only sends a
+ *  change, and failures are silent. */
+export function syncGoals(list) {
+  if (!serverOn()) return;
+  const body = remindPayload(list || goals(), catTitle);
+  const sig = JSON.stringify(body);
+  const key = 'bruce.goalsSynced' + suffix();
+  if (ls.get(key, '[]') === sig) return;
+  Server.putGoals(body).then(() => ls.set(key, sig)).catch(() => {});
+}
+export { goalTitle };

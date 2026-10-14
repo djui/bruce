@@ -1,7 +1,7 @@
 // Bruce v52 API client for the browser. Same routes, parameters and bodies as Shared/BruceCore/API*.swift (see
 // API.md). api.bruce.app answers CORS with `Access-Control-Allow-Origin: *`, so the page calls it directly; the
 // token goes in `X-Access-Token` (no cookies). In demo mode every call goes to the in-browser fake in demo.js.
-import { handle as demoHandle } from './demo.js';
+import { handle as demoHandle, handleServer as demoServer } from './demo.js';
 import { addDays } from './util.js';
 
 export const DEFAULT_API = 'https://api.bruce.app';
@@ -9,7 +9,7 @@ const STUDIO_FIELDS = 'checkin_studio_id,city_id,deleted,has_address,has_classes
 
 export class ApiError extends Error { constructor(status, message, body) { super(message); this.status = status; this.body = body; } }
 
-export const session = { token: null, userId: null, demo: false, base: DEFAULT_API, onUnauthorized: null };
+export const session = { token: null, userId: null, demo: false, base: DEFAULT_API, server: null, onUnauthorized: null };
 
 function qs(query) {
   // Brackets stay literal like the official app sends them (filter[status][in]=live).
@@ -73,13 +73,15 @@ const uid = () => session.userId;
  *  It takes the user's own Bruce login in the same headers and answers CORS, so the page calls it directly. */
 export const AUTOBOOK_SERVER = 'https://bruce-autobook.uwe-af1.workers.dev';
 const demoWatches = new Set();
-async function autobook(method, path, base) {
+async function autobook(method, path, base, body) {
+  const headers = { 'X-Access-Token': session.token, 'X-User-Id': String(uid()) };
+  if (body) headers['Content-Type'] = 'application/json';
   const res = await fetch((base || AUTOBOOK_SERVER).replace(/\/+$/, '') + path, {
-    method, headers: { 'X-Access-Token': session.token, 'X-User-Id': String(uid()) },
-  }).catch(() => { throw new ApiError(0, 'Could not reach the auto-book server.'); });
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body.error || 'Auto-book server: HTTP ' + res.status, body);
-  return body;
+    method, headers, body: body ? JSON.stringify(body) : undefined,
+  }).catch(() => { throw new ApiError(0, 'Could not reach our server.'); });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, json.error || 'Our server: HTTP ' + res.status, json);
+  return json;
 }
 export const Autobook = {
   /** Class ids the server watches for a free waitlist spot. */
@@ -89,6 +91,28 @@ export const Autobook = {
     return autobook(on ? 'PUT' : 'DELETE', '/me/waitlist/' + classId, base);
   },
 };
+/** Our server's other routes (CONTRACT.md): challenges with friends, Wrapped percentiles and goal reminders. The demo
+ *  answers them in the browser (demo.js `handleServer`). */
+async function server(method, path, body) {
+  if (!session.demo) return autobook(method, path, session.server, body);
+  await new Promise((r) => setTimeout(r, 120 + Math.random() * 180));
+  const r = demoServer(method, path, body || {});
+  if (r.status >= 400) throw new ApiError(r.status, r.body.error || 'HTTP ' + r.status, r.body);
+  return JSON.parse(JSON.stringify(r.body));
+}
+const enc = encodeURIComponent;
+export const Server = {
+  challenges: () => server('GET', '/challenges'),
+  challenge: (id) => server('GET', '/challenges/' + enc(id)),
+  createChallenge: (body) => server('POST', '/challenges', body).then((r) => r.challenge),
+  accept: (id) => server('POST', '/challenges/' + enc(id) + '/accept', {}),
+  join: (id) => server('POST', '/challenges/' + enc(id) + '/join', {}),
+  leave: (id) => server('POST', '/challenges/' + enc(id) + '/leave', {}),
+  /** metrics: {visits, minutes, studios, streak} -> {year, cohort, percentiles | null}. */
+  percentiles: (year, metrics) => server('GET', '/wrapped/percentiles?' + qs(Object.assign({ year }, metrics))),
+  putGoals: (goals) => server('PUT', '/me/goals', { goals }),
+};
+
 const yyyymmdd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
 
 export const Bruce = {
@@ -165,6 +189,10 @@ export const Bruce = {
   friendsBookings: () => api('GET', 'v52/booking', {
     user_id: uid(), friends: 'true', class_day_after: yyyymmdd(new Date()), deleted: 'false', limit: 30, include_class: 'true', include_class_studio: 'true',
   }).then((r) => r.bookings || []),
+  /** Friends' bookings from a day on ("YYYYMMDD"), paged: Wrapped's "classes together". */
+  friendsBookingsSince: (day) => paged('v52/booking', {
+    user_id: uid(), friends: 'true', class_day_after: day, deleted: 'false', limit: 30, include_class: 'true',
+  }, 'bookings', null, 40),
   notifications: () => api('GET', 'v52/notification', { user_id: uid() }).then((r) => r.notifications || []),
 
   user: () => api('GET', 'v52/user/' + uid()).then((r) => r.user || r),

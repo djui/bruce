@@ -5,6 +5,9 @@ import { Bruce } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import { sheet, toast, run, empty, loading, avatar, classRow, sectionHeader, confirmSheet, stars } from './ui.js';
+import { openPlaces } from './foryou.js';
+import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
+import { openWrapped } from './wrapped.js';
 
 // ---------------------------------------------------------------- booking rules (book / cancel)
 
@@ -102,7 +105,7 @@ export async function checkInFlow(studioOrTarget, btn) {
       const ok = r.status >= 200 && r.status < 300;
       if (ok && t.door) St.rememberDoor(t.studioId, t.door);
       await St.loadMine().catch(() => {});
-      S.visits = null;
+      S.visits = null; S.history = null;
       const b = St.todaysCheckIn(t.studioId) || (ok && r.body && r.body.bookings && r.body.bookings[0]);
       if (b && b.checked_in_at) {
         if (!S.bookings.has(b.class_id || 's' + b.id)) S.bookings.set(b.class_id || 's' + b.id, b);
@@ -223,7 +226,7 @@ function relTime(iso) {
 
 const MENU = [
   ['person', 'Account', openAccount], ['chart', 'Statistics', openStatistics], ['receipt', 'Payments and receipts', openPayments],
-  ['gift', 'Invite friends', openVouchers], ['gear', 'Settings', openSettings],
+  ['gift', 'Invite friends', openVouchers], ['spark', 'Your ' + new Date().getFullYear() + ' Wrapped', () => openWrapped()], ['gear', 'Settings', openSettings],
 ];
 export function openMenu() {
   const u = S.user;
@@ -259,9 +262,17 @@ function openAccount() {
   });
 }
 
+/** Top of Statistics: this month's goals. */
+function statsExtras() {
+  return '<button class="wrapped-banner" data-wrapped><span class="grow"><small>Year to date</small><b>Your ' + new Date().getFullYear() + ' Wrapped</b></span>' + icon('spark') + '</button>' + goalsCardHTML();
+}
 export function openStatistics() {
   const s = sheet('Statistics', loading(), { cls: 'tall' });
-  Promise.all([Bruce.aggregate().catch(() => []), S.visits ? Promise.resolve(S.visits) : Bruce.visits().then((v) => (S.visits = v.filter((x) => x.checked_in_at && !x.deleted)))])
+  s.body.addEventListener('click', (e) => {
+    if (e.target.closest('[data-wrapped]')) openWrapped();
+    else if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); }
+  });
+  Promise.all([Bruce.aggregate().catch(() => []), St.loadHistory().then(() => S.visits)])
     .then(([agg, visits]) => {
       const counts = {};
       agg.forEach((a) => { const k = String(a.day).slice(0, 6); counts[k] = (counts[k] || 0) + a.count; });
@@ -274,7 +285,7 @@ export function openStatistics() {
       const top = Math.max(1, ...months.map((m) => m.count));
       const draw = () => {
         const inMonth = visits.filter((v) => monthKeyOf(visitDate(v)) === sel).sort((a, b) => visitDate(b).localeCompare(visitDate(a)));
-        s.body.innerHTML = '<div class="bars-chart" role="group" aria-label="Visits per month">' + months.map((m) => '<button data-mk="' + m.key + '" class="' + (m.key === sel ? 'sel' : '') + '" aria-label="' + esc(m.date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })) + ': ' + m.count + ' visits">' +
+        s.body.innerHTML = statsExtras() + '<div class="bars-chart" role="group" aria-label="Visits per month">' + months.map((m) => '<button data-mk="' + m.key + '" class="' + (m.key === sel ? 'sel' : '') + '" aria-label="' + esc(m.date.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })) + ': ' + m.count + ' visits">' +
           '<span>' + m.count + '</span><i style="height:' + Math.max(2, Math.round(150 * m.count / top)) + 'px"></i><small>' + m.date.toLocaleDateString('en-GB', { month: 'short' }) + '</small></button>').join('') + '</div>' +
           (inMonth.length ? byDay(inMonth, visitDate).map((g) => sectionHeader(dayHeader(g.iso)) + g.items.map(visitRow).join('')).join('') : empty('chart', 'No visits this month.'));
         s.body.querySelectorAll('[data-mk]').forEach((b) => b.addEventListener('click', () => { sel = b.dataset.mk; draw(); }));
@@ -329,9 +340,13 @@ function openSettings() {
   const s = sheet('Settings', '<div class="card form">' +
     '<label><span>City</span><select id="set-city">' + (S.cities.length ? S.cities : [St.city()]).map((c) => '<option value="' + c.id + '"' + (c.id === S.settings.cityId ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select></label>' +
     '<label><span>Appearance</span><select id="set-theme"><option value="">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></div>' +
+    '<h3 class="sec-title">RECOMMENDATIONS</h3><div class="card menu"><button class="mrow" data-places>' + icon('pin') + '<span class="grow">Places &amp; commute<small class="muted block">' + esc(placesLine()) + '</small></span>' + icon('chevron') + '</button></div>' +
+    '<h3 class="sec-title">OUR SERVER</h3><div class="card"><label class="toggle"><span>Use our server<small class="muted">Books a waitlisted class the moment a spot opens, sends goal reminders and runs challenges. It stores your Bruce login. Off: only challenges you join use it.</small></span><input type="checkbox" id="set-server"' + (St.serverOn() ? ' checked' : '') + '><i></i></label></div>' +
     '<h3 class="sec-title">SOCIAL</h3><div class="card"><label class="toggle"><span>Bruce Studios Social<small class="muted">Friends and classmates see your name and photo on classes you book.</small></span><input type="checkbox" id="set-social"' + (S.user && S.user.social ? ' checked' : '') + '><i></i></label></div>' +
     '<h3 class="sec-title">NOTIFICATIONS</h3><div class="card" id="set-push">' + loading() + '</div>' +
     '<details class="card"><summary>Advanced</summary><label class="form"><span>API server</span><input type="url" id="set-api" value="' + esc(S.settings.apiBase) + '"></label><p class="muted small">Only change this to route requests through your own proxy.</p></details>');
+  s.el.querySelector('[data-places]').addEventListener('click', () => openPlaces());
+  $('#set-server', s.el).addEventListener('change', (e) => { S.settings.serverOn = e.target.checked; St.saveSettings(); if (e.target.checked) St.syncGoals(); toast(e.target.checked ? 'Our server is on' : 'Our server is off'); });
   const th = $('#set-theme', s.el); th.value = theme;
   th.addEventListener('change', () => {
     try { if (th.value) localStorage.setItem('theme', th.value); else localStorage.removeItem('theme'); } catch (e) { /* private mode */ }
@@ -356,4 +371,9 @@ function openSettings() {
       await Bruce.updateNotificationSetting(ns.id, body);
     })));
   }).catch(() => { const box = $('#set-push', s.el); if (box) box.innerHTML = '<p class="muted">Could not load notification settings.</p>'; });
+}
+
+function placesLine() {
+  const p = St.placesState();
+  return p.places.length ? p.places.map((x) => x.name).join(', ') + ' · ' + ({ walk: 'Walk', bike: 'Bike', transit: 'Transit', car: 'Car' }[p.mode] || 'Bike') : 'Home, work and how you get around';
 }
