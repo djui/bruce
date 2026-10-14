@@ -97,13 +97,16 @@ struct ExploreView: View {
         .safeAreaBar(edge: .top) { controls.padding(.bottom, 8) }
         .bruceTitle("Explore")
         .toolbar {
-            ToolbarItemGroup(placement: .topBarTrailing) {
-                if tabIndex == 0 {
+            if tabIndex == 0 {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button { withAnimation { m.exploreMap.toggle() } } label: {
                         Image(systemName: m.exploreMap ? "list.bullet" : "map")
                     }
+                    .accessibilityLabel(m.exploreMap ? "List" : "Map")
                 }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
+            MainToolbarButtons()
         }
         // Results cover the page only while searching with a non-empty query; the page underneath (tab, filters,
         // scroll position, map/list) stays mounted, so cancelling returns to exactly where the search started.

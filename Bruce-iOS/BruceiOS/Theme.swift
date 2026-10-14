@@ -57,12 +57,34 @@ extension View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    // Own width, but at most 170 pt, so a long title ("MY CLASSES") shrinks instead of pushing
+                    // Notifications and Menu into an overflow menu, even on a 375 pt wide iPhone.
                     Text(title.uppercased()).font(Theme.screenTitle(26)).lineLimit(1).minimumScaleFactor(0.6)
+                        .frame(maxWidth: 170, alignment: .leading)
                         .fixedSize()
                 }
                 .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             }
+    }
+}
+
+/// Notifications and Menu: the last two buttons of every main tab's top bar, in their own glass capsule.
+/// A tab's own actions go before them (followed by a fixed `ToolbarSpacer`), so these never move between tabs.
+struct MainToolbarButtons: ToolbarContent {
+    @Environment(AppModel.self) var m
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            // All toolbar icons use the label colour; only the dot is red.
+            Button { m.present(.notifications) } label: {
+                Image(systemName: "bell").overlay(alignment: .topTrailing) {
+                    if m.unreadNotifications { Circle().fill(Theme.red).frame(width: 8, height: 8).offset(x: 1, y: -1) }
+                }
+            }
+            .accessibilityLabel("Notifications")
+            Button { m.present(.menu) } label: { Image(systemName: "line.3.horizontal") }
+                .accessibilityLabel("Menu")
+        }
     }
 }
 

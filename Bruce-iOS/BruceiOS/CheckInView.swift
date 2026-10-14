@@ -96,9 +96,14 @@ struct ScanCorners: Shape {
 
 /// Check in tab: the camera QR scanner only (as in the original). Every scan asks for confirmation
 /// (`askCheckIn`) and sends a real check-in when logged in. Quick check-in lives in the Home top bar.
+/// Same top bar as the other tabs (title, Notifications, Menu), light on the camera.
 struct CheckInTab: View {
     var body: some View {
-        CheckInScanner(inSheet: false).toolbar(.hidden, for: .navigationBar)
+        CheckInScanner(inSheet: false)
+            .bruceTitle("Check in")
+            .toolbar { MainToolbarButtons() }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .environment(\.colorScheme, .dark)
     }
 }
 
@@ -114,10 +119,13 @@ struct CheckInScanner: View {
                 .frame(width: 240, height: 240)
                 .shadow(color: .black.opacity(0.3), radius: 6)
             VStack(spacing: 12) {
-                HStack {
-                    Text("CHECK IN").font(Theme.screenTitle(26)).foregroundStyle(.white)
-                    Spacer()
-                    if inSheet { Button(role: .close) { scanner.stop(); m.dismissSheets() }.buttonStyle(.glass) }
+                // The tab shows its title in the navigation bar; the sheet has no bar, so it draws its own.
+                if inSheet {
+                    HStack {
+                        Text("CHECK IN").font(Theme.screenTitle(26)).foregroundStyle(.white)
+                        Spacer()
+                        Button(role: .close) { scanner.stop(); m.dismissSheets() }.buttonStyle(.glass)
+                    }
                 }
                 Label("Hold the camera steady over the QR code on the studio door", systemImage: "qrcode.viewfinder")
                     .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)

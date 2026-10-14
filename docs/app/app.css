@@ -197,6 +197,8 @@ body.logged-out .main { display: block; }
 .glass-pill .i { width: 14px; height: 14px; }
 .page-head .glass-pill, .count-pill { color: var(--label); background: var(--fill); font-size: 15px; padding: 8px 14px; border-radius: 20px; }
 .count-pill:empty { display: none; }
+/* Wide screens: Notifications and Account are in the sidebar, so page headers don't repeat them. */
+@media (min-width: 900px) { .page-head .head-global { display: none; } }
 .sec-title { margin: 26px 0 10px; font: 900 15px/1.2 var(--display); text-transform: uppercase; letter-spacing: 0.02em; }
 .sec-row { display: flex; align-items: center; justify-content: space-between; margin: 26px 0 10px; }
 .sec-row .sec-title { margin: 0; }
