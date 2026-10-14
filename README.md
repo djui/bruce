@@ -39,6 +39,7 @@ dark setting on GitHub; every screen is in [`docs/screenshots/`](docs/screenshot
 | **Brüce for iPhone** ([`Bruce-iOS/`](Bruce-iOS/README.md)) | iOS 26+ app built with Liquid Glass throughout |
 | **BruceMacOS** ([`Bruce-MacOS/`](Bruce-MacOS/README.md)) | Phone-sized SwiftUI app for macOS 14+, run with `swift run` |
 | **BruceCore** ([`Shared/BruceCore/`](Shared/BruceCore)) | Code shared by both apps: API client, models, Keychain session, app state, booking rules, demo data |
+| **Auto-book server** ([`server/`](server/README.md)) | Optional Cloudflare Worker that books weekly classes the moment they open |
 | **API map** ([`API.md`](API.md), [`openapi.yaml`](openapi.yaml), [`swagger.html`](swagger.html)) | The Bruce Studios v52 API as observed from the official iOS app 14.4.2 |
 
 ## Features
@@ -62,6 +63,13 @@ My classes tabs, with class and studio pages and account sheets.
   "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked. A "Free spot"
   notification does not book for you: the class page then offers Book next to Leave waitlist. A fully booked class also offers **Similar classes**: nearby classes
   around the same time, as swipeable cards.
+- **Auto-book** a weekly class: switch on "Book every week" on a class page. A class opens for booking a
+  fixed time before it starts (7 days for almost all classes), so the apps know the moment in advance. The
+  Mac app books by itself at that moment while it runs; the iPhone shows a notification at that moment
+  whose **Book** button books from the lock screen (and books by itself while the app is open). An optional
+  small server ([`server/`](server/README.md), a Cloudflare Worker) books even when no device is awake; it
+  only gets your Bruce login when you send it from the app. Menu › Auto-book lists the classes and the
+  server settings.
 - **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
   plan's limit at the studio. A class over your limit shows its drop-in price ("Buy for SEK 220").
 - **Descriptions and alerts:** studio and class descriptions are rendered as Markdown (bold, lists, links).

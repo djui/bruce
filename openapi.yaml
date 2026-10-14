@@ -934,9 +934,13 @@ components:
         instructor: { type: string, nullable: true, example: "**Millie Jabol - English speaking", description: "Free text; some booking systems prefix Markdown bold markers" }
         deleted: { type: boolean, description: "Soft-deleted; still returned by list calls unless deleted=false" }
         deleted_at: { type: string, format: date-time, nullable: true }
-        bookable_earliest: { type: string, format: date-time }
-        bookable_latest: { type: string, format: date-time }
-        unbookable_latest: { type: string, format: date-time }
+        bookable_earliest: { type: integer, example: 604800, description: "Seconds before start when booking opens (7 days for ~97% of classes, 3-14 days at a few studios). Logged-in responses only" }
+        bookable_earliest_time: { type: string, format: date-time, description: "When booking opens = start_time - bookable_earliest. Logged-in responses only" }
+        bookable_latest: { type: integer, example: 600, description: "Seconds before start when booking closes" }
+        bookable_latest_time: { type: string, format: date-time }
+        unbookable_latest: { type: integer, example: 43200, description: "Seconds before start after which cancelling is a late cancellation" }
+        unbookable_latest_time: { type: string, format: date-time }
+        master_id: { type: integer, nullable: true, description: "Series shared by the weekly occurrences of a class (one master can cover several weekly slots). Logged-in responses only" }
         auto_check_in: { type: boolean }
         early_check_in_minutes: { type: integer }
         late_check_in_minutes: { type: integer }

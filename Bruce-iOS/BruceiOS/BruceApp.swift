@@ -2,6 +2,7 @@ import SwiftUI
 
 @main
 struct BruceiOSApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @State private var model = AppModel()
     @StateObject private var ui = UIState()
     @StateObject private var location = LocationProvider()
@@ -9,7 +10,10 @@ struct BruceiOSApp: App {
     var body: some Scene {
         WindowGroup {
             RootView().environment(model).environmentObject(ui).environmentObject(location)
-                .onAppear { location.model = model }
+                .onAppear {
+                    location.model = model
+                    AppDelegate.openClass = { [model] id in model.dismissSheets(); model.push(.classDetail(id)) }
+                }
                 .onChange(of: phase) { old, p in
                     if p == .active { location.start() } else if p == .background { location.stop() }
                     // Waitlist spots can turn into bookings while the app is in the background.
@@ -235,6 +239,7 @@ struct SheetScreen: View {
         case .similarClasses(let id): SimilarClassesSheet(classId: id)
         case .area(let id): AreaMapSheet(areaId: id)
         case .review(let id): ReviewSheet(bookingId: id)
+        case .autoBook: AutoBookView()
         }
     }
 }

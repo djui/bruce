@@ -63,6 +63,14 @@ enum TokenStore {
         save(s)
     }
 
+    /// Other small secrets (e.g. the auto-book server key), stored under their own Keychain account.
+    static func secret(_ account: String) -> String? {
+        read(account).flatMap { String(data: $0, encoding: .utf8) }.flatMap { $0.isEmpty ? nil : $0 }
+    }
+    static func setSecret(_ account: String, _ value: String) {
+        if value.isEmpty { delete(account) } else { write(account, Data(value.utf8)) }
+    }
+
     static func clear() {
         delete(sessionAccount); delete(legacyAccount)
     }

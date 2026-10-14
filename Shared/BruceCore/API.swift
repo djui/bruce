@@ -206,6 +206,15 @@ enum BruceAPI {
         var deletedAt: String? = nil
         var description: String? = nil
         var photo: String? = nil
+        /// Booking opens at `bookable_earliest_time` = start - `bookable_earliest` (s); 604800 (7 days) for ~97% of
+        /// classes, 3-14 days at a few studios. Only in logged-in responses (the public list omits both).
+        /// Decoded leniently: an unexpected type must never break the class list.
+        var bookableEarliestSeconds: LenientInt? = nil
+        var bookableEarliestTime: String? = nil
+        /// Series id shared by the weeks of a recurring class (one master can cover several weekly slots).
+        var masterIdValue: LenientInt? = nil
+        var bookableEarliest: Int? { bookableEarliestSeconds?.value }
+        var masterId: Int? { masterIdValue?.value }
         var bookableLatestTime: String? = nil
         var unbookableLatestTime: String? = nil
         var unbookableLatest: Int? = nil
@@ -231,6 +240,7 @@ enum BruceAPI {
             case rawInstructor = "instructor", deletedAt = "deleted_at"
             case studioId = "studio_id", startTime = "start_time", endTime = "end_time"
             case availableSpots = "available_spots"
+            case bookableEarliestSeconds = "bookable_earliest", bookableEarliestTime = "bookable_earliest_time", masterIdValue = "master_id"
             case bookableLatestTime = "bookable_latest_time", unbookableLatestTime = "unbookable_latest_time"
             case unbookableLatest = "unbookable_latest"
             case earlyCheckInMinutes = "early_check_in_minutes", lateCheckInMinutes = "late_check_in_minutes"
@@ -252,6 +262,25 @@ enum BruceAPI {
             return Int(e.timeIntervalSince(s) / 60)
         }
         var attendance: AttendanceInfo? { userAttendanceInfo ?? studioUserAttendanceInfo }
+        /// When booking opens; nil when the class has no booking window (or it was not sent).
+        var bookingOpens: Date? {
+            if let t = bookableEarliestTime.flatMap(BruceDate.parse) { return t }
+            guard let s = start, let e = bookableEarliest else { return nil }
+            return s.addingTimeInterval(-Double(e))
+        }
+    }
+
+    /// An integer that may arrive as a number or a numeric string; anything else decodes as nil instead of failing.
+    struct LenientInt: Decodable, Hashable {
+        let value: Int?
+        init(_ value: Int?) { self.value = value }
+        init(from decoder: Decoder) throws {
+            let c = try decoder.singleValueContainer()
+            if let i = try? c.decode(Int.self) { value = i }
+            else if let d = try? c.decode(Double.self) { value = Int(d) }
+            else if let s = try? c.decode(String.self) { value = Int(s) }
+            else { value = nil }
+        }
     }
 
     /// `dynamic_prices`: tier code -> öre. Decoded leniently so an unexpected shape never breaks the class list.

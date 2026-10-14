@@ -8,6 +8,7 @@ struct MenuSheet: View {
     let rows: [(String, String, SheetRoute)] = [
         ("person.crop.circle", "Account", .account),
         ("gearshape", "Settings", .settings),
+        ("calendar.badge.clock", "Auto-book", .autoBook),
         ("person.2", "Invite friends", .invite),
         ("gift", "Redeem voucher", .voucher),
         ("bubble.left.and.bubble.right", "Support", .support),

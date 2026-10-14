@@ -50,3 +50,8 @@ playground.xcworkspace
 .idea/
 *.log
 logs/
+
+# --- Auto-book server (server/) ---------------------------------------------------------------
+node_modules/
+.wrangler/
+.dev.vars
