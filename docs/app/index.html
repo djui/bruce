@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brüce</title>
+<meta name="description" content="Brüce in the browser: an unofficial client for your Bruce Studios membership. Book classes, check in, see friends, statistics and reviews. Not affiliated with Bruce Studios AB.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="robots" content="noindex">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Brüce">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="icon" href="favicon.png" type="image/png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;800;900&amp;display=swap">
+<link rel="stylesheet" href="app.css">
+<script>
+  try { var t = localStorage.getItem('theme'); if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+</head>
+<body class="logged-out">
+<aside class="sidebar" aria-label="Sections">
+  <a class="side-brand" href="#/home"><img src="icon-rounded.png" width="34" height="34" alt=""><span>BRÜCE</span></a>
+  <nav id="side-nav" class="side-nav"></nav>
+  <div id="side-actions" class="side-actions">
+    <button data-side="notifications"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20.5a2 2 0 0 0 4 0"/></svg><span>Notifications</span><i class="notif-dot" hidden></i></button>
+    <button data-side="menu"><svg class="i" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c.9-3.8 3.7-6 7-6s6.1 2.2 7 6"/></svg><span>Account</span></button>
+  </div>
+  <button id="demo-flag" class="demo-flag" hidden title="Leave the demo">Demo mode · Leave</button>
+  <p class="side-note">Unofficial. Not affiliated with Bruce Studios AB.</p>
+</aside>
+<main id="main" class="main"></main>
+<section id="pane" class="pane" aria-label="Details"></section>
+<nav id="tabbar" class="tabbar" aria-label="Sections"></nav>
+<div id="toast" role="status" aria-live="polite"></div>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
