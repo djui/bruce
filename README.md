@@ -3,7 +3,7 @@
 Native SwiftUI clients for the [Bruce Studios](https://www.brucestudios.com) fitness membership (Sweden, Norway,
 Denmark), plus a reverse-engineered map of the app's v52 HTTP API.
 
-**Project page: [djui.github.io/bruce](https://djui.github.io/bruce/)** · [API viewer](https://djui.github.io/bruce/api/)
+**Project page: [djui.github.io/bruce](https://djui.github.io/bruce/)** · [Web app](https://djui.github.io/bruce/app/) · [API viewer](https://djui.github.io/bruce/api/)
 
 > [!IMPORTANT]
 > **Unofficial: not affiliated with or endorsed by Bruce Studios AB.** "Bruce Studios" and "Bruce" are
@@ -38,6 +38,7 @@ dark setting on GitHub; every screen is in [`docs/screenshots/`](docs/screenshot
 |---|---|
 | **Brüce for iPhone** ([`Bruce-iOS/`](Bruce-iOS/README.md)) | iOS 26+ app built with Liquid Glass throughout |
 | **BruceMacOS** ([`Bruce-MacOS/`](Bruce-MacOS/README.md)) | Phone-sized SwiftUI app for macOS 14+, run with `swift run` |
+| **Brüce Web** ([`docs/app/`](docs/app), [live](https://djui.github.io/bruce/app/)) | Browser version on GitHub Pages: plain HTML, CSS and JavaScript, no build step |
 | **BruceCore** ([`Shared/BruceCore/`](Shared/BruceCore)) | Code shared by both apps: API client, models, Keychain session, app state, booking rules, demo data |
 | **API map** ([`API.md`](API.md), [`openapi.yaml`](openapi.yaml), [`swagger.html`](swagger.html)) | The Bruce Studios v52 API as observed from the official iOS app 14.4.2 |
 
@@ -113,6 +114,27 @@ full-screen camera Check in tab with clear-glass overlays. It supports light and
 A 390×780 phone-sized window that recreates the mobile app on the Mac, including camera QR scanning
 (AVFoundation and Vision) and freehand area drawing with the mouse.
 
+### Web
+
+[djui.github.io/bruce/app](https://djui.github.io/bruce/app/) runs in any modern browser, on a phone too (it can be
+added to the home screen). It calls `api.bruce.app` straight from the page, with the same routes and parameters as
+the Swift apps: the API answers CORS requests with `Access-Control-Allow-Origin: *`, so no proxy is needed.
+
+- **Classes**: a city's schedule for the next 7 days, with search (class, studio, instructor), category chips,
+  "Free spots" and "Favourite studios" filters, and Booked / Waitlist / Full / spots-left badges.
+- **Class page**: time, instructor, spots, studio and class notices, description, and Book, Cancel booking (with
+  the strike rule for late cancellations), Join or Leave waitlist, plus Similar classes when it is full.
+- **Studios**: searchable list of the city's studios; studio page with notice, address (Apple Maps), categories,
+  facilities, a favourite toggle and the studio's classes per day.
+- **My classes** (upcoming bookings and waitlist) and **Account** (plan, credits, strikes, visit limits, city,
+  appearance).
+- **Demo**: "Try the demo" on the login screen runs the whole app against an in-browser fake of the API
+  ([`docs/app/demo.js`](docs/app/demo.js)) with placeholder data; nothing is sent anywhere.
+
+Not in the web version: check-in and door QR codes, tickets, Parakey, friends, notifications, statistics and
+reviews. To try it locally, serve `docs/` (for example `python3 -m http.server -d docs`) and open
+`http://localhost:8000/app/`. GitHub Pages publishes `docs/` from `main`, so a merge deploys it.
+
 ## Repository layout
 
 ```
@@ -120,7 +142,7 @@ A 390×780 phone-sized window that recreates the mobile app on the Mac, includin
 ├── API.md                  Human-readable API map, with evidence references
 ├── openapi.yaml            OpenAPI 3.0 description of the same endpoints
 ├── swagger.html            Offline-friendly Swagger UI viewer (spec embedded)
-├── docs/                   GitHub Pages site: landing page, screenshots, api/ (Swagger UI + openapi.yaml copy)
+├── docs/                   GitHub Pages site: landing page, screenshots, app/ (web version), api/ (Swagger UI + openapi.yaml copy)
 ├── Shared/BruceCore/       Shared Swift code (API, models, AppModel, TokenStore, logic, demo data)
 ├── Bruce-MacOS/            SwiftPM package, executable target BruceMacOS
 │   ├── Package.swift
@@ -248,6 +270,8 @@ so they are **not** included in this repository. Examples in the docs use placeh
   a language model the first time; the texts themselves are not sent to any translation service.
 - Cached studio lists, images and custom areas are stored locally in the app's caches and Application
   Support folders.
+- The web version keeps its access token, settings and a cached studio list in the browser's localStorage for
+  djui.github.io; it sends the token only to `api.bruce.app`. Log out removes the token.
 - No personal data is hard-coded. Demo data is fictional.
 
 ## Responsible use

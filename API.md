@@ -14,6 +14,7 @@ Numbers in brackets are capture file numbers (`N-meta.json` / `N-req.json` / `N-
 - Auth: header `X-Access-Token: <ACCESS_TOKEN>` on every v52 call. No `Authorization`/Bearer, no cookies.
 - Other headers: `User-Agent: Bruce/<ver>_<build> (iOS<ver>; Apple)`, `Accept-Language`, Sentry `baggage`/`sentry-trace` (optional).
 - Almost all calls take `locale=en`; user-scoped calls take `user_id=<USER_ID>`.
+- CORS (checked live on 2026-10-14 with `Origin: https://djui.github.io`, `http://localhost:8000` and others): preflights answer 200 with `Access-Control-Allow-Origin: *`, echoing the requested method and headers (`Content-Type`, `X-Access-Token`) in `Access-Control-Allow-Methods`/`-Headers`; GETs carry `Access-Control-Allow-Origin: *` and `Vary: Origin`. No `Access-Control-Allow-Credentials` and no `Access-Control-Expose-Headers`. So a web page can call the API directly with the token in `X-Access-Token` (the web version in `docs/app/` does), but cannot use cookies or read custom response headers such as `X-Cache-Expires`.
 - Lists: `{"<items>":[...], "metadata":{"pagination":{count,limit,offset,next_offset,next_cursor,prev_cursor},"cache_expire_seconds"}}`; page with `limit` + `next_cursor` (base64, e.g. `id:<n>`) [75, 86].
 
 ## Login / auth (capture 2)

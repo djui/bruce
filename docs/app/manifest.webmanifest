@@ -1,0 +1,14 @@
+{
+  "name": "Brüce Web",
+  "short_name": "Brüce",
+  "description": "Unofficial Bruce Studios client in the browser. Not affiliated with Bruce Studios AB.",
+  "start_url": "./#/classes",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#07090a",
+  "theme_color": "#07090a",
+  "icons": [
+    { "src": "../favicon.svg", "sizes": "any", "type": "image/svg+xml" },
+    { "src": "../apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+  ]
+}
