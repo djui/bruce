@@ -712,6 +712,8 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .ch-month-card { padding: 14px 16px; }
 .ch-mrow { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid var(--sep); margin-top: 8px; }
 .ch-mrow + .ch-mrow { margin-top: 0; }
+.ch-mrow .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ch-mrow > .muted { flex: none; }
 .ch-mrow .rk { width: 22px; text-align: center; font-weight: 800; color: var(--label-2); }
 .ch-mrow .rk .i { color: var(--star); }
 .ch-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0; }

@@ -175,4 +175,4 @@ $('#side-actions').addEventListener('click', (e) => {
 $('#demo-flag').addEventListener('click', () => logout());
 wireCommon(document.body);
 chrome();
-if (S.auth) start(); else renderLogin();
+if (S.auth) start(); else route();   // route() also remembers a shared challenge link for after the login
