@@ -92,6 +92,12 @@ My classes tabs, with class and studio pages and account sheets.
   selected month by day (class or solo training, studio, area and instructor).
 - **Friends' classes**, bookmarks, favourites, membership, credits, strikes,
   receipts, and notification and social settings.
+- **Siri and Shortcuts** (App Intents): ask "What's my next class in Brüce", "Book a class in Brüce"
+  (one of your saved classes), "Cancel a class in Brüce", "How many visits do I have left in Brüce" or
+  "Check in with Brüce" (opens the quick check-in sheet). Booking and cancelling ask you to confirm first, and
+  a cancel past the late-cancel time warns that it may count as a strike. Siri also accepts "Bruce" as the
+  app name. On the Mac the actions only show up in Shortcuts when the app runs as a bundled `.app`; `swift
+  run` does not register them.
 - **Fast:** studios stream in page by page, then load in parallel and are cached on disk. Class days load
   in parallel time windows, and images are cached and downsampled. Measurements are in the
   [iOS README](Bruce-iOS/README.md#performance-measured-against-the-public-endpoints-logged-out-simulator).
