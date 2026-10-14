@@ -126,20 +126,35 @@ A 390×780 phone-sized window that recreates the mobile app on the Mac, includin
 added to the home screen). It calls `api.bruce.app` straight from the page, with the same routes and parameters as
 the Swift apps: the API answers CORS requests with `Access-Control-Allow-Origin: *`, so no proxy is needed.
 
-- **Classes**: a city's schedule for the next 7 days, with search (class, studio, instructor), category chips,
-  "Free spots" and "Favourite studios" filters, and Booked / Waitlist / Full / spots-left badges.
-- **Class page**: time, instructor, spots, studio and class notices, description, and Book, Cancel booking (with
-  the strike rule for late cancellations), Join or Leave waitlist, plus Similar classes when it is full.
-- **Studios**: searchable list of the city's studios; studio page with notice, address (Apple Maps), categories,
-  facilities, a favourite toggle and the studio's classes per day.
-- **My classes** (upcoming bookings and waitlist) and **Account** (plan, credits, strikes, visit limits, city,
-  appearance).
-- **Demo**: "Try the demo" on the login screen runs the whole app against an in-browser fake of the API
-  ([`docs/app/demo.js`](docs/app/demo.js)) with placeholder data; nothing is sent anywhere.
+It follows the iOS app's look (wide uppercase titles, lime actions, glass buttons, photo cards, light and dark
+mode) and uses the extra room a browser has. On a phone it has the same five tabs in a floating tab bar. From
+900px wide there is a sidebar, and the list and the selected class or studio sit side by side; with nothing
+selected, Explore shows the city's studios on a map next to the list.
 
-Not in the web version: check-in and door QR codes, tickets, Parakey, friends, notifications, statistics and
-reviews. To try it locally, serve `docs/` (for example `python3 -m http.server -d docs`) and open
-`http://localhost:8000/app/`. GitHub Pages publishes `docs/` from `main`, so a merge deploys it.
+- **Home**: reviews to give, your next class with a Check in button, Spotlight, categories, nearby and new studios.
+- **Explore**: Studios and Classes with counts, search (studio, class, instructor), favourite, category and
+  "Free spots" filters, 7 days of classes, and a studio map.
+- **Class page**: time, instructor, spots, notices, the booking rules (book until, check-in window, cancel until),
+  friends and classmates booked, Invite friends, facilities, and Book, Cancel booking, Join or Leave waitlist,
+  Similar classes, Check in, Show ticket and Rate the class. Booking and cancelling show the strike rules first.
+- **Studio page**: opening hours, notices, Parakey door note, facilities, description, map with Apple and Google
+  Maps links, classes per day, a favourite toggle, the visit limit for your plan, and reviews with a rating summary.
+- **Check in**: suggests the studio whose check-in window is open, or the last visited one, then does one
+  check-in request and shows the ticket. Scan the door QR code with the camera (BarcodeDetector, or jsQR where
+  that is missing) or type the code. Studios that open with Parakey still need the Parakey app.
+- **Friends** (their upcoming classes), **My classes** (bookings, waitlist, bookmarks) and **Notifications**.
+- **Account menu**: plan, visit meters and strikes, statistics (visits per month and the visits behind each bar),
+  payments with PDF receipts, invite codes, and settings (city, appearance, social visibility, notification
+  types, API server).
+- **Demo**: "Try the demo" on the login screen runs the whole app against an in-browser fake of the API
+  ([`docs/app/js/demo.js`](docs/app/js/demo.js)) with placeholder data; nothing is sent anywhere.
+
+Push notifications still go to the official app. The code is plain ES modules in
+[`docs/app/js/`](docs/app/js); [Leaflet](https://leafletjs.com) and [jsQR](https://github.com/cozmo/jsQR) are
+vendored in [`docs/app/vendor/`](docs/app/vendor), so the page loads nothing from a CDN (map tiles come from
+OpenStreetMap, the Unbounded font from Google Fonts). To try it locally, serve `docs/` (for example
+`python3 -m http.server -d docs`) and open `http://localhost:8000/app/`. GitHub Pages publishes `docs/` from
+`main`, so a merge deploys it.
 
 ## Repository layout
 
@@ -277,7 +292,8 @@ so they are **not** included in this repository. Examples in the docs use placeh
 - Cached studio lists, images and custom areas are stored locally in the app's caches and Application
   Support folders.
 - The web version keeps its access token, settings and a cached studio list in the browser's localStorage for
-  djui.github.io; it sends the token only to `api.bruce.app`. Log out removes the token.
+  djui.github.io; it sends the token only to `api.bruce.app`. Log out removes the token. The camera is used only
+  while the QR scanner is open, and the frames stay in the browser.
 - No personal data is hard-coded. Demo data is fictional.
 
 ## Responsible use
@@ -303,7 +319,8 @@ The [MIT license](LICENSE) covers **only the code and documentation written for 
   ([`Shared/BruceCore/Copy.swift`](Shared/BruceCore/Copy.swift)). Where the API returns the facts (strike-unblock
   price, pause allowance, free unlocks, plan prices and limits, invite codes, notification descriptions), the
   texts are built from that live data. Short generic labels such as "Book" or "Check in" are kept.
-- The landing page and screenshots in [`docs/`](docs) show only demo-mode data and an original "Ü" mark.
+- The landing page and screenshots in [`docs/`](docs) show only demo-mode data and an original "Ü" mark. The web
+  app uses the same original iOS app icon (see below).
 - **Trademark-sensitive asset:** the iOS app icon
   ([`Bruce-iOS/BruceiOS/Assets.xcassets/AppIcon.appiconset`](Bruce-iOS/BruceiOS/Assets.xcassets/AppIcon.appiconset))
   is an original rendering generated by [`scripts/make-icon.swift`](Bruce-iOS/scripts/make-icon.swift): a
@@ -318,6 +335,10 @@ The [MIT license](LICENSE) covers **only the code and documentation written for 
   design and screen structure these clients follow.
 - **Apple** for SwiftUI, Liquid Glass, SF Symbols (used for all icons, under Apple's SF Symbols license
   terms), MapKit, AVFoundation and Vision.
+- **[Leaflet](https://leafletjs.com)** (BSD 2-Clause) and **[jsQR](https://github.com/cozmo/jsQR)**
+  (Apache 2.0), vendored with their licenses in [`docs/app/vendor/`](docs/app/vendor), and
+  **[OpenStreetMap](https://www.openstreetmap.org/copyright)** contributors for the map tiles (ODbL).
+- **[Unbounded](https://fonts.google.com/specimen/Unbounded)** (SIL Open Font License) for the web app's titles.
 - **[Charles Proxy](https://www.charlesproxy.com)** by Karl von Randow, used to observe the traffic.
 - **[Swagger UI](https://github.com/swagger-api/swagger-ui)** (Apache 2.0), loaded by `swagger.html` and the
   [online API viewer](https://djui.github.io/bruce/api/).
