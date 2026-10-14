@@ -13,6 +13,7 @@ struct BruceiOSApp: App {
                 .onAppear {
                     location.model = model
                     AppDelegate.openClass = { [model] id in model.dismissSheets(); model.push(.classDetail(id)) }
+                    AppDelegate.onDeviceToken = { [model] in Task { await model.syncAutoBookServer() } }
                 }
                 .onChange(of: phase) { old, p in
                     if p == .active { location.start() } else if p == .background { location.stop() }

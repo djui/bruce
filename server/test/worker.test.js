@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import worker, { localParts, localMidnight, matches, opensAt, scanPlan, book, tick } from "../src/worker.js";
+import worker, { localParts, localMidnight, matches, opensAt, scanPlan, book, tick, tickUser } from "../src/worker.js";
 
 const rule = { id: "r1", studioId: 6614, masterId: 77, title: "Reformer", weekday: 3, minuteOfDay: 18 * 60 };
 // Tue 2026-10-20 18:00 Stockholm (CEST, UTC+2) = 16:00Z
@@ -57,51 +57,87 @@ test("book retries until the window opens", async () => {
   assert.equal(calls[0].headers["X-Access-Token"], "t");
 });
 
-function memoryKV(init) {
-  const m = new Map(Object.entries(init).map(([k, v]) => [k, JSON.stringify(v)]));
-  return { m, puts: 0,
-    async get(k, type) { const v = m.get(k); return v == null ? null : type === "json" ? JSON.parse(v) : v; },
-    async put(k, v) { this.puts++; m.set(k, v); }, async delete(k) { m.delete(k); } };
+// A tiny in-memory stand-in for the D1 binding, enough for the queries the worker makes.
+function memoryDB(rows = []) {
+  const t = new Map(rows.map((r) => [r.user_id, { rules: "[]", devices: "[]", state: "{}", ...r }]));
+  return { t, prepare(sql) {
+    let args = [];
+    const stmt = {
+      bind(...a) { args = a; return stmt; },
+      async run() {
+        if (sql.startsWith("INSERT")) t.set(args[0], { user_id: args[0], access_token: args[1], rules: args[2], devices: args[3], state: args[4] });
+        if (sql.startsWith("DELETE")) t.delete(args[0]);
+      },
+      async first() { return t.get(args[0]) ?? null; },
+      async all() { return { results: [...t.values()] }; },
+    };
+    return stmt;
+  } };
 }
 
+const userRow = (state, extra = {}) => ({ user_id: 42, access_token: "t", rules: JSON.stringify([rule]), state: JSON.stringify(state), ...extra });
+const upcoming = (opens) => [{ classId: 1, title: "Reformer", start: Date.parse(cls.start_time), opens }];
+
 test("tick: quiet minutes make no Bruce calls and no writes", async () => {
-  const kv = memoryKV({ rules: [rule], session: { access_token: "t" },
-    state: { upcoming: [{ classId: 1, title: "Reformer", start: Date.parse(cls.start_time), opens: Date.parse(cls.bookable_earliest_time) }], handled: {}, log: [], lastScan: "x" } });
+  const DB = memoryDB([userRow({ upcoming: upcoming(Date.parse(cls.bookable_earliest_time)), handled: {}, log: [], lastScan: "x" })]);
+  const before = DB.t.get(42).state;
   const calls = fakeFetch(() => ok({}));
-  await tick({ AUTOBOOK: kv }, Date.parse("2026-10-13T12:01:00Z"));
+  await tick({ DB }, Date.parse("2026-10-13T12:01:00Z"));   // minute % 5 = 1, user 42 % 5 = 2
   assert.equal(calls.length, 0);
-  assert.equal(kv.puts, 0);
+  assert.equal(DB.t.get(42).state, before);
 });
 
-test("tick: scan on the 5th minute finds the class", async () => {
-  const kv = memoryKV({ rules: [rule], session: { access_token: "t" }, state: { upcoming: [], handled: {}, log: [], lastScan: "x" } });
+test("tick: scans on the user's minute and finds the class", async () => {
+  const DB = memoryDB([userRow({ upcoming: [], handled: {}, log: [], lastScan: "x" })]);
   fakeFetch((url) => ok({ classes: url.includes("2026-10-19T22") ? [cls, { ...cls, id: 2, title: "Other", master_id: 1 }] : [], metadata: {} }));
-  await tick({ AUTOBOOK: kv }, Date.parse("2026-10-14T08:05:00Z"));
-  const st = JSON.parse(kv.m.get("state"));
-  assert.deepEqual(st.upcoming.map((o) => o.classId), [1]);
+  await tick({ DB }, Date.parse("2026-10-14T08:02:00Z"));
+  assert.deepEqual(JSON.parse(DB.t.get(42).state).upcoming.map((o) => o.classId), [1]);
 });
 
-test("tick: books a due class once, and a 401 stops the server", async () => {
+test("tickUser: books a due class once and pushes the result", async () => {
   const opens = Date.parse("2026-10-13T16:00:00Z");
-  const kv = memoryKV({ rules: [rule], session: { access_token: "t" },
-    state: { upcoming: [{ classId: 1, title: "Reformer", start: Date.parse(cls.start_time), opens: opens - 5000 }], handled: {}, log: [], lastScan: "x" } });
-  fakeFetch(() => new Response("", { status: 401 }));
-  await tick({ AUTOBOOK: kv }, opens + 1000);
-  const st = JSON.parse(kv.m.get("state"));
-  assert.equal(st.log[1].outcome, "Login expired");
-  assert.ok(st.handled[1]);
-  assert.equal(kv.m.get("session"), undefined);
+  const u = { userId: 42, session: { access_token: "t" }, rules: [rule], devices: [{ token: "ab".repeat(32), env: "production" }],
+              state: { upcoming: upcoming(opens - 5000), handled: {}, log: [], lastScan: "x" } };
+  const { privateKey } = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
+  const pem = Buffer.from(await crypto.subtle.exportKey("pkcs8", privateKey)).toString("base64");
+  const env = { APNS_KEY: `-----BEGIN PRIVATE KEY-----\n${pem}\n-----END PRIVATE KEY-----`, APNS_KEY_ID: "K", APNS_TEAM_ID: "T", APNS_TOPIC: "net.dauernheim.bruce" };
+  const calls = fakeFetch(() => ok({}));
+  let booked = 0;
+  assert.ok(await tickUser(env, u, opens + 1000, { bookFn: async () => { booked++; return "Booked"; } }));
+  assert.ok(await tickUser(env, u, opens + 61000, { bookFn: async () => { booked++; return "Booked"; } }));
+  assert.equal(booked, 1);
+  const apns = calls.filter((c) => c.url.startsWith("https://api.push.apple.com/3/device/"));
+  assert.equal(apns.length, 1);
+  assert.equal(apns[0].headers["apns-topic"], "net.dauernheim.bruce");
+  assert.match(apns[0].headers.authorization, /^bearer [\w-]+\.[\w-]+\.[\w-]+$/);
+  assert.equal(JSON.parse(apns[0].body).aps.alert.title, "Booked: Reformer");
 });
 
-test("HTTP API needs the key", async () => {
-  const kv = memoryKV({});
-  const env = { API_KEY: "k", AUTOBOOK: kv };
+test("tick: a 401 at booking deletes the user", async () => {
+  const opens = Date.parse("2026-10-13T16:00:00Z");
+  const DB = memoryDB([userRow({ upcoming: upcoming(opens - 5000), handled: {}, log: [], lastScan: "x" })]);
+  fakeFetch(() => new Response("", { status: 401 }));
+  await tick({ DB }, opens + 1000);
+  assert.equal(DB.t.size, 0);
+});
+
+test("HTTP API: users authenticate with their own Bruce login", async () => {
+  const DB = memoryDB();
   const ctx = { waitUntil() {} };
-  assert.equal((await worker.fetch(new Request("https://x/status"), env, ctx)).status, 401);
-  const r = await worker.fetch(new Request("https://x/rules", { method: "PUT", headers: { Authorization: "Bearer k" },
-    body: JSON.stringify({ rules: [{ ...rule, createdAt: "2026-10-14T00:00:00Z" }] }) }), env, ctx);
+  fakeFetch((url, init) => (url.includes("/v52/user/42") && init.headers["X-Access-Token"] === "good" ? ok({ user: { id: 42 } })
+                            : url.includes("/v52/class") ? ok({ classes: [], metadata: {} }) : new Response("", { status: 401 })));
+  const req = (method, path, token, body) => new Request(`https://x${path}`, { method, headers: { "X-Access-Token": token, "X-User-Id": "42" },
+                                                                              body: body && JSON.stringify(body) });
+  assert.equal((await worker.fetch(req("GET", "/me", "bad"), { DB }, ctx)).status, 401);
+  assert.equal((await worker.fetch(req("GET", "/me", "good"), { DB, ALLOWED_USERS: "7" }, ctx)).status, 401);
+  const r = await worker.fetch(req("PUT", "/me", "good", { rules: [rule], device: { token: "AB".repeat(32), env: "sandbox" } }), { DB }, ctx);
   assert.equal(r.status, 200);
-  assert.equal(JSON.parse(kv.m.get("rules"))[0].minuteOfDay, 1080);
-  const s = await (await worker.fetch(new Request("https://x/status", { headers: { Authorization: "Bearer k" } }), env, ctx)).json();
-  assert.equal(s.hasSession, false);
+  const row = DB.t.get(42);
+  assert.equal(row.access_token, "good");
+  assert.equal(JSON.parse(row.rules)[0].minuteOfDay, 1080);
+  assert.deepEqual(JSON.parse(row.devices), [{ token: "ab".repeat(32), env: "sandbox" }]);
+  const s = await (await worker.fetch(req("GET", "/me", "good"), { DB }, ctx)).json();
+  assert.equal(s.hasSession, true);
+  await worker.fetch(req("DELETE", "/me", "good"), { DB }, ctx);
+  assert.equal(DB.t.size, 0);
 });

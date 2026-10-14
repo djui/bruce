@@ -167,9 +167,13 @@ enum AutoBook {
         ])
     }
 
+    /// Asks for notification permission and registers for remote push (the token arrives in the app delegate).
     static func requestPermission() async {
-        _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+        let ok = (try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])) ?? false
+        if ok { await MainActor.run { registerForPush?() } }
     }
+    /// Set by the iOS app (UIApplication lives in the app target).
+    @MainActor static var registerForPush: (@MainActor () -> Void)?
 
     /// Replaces the pending auto-book notifications with one per upcoming class (iOS keeps at most 64 pending).
     static func schedule(_ upcoming: [AutoBookOccurrence], studioNames: [Int: String] = [:]) async {
@@ -193,6 +197,8 @@ enum AutoBook {
     /// as a follow-up notification. Works while the app is in the background.
     static func handle(_ response: UNNotificationResponse) async -> Int? {
         let info = response.notification.request.content.userInfo
+        // A server push ("Booked: …") only opens the class.
+        if response.notification.request.content.categoryIdentifier == "AUTOBOOK_RESULT" { return info["classId"] as? Int }
         guard response.notification.request.content.categoryIdentifier == category,
               let classId = info["classId"] as? Int else { return nil }
         let opens = (info["opens"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? .distantPast
@@ -208,42 +214,38 @@ enum AutoBook {
     #endif
 }
 
-// MARK: - Optional server (server/README.md)
+// MARK: - Server (server/README.md)
 
-/// The server's address and key. The address is built in (`defaultURL`); the key is a shared secret set on the
-/// server (`API_KEY`). It comes from the Keychain (entered in the app, or stored there by a setup script) or from
-/// the iOS build setting `AUTOBOOK_SERVER_KEY` in the git-ignored Config/Local.xcconfig, never from the repository.
+/// The auto-book server. Its address is built in; the app signs in with the user's own Bruce login
+/// (`X-Access-Token` + `X-User-Id`, checked by the server with Bruce), so there is no shared key and each user only
+/// sees their own classes. The server keeps the login to book with it.
 enum AutoBookServer {
     static let defaultURL = "https://bruce-autobook.uwe-af1.workers.dev"
     static var url: String {
         get { UserDefaults.standard.string(forKey: "autoBookServerURL").flatMap { $0.isEmpty ? nil : $0 } ?? defaultURL }
         set {
             let v = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
-            UserDefaults.standard.set(v == defaultURL ? nil : v, forKey: "autoBookServerURL")
+            UserDefaults.standard.set(v.isEmpty || v == defaultURL ? nil : v, forKey: "autoBookServerURL")
         }
     }
-    static var key: String {
-        get {
-            TokenStore.secret("autobook-server-key")
-                ?? (Bundle.main.object(forInfoDictionaryKey: "AutoBookServerKey") as? String).flatMap { $0.isEmpty || $0.hasPrefix("$(") ? nil : $0 }
-                ?? ""
-        }
-        set { TokenStore.setSecret("autobook-server-key", newValue.trimmingCharacters(in: .whitespacesAndNewlines)) }
-    }
-    static var isConfigured: Bool { URL(string: url)?.host != nil && !key.isEmpty }
-    /// "Let the server book for me": on by default once a server is configured; the app then hands it the login.
+    static var isConfigured: Bool { URL(string: url)?.host != nil }
+    /// "Let the server book for me": on by default; off removes everything from the server.
     static var booksForMe: Bool {
         get { UserDefaults.standard.object(forKey: "autoBookServerBooks") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "autoBookServerBooks") }
     }
-    /// Which access token the server last got (a hash, so a new login is sent again and the same one is not).
-    static var sentTokenHash: Int? {
-        get { UserDefaults.standard.object(forKey: "autoBookServerTokenHash") as? Int }
-        set { UserDefaults.standard.set(newValue, forKey: "autoBookServerTokenHash") }
+    /// This device's APNs token (hex) once iOS registered for push; sent with the rules.
+    static var deviceToken: String? {
+        get { UserDefaults.standard.string(forKey: "autoBookDeviceToken") }
+        set { UserDefaults.standard.set(newValue, forKey: "autoBookDeviceToken") }
     }
-    static func tokenHash(_ t: String) -> Int {
-        // Stable across launches (Swift's hashValue is seeded per process).
-        t.utf8.reduce(5381) { ($0 &* 33) &+ Int($1) }
+    /// Debug builds run against Apple's sandbox push service, TestFlight/App Store builds against production.
+    static var pushEnvironment: String {
+        #if DEBUG
+        return "sandbox"
+        #else
+        return "production"
+        #endif
     }
 
     struct Status: Decodable {
@@ -252,13 +254,15 @@ enum AutoBookServer {
         let lastScan: String?
         let upcoming: [Entry]?
         let log: [Entry]?
+        let devices: Int?
     }
 
-    private static func request(_ method: String, _ path: String, body: Any? = nil) throws -> URLRequest {
-        guard let base = URL(string: url), base.host != nil else { throw BruceAPI.APIError.badURL }
+    private static func request(_ method: String, _ path: String, session: Session, body: Any? = nil) throws -> URLRequest {
+        guard let base = URL(string: url), base.host != nil, let uid = session.userId else { throw BruceAPI.APIError.notLoggedIn }
         var req = URLRequest(url: base.appendingPathComponent(path))
         req.httpMethod = method
-        req.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
+        req.setValue(session.accessToken, forHTTPHeaderField: "X-Access-Token")
+        req.setValue(String(uid), forHTTPHeaderField: "X-User-Id")
         if let body {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: body)
@@ -266,26 +270,23 @@ enum AutoBookServer {
         return req
     }
 
-    /// `PUT /rules`: replaces the server's rules (same JSON as stored locally) and rescans.
-    static func push(_ rules: [AutoBookRule]) async throws {
+    /// `PUT /me`: the rules (same JSON as stored locally), this device's push token, and with them the login.
+    static func sync(_ rules: [AutoBookRule], session: Session) async throws {
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
-        let json = try JSONSerialization.jsonObject(with: enc.encode(rules))
-        try await BruceAPI.send(request("PUT", "rules", body: ["rules": json]))
+        var body: [String: Any] = ["rules": try JSONSerialization.jsonObject(with: enc.encode(rules))]
+        if let t = deviceToken { body["device"] = ["token": t, "env": pushEnvironment] }
+        try await BruceAPI.send(request("PUT", "me", session: session, body: body))
     }
 
-    /// `PUT /session`: hands the server the Bruce access token so it can book. Only on an explicit tap.
-    static func sendSession(_ s: Session) async throws {
-        var body: [String: Any] = ["access_token": s.accessToken]
-        if let uid = s.userId { body["user_id"] = uid }
-        try await BruceAPI.send(request("PUT", "session", body: body))
+    /// `DELETE /me`: the server forgets the login, rules and devices.
+    static func remove(session: Session) async throws { try await BruceAPI.send(request("DELETE", "me", session: session)) }
+
+    static func status(session: Session) async throws -> Status {
+        try JSONDecoder().decode(Status.self, from: try await BruceAPI.send(request("GET", "me", session: session)))
     }
 
-    /// `DELETE /session`: the server forgets the token.
-    static func removeSession() async throws { try await BruceAPI.send(request("DELETE", "session")) }
-
-    static func status() async throws -> Status {
-        try JSONDecoder().decode(Status.self, from: try await BruceAPI.send(request("GET", "status")))
-    }
+    /// `POST /me/test-push`: a test notification to this user's devices.
+    static func testPush(session: Session) async throws { try await BruceAPI.send(request("POST", "me/test-push", session: session)) }
 }
 
 // MARK: - App state
@@ -314,33 +315,29 @@ extension AppModel {
         if !AppModel.demo { AutoBook.saveRules(autoBookRules) }
         Task {
             #if os(iOS)
-            if !autoBookRules.isEmpty { await AutoBook.requestPermission() }
+            if !autoBookRules.isEmpty { await AutoBook.requestPermission() }   // also registers for remote push
             #endif
             await refreshAutoBook()
             await syncAutoBookServer()
         }
     }
 
-    /// Pushes the rules and, while "Let the server book for me" is on, the current login (only when it changed).
+    /// While "Let the server book for me" is on: sends the rules, the push token and the current login.
     func syncAutoBookServer() async {
-        guard !AppModel.demo, tokenUsable, AutoBookServer.isConfigured else { return }
-        do {
-            try await AutoBookServer.push(autoBookRules)
-            if AutoBookServer.booksForMe, let s = session, AutoBookServer.sentTokenHash != AutoBookServer.tokenHash(s.accessToken) {
-                try await AutoBookServer.sendSession(s)
-                AutoBookServer.sentTokenHash = AutoBookServer.tokenHash(s.accessToken)
-            }
-            autoBookServerNote = nil
-        } catch { autoBookServerNote = "Server sync failed: \(error.localizedDescription)" }
+        guard !AppModel.demo, tokenUsable, let s = session, AutoBookServer.isConfigured, AutoBookServer.booksForMe else { return }
+        guard !autoBookRules.isEmpty || AutoBookServer.deviceToken != nil else { return }
+        do { try await AutoBookServer.sync(autoBookRules, session: s); autoBookServerNote = nil }
+        catch { autoBookServerNote = "Server sync failed: \(error.localizedDescription)" }
     }
 
     /// The "Let the server book for me" switch.
     func setServerBooksForMe(_ on: Bool) async {
         AutoBookServer.booksForMe = on
-        AutoBookServer.sentTokenHash = nil
-        if on { await syncAutoBookServer(); return }
-        do { try await AutoBookServer.removeSession(); autoBookServerNote = nil }
+        if on { await syncAutoBookServer(); await refreshAutoBook(); return }
+        guard let s = session else { return }
+        do { try await AutoBookServer.remove(session: s); autoBookServerNote = nil }
         catch { autoBookServerNote = "Server: \(error.localizedDescription)" }
+        await refreshAutoBook()
     }
 
     /// Next opening for a rule, if one of its classes is known.
@@ -361,8 +358,9 @@ extension AppModel {
         // A class that is already booked or waitlisted needs nothing.
         autoBookUpcoming = found.filter { booking(forClass: $0.classId) == nil && standby(forClass: $0.classId) == nil }
         #if os(iOS)
+        // While the server books, its push reports the result; the local "Book" prompt is only the fallback.
         let names = Dictionary(autoBookUpcoming.map { ($0.studioId, studioName($0.studioId)) }, uniquingKeysWith: { a, _ in a })
-        await AutoBook.schedule(autoBookUpcoming, studioNames: names)
+        await AutoBook.schedule(AutoBookServer.booksForMe && AutoBookServer.isConfigured ? [] : autoBookUpcoming, studioNames: names)
         #endif
         startAutoBooker()
     }

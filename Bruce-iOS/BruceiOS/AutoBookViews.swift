@@ -6,11 +6,10 @@ import UserNotifications
 struct AutoBookView: View {
     @Environment(AppModel.self) var m
     @State private var serverURL = AutoBookServer.url
-    @State private var serverKey = AutoBookServer.key
     @State private var server: AutoBookServer.Status?
     @State private var working = false
     @State private var booksForMe = AutoBookServer.booksForMe
-    @State private var showServerFields = !AutoBookServer.isConfigured
+    @State private var showServerFields = false
 
     var body: some View {
         Form {
@@ -25,23 +24,25 @@ struct AutoBookView: View {
             } header: { Text("Every week") } footer: { Text(AutoBookCopy.howItWorks) }
 
             Section {
-                if AutoBookServer.isConfigured {
-                    Toggle("Let the server book for me", isOn: Binding(get: { booksForMe }, set: { on in
-                        booksForMe = on
-                        run { await m.setServerBooksForMe(on); if let n = m.autoBookServerNote { throw ServerError(n) } }
-                    }))
-                    if let s = server { serverSummary(s) }
+                Toggle("Let the server book for me", isOn: Binding(get: { booksForMe }, set: { on in
+                    booksForMe = on
+                    run { await m.setServerBooksForMe(on); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                }))
+                if booksForMe, let s = server { serverSummary(s) }
+                if booksForMe, (server?.devices ?? 0) > 0 {
+                    Button("Send a test notification") {
+                        guard let s = m.session else { return }
+                        run { try await AutoBookServer.testPush(session: s) }
+                    }
                 }
                 if let n = m.autoBookServerNote { Text(n).foregroundStyle(Theme.red).font(.system(size: 14)) }
-                DisclosureGroup("Server address and key", isExpanded: $showServerFields) {
+                DisclosureGroup("Server address", isExpanded: $showServerFields) {
                     TextField(AutoBookServer.defaultURL, text: $serverURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
-                    SecureField("Server key", text: $serverKey)
                     Button("Save and sync") {
-                        AutoBookServer.url = serverURL; AutoBookServer.key = serverKey
+                        AutoBookServer.url = serverURL
                         run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
                     }
-                    .disabled(serverURL.isEmpty || serverKey.isEmpty)
                 }
             } header: { Text("Server") } footer: { Text(AutoBookCopy.server) }
         }
@@ -58,7 +59,7 @@ struct AutoBookView: View {
 
     @ViewBuilder func serverSummary(_ s: AutoBookServer.Status) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(s.hasSession == true ? "The server can book for you." : "The server has no login yet.")
+            Text(s.hasSession == true ? "The server books for you\((s.devices ?? 0) > 0 ? " and notifies this phone" : "")." : "Not connected yet.")
             if let t = s.lastScan.flatMap(BruceDate.parse) { Text("Last checked \(BruceDate.format(t, "HH:mm"))") }
             ForEach((s.log ?? []).prefix(5), id: \.self) { e in
                 Text("\(e.outcome ?? "") · \(e.title ?? "#\(e.classId)")").foregroundStyle(Theme.secondary)
@@ -68,8 +69,8 @@ struct AutoBookView: View {
     }
 
     func loadServer() async {
-        guard AutoBookServer.isConfigured else { server = nil; return }
-        server = try? await AutoBookServer.status()
+        guard AutoBookServer.isConfigured, AutoBookServer.booksForMe, let s = m.session else { server = nil; return }
+        server = try? await AutoBookServer.status(session: s)
     }
 
     func run(_ op: @escaping () async throws -> Void) {
@@ -88,8 +89,8 @@ struct ServerError: LocalizedError {
 }
 
 enum AutoBookCopy {
-    static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. When it opens you get a notification with a Book button, and the app books by itself while it is open. Swipe to remove a class. Cancelling an auto-booked class does not rebook it."
-    static let server = "Books even when your phone is locked or offline: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes the login from the server."
+    static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. The server books it at that moment and sends you a notification. Without the server, you get a notification with a Book button instead. Swipe to remove a class. Cancelling an auto-booked class does not rebook it."
+    static let server = "Books even when your phone is locked or offline: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login to book with; switching it off removes your login and classes from the server."
 }
 
 /// Class page toggle.
@@ -121,11 +122,26 @@ struct AutoBookToggle: View {
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {
     /// Set by the app so a tap in the foreground can open the class page.
     @MainActor static var openClass: (@MainActor (Int) -> Void)?
+    /// Set by the app: sends a new push token to the auto-book server.
+    @MainActor static var onDeviceToken: (@MainActor () -> Void)?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
         AutoBook.registerCategory()
+        AutoBook.registerForPush = { UIApplication.shared.registerForRemoteNotifications() }
+        // Apple recommends registering at every launch; the token can change.
+        Task {
+            let settings = await UNUserNotificationCenter.current().notificationSettings()
+            if settings.authorizationStatus == .authorized { await MainActor.run { UIApplication.shared.registerForRemoteNotifications() } }
+        }
         return true
+    }
+
+    func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        let hex = deviceToken.map { String(format: "%02x", $0) }.joined()
+        guard hex != AutoBookServer.deviceToken else { return }
+        AutoBookServer.deviceToken = hex
+        Task { @MainActor in AppDelegate.onDeviceToken?() }
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {

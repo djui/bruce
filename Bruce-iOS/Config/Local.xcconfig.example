@@ -10,6 +10,3 @@ DEVELOPMENT_TEAM =
 
 // Optional: home-screen name.
 // APP_DISPLAY_NAME = Brüce
-
-// Optional: the auto-book server's API_KEY (server/README.md), so the app connects without typing it.
-// AUTOBOOK_SERVER_KEY = <64 hex characters>

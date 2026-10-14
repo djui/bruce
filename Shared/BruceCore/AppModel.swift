@@ -650,7 +650,7 @@ final class AppModel {
         async let g: Void = loadAllFavorites()
         _ = await (a, b, c, d, e, f, g)
         await refreshAutoBook()   // after loadMine: booked classes are skipped
-        if !autoBookRules.isEmpty { await syncAutoBookServer() }   // hands a new login to the server
+        await syncAutoBookServer()   // hands a new login and push token to the server
     }
 
     /// Studio list: cached copy instantly, then a fast streamed refresh (see FastLoading.swift).

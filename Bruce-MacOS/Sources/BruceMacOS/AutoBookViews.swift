@@ -5,11 +5,10 @@ import SwiftUI
 struct AutoBookView: View {
     @Environment(AppModel.self) var m
     @State private var serverURL = AutoBookServer.url
-    @State private var serverKey = AutoBookServer.key
     @State private var server: AutoBookServer.Status?
     @State private var working = false
     @State private var booksForMe = AutoBookServer.booksForMe
-    @State private var showServerFields = !AutoBookServer.isConfigured
+    @State private var showServerFields = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,27 +32,23 @@ struct AutoBookView: View {
 
                     header("SERVER")
                     VStack(alignment: .leading, spacing: 10) {
-                        if AutoBookServer.isConfigured {
-                            HStack {
-                                Text("Let the server book for me").font(.system(size: 17, weight: .medium))
-                                Spacer()
-                                BlackToggle(isOn: Binding(get: { booksForMe }, set: { on in
-                                    booksForMe = on
-                                    run { await m.setServerBooksForMe(on); if let n = m.autoBookServerNote { throw ServerError(n) } }
-                                }))
-                            }
-                            if let s = server { serverSummary(s) }
+                        HStack {
+                            Text("Let the server book for me").font(.system(size: 17, weight: .medium))
+                            Spacer()
+                            BlackToggle(isOn: Binding(get: { booksForMe }, set: { on in
+                                booksForMe = on
+                                run { await m.setServerBooksForMe(on); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                            }))
                         }
+                        if booksForMe, let s = server { serverSummary(s) }
                         if let n = m.autoBookServerNote { Text(n).foregroundStyle(.red).font(.system(size: 14)) }
-                        DisclosureGroup("Server address and key", isExpanded: $showServerFields) {
+                        DisclosureGroup("Server address", isExpanded: $showServerFields) {
                             VStack(alignment: .leading, spacing: 10) {
                                 TextField(AutoBookServer.defaultURL, text: $serverURL).textFieldStyle(.roundedBorder)
-                                SecureField("Server key", text: $serverKey).textFieldStyle(.roundedBorder)
                                 Button("Save and sync") {
-                                    AutoBookServer.url = serverURL; AutoBookServer.key = serverKey
+                                    AutoBookServer.url = serverURL
                                     run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
                                 }
-                                .disabled(serverURL.isEmpty || serverKey.isEmpty)
                             }
                             .padding(.top, 8)
                         }
@@ -88,7 +83,7 @@ struct AutoBookView: View {
 
     @ViewBuilder func serverSummary(_ s: AutoBookServer.Status) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(s.hasSession == true ? "The server can book for you." : "The server has no login yet.")
+            Text(s.hasSession == true ? "The server books for you." : "Not connected yet.")
             if let t = s.lastScan.flatMap(BruceDate.parse) { Text("Last checked \(BruceDate.format(t, "HH:mm"))") }
             ForEach((s.log ?? []).prefix(5), id: \.self) { e in
                 Text("\(e.outcome ?? "") · \(e.title ?? "#\(e.classId)")").foregroundStyle(Theme.secondary)
@@ -98,8 +93,8 @@ struct AutoBookView: View {
     }
 
     func loadServer() async {
-        guard AutoBookServer.isConfigured else { server = nil; return }
-        server = try? await AutoBookServer.status()
+        guard AutoBookServer.isConfigured, AutoBookServer.booksForMe, let s = m.session else { server = nil; return }
+        server = try? await AutoBookServer.status(session: s)
     }
 
     func run(_ op: @escaping () async throws -> Void) {
@@ -119,7 +114,7 @@ struct ServerError: LocalizedError {
 
 enum AutoBookCopy {
     static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. While this app is running (and the Mac is awake) it books the class the moment it opens. Cancelling an auto-booked class does not rebook it."
-    static let server = "Books even when no device is awake: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes the login from the server."
+    static let server = "Books even when no device is awake: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes your login and classes from the server."
 }
 
 /// Class page toggle.
