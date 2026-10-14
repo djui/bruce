@@ -104,6 +104,9 @@ final class AppModel {
     /// Studios pinned in the quick check-in list (local only).
     var checkInPins: Set<Int> = AppModel.demo ? [] : Set((UserDefaults.standard.array(forKey: "checkInPins") as? [Int]) ?? [])
     var toast: String?
+    /// SF Symbol shown in front of the toast text (iOS), and the action behind its Undo button.
+    var toastIcon: String?
+    var toastUndo: (() -> Void)?
     var loading = false
 
     // Data
@@ -521,18 +524,19 @@ final class AppModel {
     func toggleBookmark(_ classId: Int) {
         if let b = bookmarks.first(where: { $0.class?.id == classId }) {
             bookmarks.removeAll { $0.id == b.id }
-            guard !AppModel.demo else { flash("Bookmark removed"); return }
+            let undo: () -> Void = { [weak self] in self?.toggleBookmark(classId) }
+            guard !AppModel.demo else { flash("Bookmark removed", icon: "bookmark.slash", undo: undo); return }
             Task {
-                do { try await BruceAPI.removeBookmark(token: token, bookmarkId: b.id); flash("Bookmark removed") }
+                do { try await BruceAPI.removeBookmark(token: token, bookmarkId: b.id); flash("Bookmark removed", icon: "bookmark.slash", undo: undo) }
                 catch { bookmarks.append(b); flash("Could not remove bookmark") }
             }
         } else {
             let c = findClass(classId)
-            guard !AppModel.demo else { bookmarks.append(BruceAPI.ClassHolder(id: -classId, class: c)); flash("Bookmark added"); return }
+            guard !AppModel.demo else { bookmarks.append(BruceAPI.ClassHolder(id: -classId, class: c)); flash("Bookmark added", icon: "bookmark.fill"); return }
             Task {
                 do {
                     let ref = try await BruceAPI.addBookmark(token: token, classId: classId)
-                    bookmarks.append(BruceAPI.ClassHolder(id: ref.id, class: c)); flash("Bookmark added")
+                    bookmarks.append(BruceAPI.ClassHolder(id: ref.id, class: c)); flash("Bookmark added", icon: "bookmark.fill")
                 } catch { flash("Could not add bookmark") }
             }
         }
@@ -557,10 +561,11 @@ final class AppModel {
         await cats
     }
 
-    func flash(_ s: String) {
-        toast = s
-        Task { try? await Task.sleep(nanoseconds: 3_500_000_000); if toast == s { toast = nil } }
+    func flash(_ s: String, icon: String? = nil, undo: (() -> Void)? = nil) {
+        toast = s; toastIcon = icon; toastUndo = undo
+        Task { try? await Task.sleep(nanoseconds: (undo == nil ? 3_500 : 5_000) * 1_000_000); if toast == s { dismissToast() } }
     }
+    func dismissToast() { toast = nil; toastIcon = nil; toastUndo = nil }
 
     // MARK: Auth
 

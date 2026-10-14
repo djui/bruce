@@ -80,11 +80,12 @@ struct RootView: View {
             SheetContainer(root: first)
         }
         .modifier(ModelAlerts(active: m.sheets.isEmpty))
-        .overlay(alignment: .bottom) {
-            if m.sheets.isEmpty, let t = m.toast { ToastView(text: t).padding(.bottom, 110).transition(.move(edge: .bottom).combined(with: .opacity)) }
-        }
         .overlay(alignment: .top) {
             if m.sheets.isEmpty, !m.showWelcome, let e = m.loadError { ErrorBanner(text: e).padding(.top, 54).transition(.move(edge: .top).combined(with: .opacity)) }
+        }
+        .overlay(alignment: .top) {
+            // Below the floating back/share/bookmark buttons, away from the bottom action buttons.
+            if m.sheets.isEmpty, let t = m.toast { ToastView(text: t).padding(.top, 52).transition(.move(edge: .top).combined(with: .opacity)) }
         }
         .animation(.spring(duration: 0.3), value: m.loadError)
         .animation(.spring(duration: 0.3), value: m.toast)
@@ -156,8 +157,8 @@ struct SheetContainer: View {
         .presentationDetents(detents)
         .presentationDragIndicator(.visible)
         .modifier(ModelAlerts(active: true))
-        .overlay(alignment: .bottom) {
-            if let t = m.toast { ToastView(text: t).padding(.bottom, 40).transition(.opacity) }
+        .overlay(alignment: .top) {
+            if let t = m.toast { ToastView(text: t).padding(.top, 56).transition(.move(edge: .top).combined(with: .opacity)) }
         }
         .animation(.spring(duration: 0.3), value: m.toast)
     }
