@@ -65,7 +65,7 @@ iOS falling back to "More". Also used:
 - glass partial-height sheets (rules, menu, filter, quick check-in);
 - `scrollEdgeEffectStyle(.soft)`.
 
-The Check in tab is a full-screen camera with clear-glass overlays and one-tap check-in targets.
+The Check in tab is a full-screen camera with clear-glass overlays and a one-tap suggested check-in.
 
 ## Behaviour and safety
 
@@ -95,8 +95,9 @@ never stores the password. No personal data is hard-coded.
 
 ## Check-in
 
-- **Check in tab**: the camera QR scanner only (as in the original).
-- **Home top-bar control**: one suggested place in a glass card. The suggestion is chosen in this order:
+- **Check in tab** is the one place to check in: the camera QR scanner, with one suggested place in a glass
+  card below the viewfinder. The tab shows a badge while a booking's check-in window is open. The
+  suggestion is chosen in this order:
   1. a booking whose check-in window is open now;
   2. the nearest check-in studio within 300 m, when location is allowed;
   3. the last visited studio.

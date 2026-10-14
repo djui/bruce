@@ -37,7 +37,7 @@ async function homeData() {
 export const Home = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
-    el.innerHTML = header('Home', '<a class="glass-btn" href="#/checkin" aria-label="Check in">' + icon('checkin') + '</a>' + headButtons()) + '<div id="home-body">' + loading() + '</div>';
+    el.innerHTML = header('Home', headButtons()) + '<div id="home-body">' + loading() + '</div>';
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
   },
   refresh() {
@@ -243,7 +243,7 @@ export function placeholderPane(el, tab) {
 export const CheckIn = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx; this.q = '';
-    el.innerHTML = header('Check in', '<button class="glass-btn" data-act="scan" aria-label="Scan door QR code">' + icon('camera') + '</button>') + '<div id="ci-body">' + loading() + '</div>';
+    el.innerHTML = header('Check in') + '<div id="ci-body">' + loading() + '</div>';
     if (!S.visits) Bruce.visits().then((v) => { S.visits = v.filter((x) => x.checked_in_at && !x.deleted); this.refresh(); }).catch(() => { S.visits = []; this.refresh(); });
     St.loadStudios().catch(() => {});
     el.addEventListener('input', (e) => { if (e.target.id === 'ciq') { this.q = e.target.value; this.drawList(); } });
