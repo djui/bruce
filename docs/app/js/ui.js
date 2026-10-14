@@ -2,6 +2,16 @@
 import { $, esc, icon, media, time, minutes, instructor, imgURL, initials, dayHeader, byDay } from './util.js';
 import { S, studio, classBadge, friendsOn, isWellness } from './store.js';
 
+/** Shrinks a page title to fit beside its header buttons (down to 60%, like iOS minimumScaleFactor),
+ *  again whenever the row changes width (e.g. the My classes count arrives). */
+const titleFit = window.ResizeObserver && new ResizeObserver((entries) => entries.forEach(({ target: t }) => {
+  if (!t.isConnected) { titleFit.unobserve(t); return; }
+  t.style.fontSize = '';
+  const s = t.clientWidth / t.scrollWidth;
+  if (s < 1) t.style.fontSize = Math.floor(Math.max(0.6, s) * parseFloat(getComputedStyle(t).fontSize) * 4) / 4 + 'px';
+}));
+export function fitTitle(t) { if (t && titleFit) titleFit.observe(t); }
+
 let toastTimer;
 export function toast(msg) {
   const t = $('#toast');

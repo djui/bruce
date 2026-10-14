@@ -94,11 +94,19 @@ struct ScanCorners: Shape {
     }
 }
 
-/// Check in tab: the camera QR scanner only (as in the original). Every scan asks for confirmation
-/// (`askCheckIn`) and sends a real check-in when logged in. Quick check-in lives in the Home top bar.
+/// Check in tab: the camera QR scanner with the suggested studio and "Other studios" below it, so scanning
+/// and checking in by studio live in one place. Every check-in asks for confirmation (`askCheckIn`) and
+/// sends a real check-in when logged in. Same top bar as the other tabs (title, Notifications, Menu), light
+/// on the camera.
 struct CheckInTab: View {
+    @State private var showAll = AppModel.demo && AppModel.setting("BRUCE_SCREEN") == "checkinall"
     var body: some View {
-        CheckInScanner(inSheet: false).toolbar(.hidden, for: .navigationBar)
+        CheckInScanner(inSheet: false, showAll: $showAll)
+            .bruceTitle("Check in")
+            .toolbar { MainToolbarButtons() }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .environment(\.colorScheme, .dark)
+            .navigationDestination(isPresented: $showAll) { OtherStudiosView() }
     }
 }
 
@@ -106,25 +114,32 @@ struct CheckInScanner: View {
     @Environment(AppModel.self) var m
     @StateObject private var scanner = QRScanner()
     var inSheet = true
+    var showAll: Binding<Bool>? = nil
 
     var body: some View {
         ZStack {
             camera.ignoresSafeArea()
-            ScanCorners().stroke(Color.white, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
-                .frame(width: 240, height: 240)
-                .shadow(color: .black.opacity(0.3), radius: 6)
             VStack(spacing: 12) {
-                HStack {
-                    Text("CHECK IN").font(Theme.screenTitle(26)).foregroundStyle(.white)
-                    Spacer()
-                    if inSheet { Button(role: .close) { scanner.stop(); m.dismissSheets() }.buttonStyle(.glass) }
+                // The tab shows its title in the navigation bar; the sheet has no bar, so it draws its own.
+                if inSheet {
+                    HStack {
+                        Text("CHECK IN").font(Theme.screenTitle(26)).foregroundStyle(.white)
+                        Spacer()
+                        Button(role: .close) { scanner.stop(); m.dismissSheets() }.buttonStyle(.glass)
+                    }
                 }
                 Label("Hold the camera steady over the QR code on the studio door", systemImage: "qrcode.viewfinder")
                     .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .glassEffect(.clear, in: .rect(cornerRadius: 22))
-                Spacer()
+                Spacer(minLength: 8)
+                ScanCorners().stroke(Color.white, style: StrokeStyle(lineWidth: 8, lineCap: .round, lineJoin: .round))
+                    .frame(width: 220, height: 220)
+                    .shadow(color: .black.opacity(0.3), radius: 6)
+                    .overlay { if scanner.state != .running { cameraStatus.frame(width: 300) } }
+                Spacer(minLength: 8)
+                if let showAll { CheckInSuggestions(showAll: showAll) }
             }
             .padding(Theme.gutter)
         }
@@ -140,23 +155,24 @@ struct CheckInScanner: View {
         if scanner.state == .running {
             CameraPreview(session: scanner.session)
         } else {
-            ZStack {
-                LinearGradient(colors: [Color(white: 0.16), Color(white: 0.05)], startPoint: .top, endPoint: .bottom)
-                VStack(spacing: 14) {
-                    Image(systemName: "camera.viewfinder").font(.system(size: 50, weight: .light))
-                    switch scanner.state {
-                    case .denied:
-                        Text("Camera access is off. Allow it in Settings to scan the door QR code.")
-                        Button("Open Settings") { if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) } }
-                            .buttonStyle(.glass)
-                    case .unavailable(let s): Text(s)
-                    default: ProgressView()
-                    }
-                }
-                .font(.system(size: 15)).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.85))
-                .padding(40)
+            LinearGradient(colors: [Color(white: 0.16), Color(white: 0.05)], startPoint: .top, endPoint: .bottom)
+        }
+    }
+
+    /// Shown inside the viewfinder while the camera isn't running.
+    var cameraStatus: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "camera.viewfinder").font(.system(size: 50, weight: .light))
+            switch scanner.state {
+            case .denied:
+                Text("Camera access is off. Allow it in Settings to scan the door QR code.")
+                Button("Open Settings") { if let u = URL(string: UIApplication.openSettingsURLString) { UIApplication.shared.open(u) } }
+                    .buttonStyle(.glass)
+            case .unavailable(let s): Text(s)
+            default: ProgressView()
             }
         }
+        .font(.system(size: 15)).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.85))
     }
 
     func handle(_ code: String) {
@@ -166,60 +182,43 @@ struct CheckInScanner: View {
     }
 }
 
-// MARK: - Quick check-in (Home top bar): one suggestion + "Other studios"
+// MARK: - Check in by studio (under the scanner): one suggestion + "Other studios"
 
-struct QuickCheckInSheet: View {
+struct CheckInSuggestions: View {
     @Environment(AppModel.self) var m
     @EnvironmentObject var loc: LocationProvider
-    @State private var showAll = AppModel.demo && AppModel.setting("BRUCE_SCREEN") == "checkinall"
+    @Binding var showAll: Bool
 
     var body: some View {
         let suggestion = m.suggestedCheckIn(location: loc.authorized ? m.userLocation : nil)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                if let sug = suggestion {
-                    SuggestedCheckInCard(suggestion: sug)
-                } else {
-                    VStack(spacing: 10) {
-                        Image(systemName: "figure.walk.arrival").font(.system(size: 40, weight: .light)).foregroundStyle(Theme.secondary)
-                        Text("No booking with an open check-in window and no recent visit. Pick a studio below or scan the door QR code.")
-                            .font(.system(size: 15)).foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
-                    }
-                    .frame(maxWidth: .infinity).padding(24)
-                    .glassEffect(.regular, in: .rect(cornerRadius: 30))
-                }
-                if !loc.authorized && suggestion?.kind != .booking {
-                    HStack {
-                        Text("Suggest the gym you're at").font(.system(size: 14)).foregroundStyle(Theme.secondary)
-                        Spacer()
-                        UseLocationButton()
-                    }
-                    .padding(.horizontal, 6)
-                }
-                Button { showAll = true } label: {
-                    HStack(spacing: 14) {
-                        Image(systemName: "list.bullet").font(.system(size: 18)).frame(width: 28)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Other studios").font(.system(size: 17, weight: .semibold))
-                            Text("Bookings, recent visits and all check-in studios").font(.system(size: 13)).foregroundStyle(Theme.secondary)
-                        }
-                        Spacer()
-                        Image(systemName: "chevron.right").foregroundStyle(Theme.tertiary)
-                    }
-                    .foregroundStyle(Theme.ink)
-                    .padding(16).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
+        VStack(alignment: .leading, spacing: 10) {
+            if let sug = suggestion {
+                SuggestedCheckInCard(suggestion: sug)
             }
-            .padding(Theme.gutter)
-        }
-        .sheetChrome("Check in")
-        .navigationDestination(isPresented: $showAll) { OtherStudiosView() }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { m.present(.checkIn) } label: { Image(systemName: "qrcode.viewfinder") }.accessibilityLabel("Scan QR code")
+            if !loc.authorized && suggestion?.kind != .booking {
+                HStack {
+                    Text("Suggest the gym you're at").font(.system(size: 14)).foregroundStyle(.white.opacity(0.85))
+                    Spacer()
+                    UseLocationButton()
+                }
+                .padding(.horizontal, 16).padding(.vertical, 8)
+                .glassEffect(.clear, in: .rect(cornerRadius: 22))
             }
+            Button { showAll = true } label: {
+                HStack(spacing: 14) {
+                    Image(systemName: "list.bullet").font(.system(size: 18)).frame(width: 28)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Other studios").font(.system(size: 17, weight: .semibold))
+                        Text("Bookings, recent visits and all check-in studios").font(.system(size: 13)).foregroundStyle(.white.opacity(0.7))
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.5))
+                }
+                .foregroundStyle(.white)
+                .padding(16).contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 24))
         }
     }
 }

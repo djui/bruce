@@ -83,17 +83,18 @@ struct RootView: View {
         }
         .modifier(ModelAlerts(active: m.sheets.isEmpty))
         .fullScreenCover(isPresented: Binding(get: { m.wrappedOpen }, set: { m.wrappedOpen = $0 })) { WrappedView() }
-        .overlay(alignment: .bottom) {
-            if m.sheets.isEmpty, let t = m.toast { ToastView(text: t).padding(.bottom, 110).transition(.move(edge: .bottom).combined(with: .opacity)) }
-        }
         .overlay(alignment: .top) {
             if m.sheets.isEmpty, !m.showWelcome, let e = m.loadError { ErrorBanner(text: e).padding(.top, 54).transition(.move(edge: .top).combined(with: .opacity)) }
+        }
+        .overlay(alignment: .top) {
+            // Below the floating back/share/bookmark buttons, away from the bottom action buttons.
+            if m.sheets.isEmpty, let t = m.toast { ToastView(text: t).padding(.top, 52).transition(.move(edge: .top).combined(with: .opacity)) }
         }
         .animation(.spring(duration: 0.3), value: m.loadError)
         .animation(.spring(duration: 0.3), value: m.toast)
         .onChange(of: m.sheets) { _, s in
-            // macOS shows the scanner and search as sheets; on iPhone they live in the Check in / Explore tabs.
-            if s.first == .checkIn { m.sheets = []; m.tab = .checkIn }
+            // macOS shows the scanner, quick check-in and search as sheets; on iPhone they live in the Check in / Explore tabs.
+            if s.first == .checkIn || s.first == .quickCheckIn { m.sheets = []; m.tab = .checkIn }
             if s.first == .search { m.sheets = []; ui.searchActive = true }   // focuses the bottom search accessory
         }
         .onAppear {
@@ -114,6 +115,7 @@ struct RootView: View {
             SwiftUI.Tab("Check in", systemImage: "qrcode.viewfinder", value: Tab.checkIn) {
                 NavigationStack(path: stack(.checkIn)) { CheckInTab().routeDestinations() }
             }
+            .badge(m.openWindowTargets.count)   // bookings whose check-in window is open now
             SwiftUI.Tab("Friends", systemImage: "person.2", value: Tab.friends) {
                 NavigationStack(path: stack(.friends)) { FriendsView().routeDestinations() }
             }
@@ -162,15 +164,15 @@ struct SheetContainer: View {
         .presentationDetents(detents)
         .presentationDragIndicator(.visible)
         .modifier(ModelAlerts(active: true))
-        .overlay(alignment: .bottom) {
-            if let t = m.toast { ToastView(text: t).padding(.bottom, 40).transition(.opacity) }
+        .overlay(alignment: .top) {
+            if let t = m.toast { ToastView(text: t).padding(.top, 56).transition(.move(edge: .top).combined(with: .opacity)) }
         }
         .animation(.spring(duration: 0.3), value: m.toast)
     }
 
     var detents: Set<PresentationDetent> {
         switch root {
-        case .menu, .quickCheckIn, .similarClasses: return [.medium, .large]
+        case .menu, .similarClasses: return [.medium, .large]
         case .bookingRules: return [.fraction(0.82), .large]
         default: return [.large]
         }
@@ -248,7 +250,7 @@ struct SheetScreen: View {
         case .help: HelpSheet()
         case .push: PushSettingsView()
         case .pushInfo: TextInfoSheet(title: "Push settings", paragraphs: Copy.pushInfo)
-        case .quickCheckIn: QuickCheckInSheet()
+        case .quickCheckIn: EmptyView()   // shown in the Check in tab
         case .similarClasses(let id): SimilarClassesSheet(classId: id)
         case .area(let id): AreaMapSheet(areaId: id)
         case .review(let id): ReviewSheet(bookingId: id)

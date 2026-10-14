@@ -12,13 +12,10 @@ struct HomeView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScreenHeader(title: "Home") {
-                HStack(spacing: 18) {
-                    IconButton(system: "viewfinder", size: 22, badge: !m.openWindowTargets.isEmpty) {
-                        m.present(.quickCheckIn)
-                    }
-                    IconButton(system: "bell", size: 22) { m.present(.notifications) }
-                    IconButton(system: "line.3.horizontal", size: 22, badge: true) { m.present(.menu) }
+                IconButton(system: "viewfinder", size: 22, badge: !m.openWindowTargets.isEmpty) {
+                    m.present(.quickCheckIn)
                 }
+                .help("Quick check-in")
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {

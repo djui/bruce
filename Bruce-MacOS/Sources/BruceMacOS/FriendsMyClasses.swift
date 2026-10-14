@@ -14,9 +14,7 @@ struct FriendsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: "Friends") {
-                IconButton(system: "person.badge.plus", size: 22) { m.flash("Friend requests are managed in the iOS app") }
-            }
+            ScreenHeader(title: "Friends")
             if !m.isLoggedIn {
                 EmptyState(system: "person.2", text: "Log in to see what your friends are training.")
             } else if items.isEmpty {

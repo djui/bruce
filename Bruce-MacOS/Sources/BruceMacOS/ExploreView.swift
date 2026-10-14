@@ -74,12 +74,11 @@ struct ExploreView: View {
     var body: some View {
         VStack(spacing: 0) {
             ScreenHeader(title: "Explore") {
-                HStack(spacing: 18) {
-                    if tabIndex == 0 {
-                        IconButton(system: m.exploreMap ? "list.bullet" : "map", size: 22) { m.exploreMap.toggle() }
-                    }
-                    IconButton(system: "magnifyingglass", size: 22) { m.present(.search) }
+                if tabIndex == 0 {
+                    IconButton(system: m.exploreMap ? "list.bullet" : "map", size: 22) { m.exploreMap.toggle() }
+                        .help(m.exploreMap ? "List" : "Map")
                 }
+                IconButton(system: "magnifyingglass", size: 22) { m.present(.search) }.help("Search")
             }
             UnderlineTabs(titles: ["Studios", "Classes"],
                           badges: [String(studios.count), m.classesLoadingDay != nil && tabIndex == 1 ? "…" : String(classes.count)],

@@ -40,11 +40,14 @@ struct FriendsView: View {
         .scrollEdgeEffectStyle(.soft, for: .top)
         .bruceTitle("Friends")
         .toolbar {
+            // The tab's own action goes before the shared Notifications/Menu capsule (see MainToolbarButtons).
             if m.isLoggedIn {
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { m.present(.newChallenge) } label: { Image(systemName: "plus") }.accessibilityLabel("New challenge")
                 }
+                ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
+            MainToolbarButtons()
         }
         .task { await m.loadSocial(); await m.loadChallenges() }
         .refreshable { await m.loadSocial(); await m.loadChallenges() }
@@ -149,6 +152,8 @@ struct MyClassesView: View {
                 Text(m.simultaneousLimit.map { "\(m.upcomingBookings.count) / \($0)" } ?? "\(m.upcomingBookings.count)").font(.system(size: 15, weight: .semibold)).monospacedDigit()
                     .padding(.horizontal, 6)
             }
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            MainToolbarButtons()
         }
         .task { await m.loadMine() }
         .refreshable { await m.loadMine() }

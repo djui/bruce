@@ -9,14 +9,16 @@ import { forYouHTML, forYouClick } from './foryou.js';
 import { challengesHTML, challengesClick, openNewChallenge, loadIfAllowed } from './challenges.js';
 import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
 
-/** Page header: big wide uppercase title with glass buttons on the right. */
+/** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
+ *  Menu, which end every tab's header (on wide screens they live in the sidebar instead). */
 function header(title, right) {
-  return '<div class="page-head"><h1 class="screen-title">' + esc(title) + '</h1><div class="head-btns">' + (right || '') + '</div></div>';
+  return '<div class="page-head"><h1 class="screen-title">' + esc(title) + '</h1><div class="head-btns">' + (right || '') + headButtons() + '</div></div>';
 }
-export function headButtons() {
-  const dot = St.unseenNotifications() ? '<i class="dot"></i>' : '';
-  return '<button class="glass-btn" data-act="notifications" aria-label="Notifications">' + icon('bell') + dot + '</button>' +
-    '<button class="glass-btn" data-act="menu" aria-label="Menu">' + icon('menu') + '</button>';
+function headButtons() {
+  // main.js badges() keeps the dot in sync after the header is drawn.
+  const dot = '<i class="dot"' + (St.unseenNotifications() ? '' : ' hidden') + '></i>';
+  return '<button class="glass-btn head-global" data-act="notifications" aria-label="Notifications">' + icon('bell') + dot + '</button>' +
+    '<button class="glass-btn head-global" data-act="menu" aria-label="Menu">' + icon('menu') + '</button>';
 }
 const link = (tab, kind, id) => '#/' + tab + '/' + kind + '/' + id;
 
@@ -40,7 +42,7 @@ async function homeData() {
 export const Home = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
-    el.innerHTML = header('Home', '<a class="glass-btn" href="#/checkin" aria-label="Check in">' + icon('checkin') + '</a>' + headButtons()) + '<div id="home-body">' + loading() + '</div>';
+    el.innerHTML = header('Home') + '<div id="home-body">' + loading() + '</div>';
     el.addEventListener('click', (e) => forYouClick(e, (id) => link('home', 'class', id)));
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
   },
@@ -248,7 +250,7 @@ export function placeholderPane(el, tab) {
 export const CheckIn = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx; this.q = '';
-    el.innerHTML = header('Check in', '<button class="glass-btn" data-act="scan" aria-label="Scan door QR code">' + icon('camera') + '</button>') + '<div id="ci-body">' + loading() + '</div>';
+    el.innerHTML = header('Check in') + '<div id="ci-body">' + loading() + '</div>';
     if (!S.visits) Bruce.visits().then((v) => { S.visits = v.filter((x) => x.checked_in_at && !x.deleted); this.refresh(); }).catch(() => { S.visits = []; this.refresh(); });
     St.loadStudios().catch(() => {});
     el.addEventListener('input', (e) => { if (e.target.id === 'ciq') { this.q = e.target.value; this.drawList(); } });
@@ -300,7 +302,7 @@ export const Friends = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
     this.tab = ctx.params.get('tab') || this.tab || 'classes';
-    el.innerHTML = header('Friends', '<span id="fr-head"></span>' + headButtons()) + '<div id="fr-tabs" class="sticky-tools"></div><div id="fr-body">' + loading() + '</div>';
+    el.innerHTML = header('Friends', '<span id="fr-head"></span>') + '<div id="fr-tabs" class="sticky-tools"></div><div id="fr-body">' + loading() + '</div>';
     el.addEventListener('click', (e) => {
       const t = e.target.closest('[data-ftab]');
       if (t) { this.tab = t.dataset.ftab; const d = this.ctx.detail; location.hash = '#/friends' + (d && d.kind !== 'challenge' ? '/' + d.kind + '/' + d.id : '') + '?tab=' + this.tab; return; }

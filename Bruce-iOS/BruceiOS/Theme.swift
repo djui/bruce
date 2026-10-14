@@ -57,12 +57,34 @@ extension View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    // Own width, but at most 170 pt, so a long title ("MY CLASSES") shrinks instead of pushing
+                    // Notifications and Menu into an overflow menu, even on a 375 pt wide iPhone.
                     Text(title.uppercased()).font(Theme.screenTitle(26)).lineLimit(1).minimumScaleFactor(0.6)
+                        .frame(maxWidth: 170, alignment: .leading)
                         .fixedSize()
                 }
                 .sharedBackgroundVisibility(.hidden)
                 ToolbarItem(placement: .principal) { Color.clear.frame(width: 1, height: 1) }
             }
+    }
+}
+
+/// Notifications and Menu: the last two buttons of every main tab's top bar, in their own glass capsule.
+/// A tab's own actions go before them (followed by a fixed `ToolbarSpacer`), so these never move between tabs.
+struct MainToolbarButtons: ToolbarContent {
+    @Environment(AppModel.self) var m
+    var body: some ToolbarContent {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            // All toolbar icons use the label colour; only the dot is red.
+            Button { m.present(.notifications) } label: {
+                Image(systemName: "bell").overlay(alignment: .topTrailing) {
+                    if m.unreadNotifications { Circle().fill(Theme.red).frame(width: 8, height: 8).offset(x: 1, y: -1) }
+                }
+            }
+            .accessibilityLabel("Notifications")
+            Button { m.present(.menu) } label: { Image(systemName: "line.3.horizontal") }
+                .accessibilityLabel("Menu")
+        }
     }
 }
 
@@ -363,14 +385,27 @@ struct ClassMenu: View {
     }
 }
 
-/// Liquid-glass toast.
+/// Top banner toast: a solid dark card, so it can't be mistaken for the glass action buttons at the bottom.
 struct ToastView: View {
+    @Environment(AppModel.self) var m
     let text: String
     var body: some View {
-        Text(text).font(.system(size: 14, weight: .semibold)).multilineTextAlignment(.center)
-            .padding(.horizontal, 18).padding(.vertical, 12)
-            .glassEffect(.regular, in: .capsule)
-            .padding(.horizontal, 24)
+        HStack(spacing: 10) {
+            if let icon = m.toastIcon { Image(systemName: icon).font(.system(size: 15, weight: .semibold)) }
+            Text(text).font(.system(size: 15, weight: .semibold)).lineLimit(3)
+            Spacer(minLength: 4)
+            if let undo = m.toastUndo {
+                Button("Undo") { m.dismissToast(); undo() }
+                    .font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.lime).buttonStyle(.plain)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 16).padding(.vertical, 13)
+        .frame(maxWidth: 500)
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color(light: Color(white: 0.13), dark: Color(white: 0.24))))
+        .shadow(color: .black.opacity(0.25), radius: 14, y: 6)
+        .gesture(DragGesture(minimumDistance: 10).onEnded { if $0.translation.height < 0 { m.dismissToast() } })   // swipe up to dismiss
+        .padding(.horizontal, Theme.gutter)
     }
 }
 
