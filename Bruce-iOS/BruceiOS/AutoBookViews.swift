@@ -145,7 +145,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     /// Set by the app: sends a new push token to the auto-book server.
     @MainActor static var onDeviceToken: (@MainActor () -> Void)?
     /// Set by the app: opens a challenge or the goals from a push of our server.
-    @MainActor static var openTarget: (@MainActor (PushTarget) -> Void)?
+    @MainActor static var openTarget: (@MainActor (PushTarget) -> Void)? { didSet { if let t = pendingTarget, let o = openTarget { pendingTarget = nil; o(t) } } }
+    /// A push tapped before the app's UI was up (cold launch); opened once `openTarget` is set.
+    @MainActor static var pendingTarget: PushTarget?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
@@ -169,7 +171,9 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {
         // Challenge invites and goal reminders from our server.
         if let t = PushTarget(userInfo: response.notification.request.content.userInfo) {
-            await MainActor.run { AppDelegate.openTarget?(t) }
+            await MainActor.run {
+                if let o = AppDelegate.openTarget { o(t) } else { AppDelegate.pendingTarget = t }
+            }
             return
         }
         guard let classId = await AutoBook.handle(response) else { return }
