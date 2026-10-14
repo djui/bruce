@@ -68,6 +68,27 @@ export async function paged(path, query, key, onPage, maxPages) {
 }
 
 const uid = () => session.userId;
+
+/** The auto-book server (server/README.md): books a full class for the user as soon as a waitlist spot frees up.
+ *  It takes the user's own Bruce login in the same headers and answers CORS, so the page calls it directly. */
+export const AUTOBOOK_SERVER = 'https://bruce-autobook.uwe-af1.workers.dev';
+const demoWatches = new Set();
+async function autobook(method, path, base) {
+  const res = await fetch((base || AUTOBOOK_SERVER).replace(/\/+$/, '') + path, {
+    method, headers: { 'X-Access-Token': session.token, 'X-User-Id': String(uid()) },
+  }).catch(() => { throw new ApiError(0, 'Could not reach the auto-book server.'); });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, body.error || 'Auto-book server: HTTP ' + res.status, body);
+  return body;
+}
+export const Autobook = {
+  /** Class ids the server watches for a free waitlist spot. */
+  watching: (base) => session.demo ? Promise.resolve([...demoWatches]) : autobook('GET', '/me', base).then((r) => (r.waitlist || []).map((w) => w.classId)),
+  watch: (classId, on, base) => {
+    if (session.demo) { on ? demoWatches.add(classId) : demoWatches.delete(classId); return Promise.resolve({ ok: true }); }
+    return autobook(on ? 'PUT' : 'DELETE', '/me/waitlist/' + classId, base);
+  },
+};
 const yyyymmdd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');
 
 export const Bruce = {

@@ -24,6 +24,14 @@ const MAX_DEVICES = 5;
 const DUE_AHEAD_MS = 65_000;
 const RETRY_WINDOW_MS = 20_000;
 const LOG_SIZE = 30;
+/// Waitlist watches: a class starting within a day is polled every minute (a freed spot is taken by whoever books
+/// first), a later one every WATCH_FAR_EVERY_MIN minutes, one request per class. Capped per user.
+const MAX_WATCHES = 10;
+const WATCH_NEAR_MS = 24 * 3600_000;
+const WATCH_FAR_EVERY_MIN = 5;
+/// After a failed booking attempt on a free spot the watch waits this long, and is dropped after MAX_WATCH_FAILS.
+const WATCH_RETRY_MS = 5 * 60_000;
+const MAX_WATCH_FAILS = 5;
 
 // MARK: Time in Europe/Stockholm
 
@@ -118,7 +126,16 @@ async function fetchClasses(token, studioId, from, to) {
   return out;
 }
 
-class LoggedOut extends Error {}
+/** `GET /v52/class/<id>`; null when the class does not exist (any more). */
+export async function fetchClass(token, classId) {
+  const res = await bruce("GET", `/v52/class/${classId}`, token, { query: [["include_absolute_times", "true"], ["locale", "en"]] });
+  if (res.status === 401) throw new LoggedOut();
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`class HTTP ${res.status}`);
+  return (await res.json()).class ?? null;
+}
+
+export class LoggedOut extends Error {}
 
 function errorMessage(text, status) {
   try { const e = JSON.parse(text).errors?.[0]; if (e?.message || e?.code) return e.message || e.code; } catch {}
@@ -212,7 +229,7 @@ async function db(env) {
   return env.DB;
 }
 
-const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null });
+const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null, watches: [] });
 
 function rowToUser(r) {
   return { userId: r.user_id, session: { access_token: r.access_token, user_id: r.user_id },
@@ -254,8 +271,57 @@ export async function scan(rules, session, state, now) {
 
 const when = (ms) => new Date(ms).toLocaleString("en-GB", { timeZone: TZ, weekday: "short", hour: "2-digit", minute: "2-digit" });
 
+/**
+ * Waitlist watches ("book me as soon as a spot frees up"). Bruce does not book waitlisters itself (a "Free spot"
+ * only notifies, see API.md), so the server polls the class and books when `available_spots` is above 0.
+ * A watch ends when the class is booked, started, gone, or the user removes it; a lost race (someone else was
+ * faster) keeps it. Returns false if the login died.
+ */
+export async function watchWaitlists(env, u, now, { bookFn = book, classFn = fetchClass } = {}) {
+  const { state, session } = u;
+  const minute = Math.floor(now / 60_000);
+  const keep = [];
+  let ok = true;
+  for (const w of state.watches ?? []) {
+    if (!ok || w.start <= now) continue;
+    keep.push(w);
+    if (w.retryAt && w.retryAt > now) continue;
+    const near = w.start - now <= WATCH_NEAR_MS;
+    if (!near && (minute + w.classId) % WATCH_FAR_EVERY_MIN !== u.userId % WATCH_FAR_EVERY_MIN) continue;
+    let c;
+    try { c = await classFn(session.access_token, w.classId); }
+    catch (e) {
+      if (e instanceof LoggedOut) { ok = false; continue; }
+      console.log("watch failed:", u.userId, w.classId, e.message);   // try again next minute
+      continue;
+    }
+    if (!c || c.deleted || c.deleted_at || c.canceled) { keep.pop(); continue; }
+    if (!(c.available_spots > 0)) continue;
+    const outcome = await bookFn(session, { classId: w.classId, opens: 0 });
+    if (outcome === "Login expired") { ok = false; continue; }
+    if (outcome === "Booked" || outcome === "Already booked") {
+      keep.pop();
+      state.log.unshift({ classId: w.classId, title: w.title, at: new Date().toISOString(), outcome: `${outcome} (waitlist)` });
+      const gone = await push(env, u.devices, `${outcome}: ${w.title}`, `${when(w.start)} · a waitlist spot opened`, { classId: w.classId });
+      u.devices = u.devices.filter((d) => !gone.includes(d.token));
+      continue;
+    }
+    // Spot taken by someone else in the meantime, or Bruce refuses (visit limit, ...): wait and look again.
+    w.fails = (w.fails ?? 0) + 1;
+    w.retryAt = now + WATCH_RETRY_MS;
+    if (w.fails >= MAX_WATCH_FAILS) {
+      keep.pop();
+      state.log.unshift({ classId: w.classId, title: w.title, at: new Date().toISOString(), outcome: `Waitlist stopped: ${outcome}` });
+      const gone = await push(env, u.devices, `Waitlist watch stopped: ${w.title}`, outcome, { classId: w.classId });
+      u.devices = u.devices.filter((d) => !gone.includes(d.token));
+    }
+  }
+  state.watches = keep;
+  return ok;
+}
+
 /** One user's minute: book what opens now, rescan when it is this user's turn. Returns false if the login died. */
-export async function tickUser(env, u, now, { force = false, bookFn = book } = {}) {
+export async function tickUser(env, u, now, { force = false, bookFn = book, classFn = fetchClass } = {}) {
   const { rules, session, state } = u;
   let loggedOut = false;
   const due = state.upcoming.filter((o) => o.opens <= now + DUE_AHEAD_MS && o.start > now && !state.handled[o.classId]);
@@ -269,6 +335,7 @@ export async function tickUser(env, u, now, { force = false, bookFn = book } = {
     u.devices = u.devices.filter((d) => !gone.includes(d.token));
   }
   state.upcoming = state.upcoming.filter((o) => !state.handled[o.classId] && o.start > now);
+  if (state.watches?.length && !loggedOut && !(await watchWaitlists(env, u, now, { bookFn, classFn }))) loggedOut = true;
   const minute = Math.floor(now / 60_000);
   if (!loggedOut && rules.length && (force || minute % SCAN_EVERY_MIN === u.userId % SCAN_EVERY_MIN || !state.lastScan)) {
     try { await scan(rules, session, state, now); }
@@ -299,8 +366,40 @@ export async function tick(env, now) {
 
 // MARK: HTTP API
 
+// The web app calls this server from the browser; it authenticates with headers, not cookies, so any origin is fine.
+const CORS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, PUT, DELETE, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "X-Access-Token, X-User-Id, Content-Type",
+};
+
 function json(data, status = 200) {
-  return new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json" } });
+  return new Response(status === 204 ? null : JSON.stringify(data), { status, headers: { "Content-Type": "application/json", ...CORS } });
+}
+
+/** `PUT|DELETE /me/waitlist/<classId>`: start or stop watching a full class. Creates the user's row if needed. */
+async function watchRoute(request, env, classId) {
+  const auth = await authenticate(request, env);
+  if (!auth) return json({ error: "unauthorized" }, 401);
+  const u = (await getUser(env, auth.userId)) ?? { userId: auth.userId, rules: [], devices: [], state: emptyState() };
+  u.session = { access_token: auth.token, user_id: auth.userId };
+  if (request.method === "DELETE") {
+    u.state.watches = u.state.watches.filter((w) => w.classId !== classId);
+    // Keep the row only while it has something to do.
+    if (!u.rules.length && !u.state.watches.length && !u.devices.length) await deleteUser(env, auth.userId); else await saveUser(env, u);
+    return json({ ok: true, watches: u.state.watches.length });
+  }
+  const existing = u.state.watches.find((w) => w.classId === classId);
+  if (!existing) {
+    if (u.state.watches.length >= MAX_WATCHES) return json({ error: `at most ${MAX_WATCHES} waitlist watches` }, 409);
+    let c;
+    try { c = await fetchClass(auth.token, classId); } catch { return json({ error: "Bruce is not answering" }, 502); }
+    const start = c ? Date.parse(c.start_time) : NaN;
+    if (!c || c.deleted || c.deleted_at || c.canceled || !(start > Date.now())) return json({ error: "class not found or already started" }, 404);
+    u.state.watches.push({ classId, title: String(c.title).slice(0, 200), studioId: c.studio_id, start });
+  }
+  await saveUser(env, u);
+  return json({ ok: true, watches: u.state.watches.length, push: apnsConfigured(env) && u.devices.length > 0 });
 }
 
 /** The caller's Bruce user id if `X-Access-Token` is a live Bruce login for `X-User-Id`, else null. */
@@ -334,6 +433,9 @@ export default {
   async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
     const route = `${request.method} ${pathname.replace(/\/+$/, "")}`;
+    if (request.method === "OPTIONS") return json({}, 204);
+    const watch = pathname.replace(/\/+$/, "").match(/^\/me\/waitlist\/(\d+)$/);
+    if (watch && (request.method === "PUT" || request.method === "DELETE")) return watchRoute(request, env, +watch[1]);
     if (!["PUT /me", "GET /me", "DELETE /me", "POST /me/test-push"].includes(route)) return json({ error: "not found" }, 404);
     const auth = await authenticate(request, env);
     if (!auth) return json({ error: "unauthorized" }, 401);
@@ -356,7 +458,8 @@ export default {
         const u = await getUser(env, auth.userId);
         const opens = (o) => ({ classId: o.classId, title: o.title, at: new Date(o.opens).toISOString(), outcome: "Opens" });
         return json({ hasSession: !!u, rules: u?.rules ?? [], lastScan: u?.state.lastScan ?? null,
-                      upcoming: (u?.state.upcoming ?? []).map(opens), log: u?.state.log ?? [], devices: u?.devices.length ?? 0 });
+                      upcoming: (u?.state.upcoming ?? []).map(opens),
+                      waitlist: (u?.state.watches ?? []).map((w) => ({ classId: w.classId, title: w.title, start: new Date(w.start).toISOString() })), log: u?.state.log ?? [], devices: u?.devices.length ?? 0 });
       }
       case "DELETE /me":
         await deleteUser(env, auth.userId);

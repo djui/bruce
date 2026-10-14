@@ -133,6 +133,7 @@ struct ClassDetailView: View {
                             if let b = booking { bookedBox(r, checkedIn: b.checkedInAt.flatMap(BruceDate.parse)) } else { rulesLines(c, r) }
                         }
                         if m.isLoggedIn, c.start.map({ $0 > Date() }) ?? false { AutoBookToggle(c: c) }
+                        if m.offersWaitlistAutoBook(c) { WaitlistAutoBookToggle(c: c) }
                         if let studio, studio.usesParakey { ParakeyRow(studio: studio, forClass: true) }
                         whoIsBooked(c).padding(.top, 4)
                     }

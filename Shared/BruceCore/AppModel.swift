@@ -135,6 +135,8 @@ final class AppModel {
     var autoBookRules: [AutoBookRule] = AppModel.demo ? [] : AutoBook.loadRules()
     var autoBookUpcoming: [AutoBookOccurrence] = []
     var autoBookServerNote: String?
+    /// Waitlisted classes the server books as soon as a spot frees up (see AutoBook.swift).
+    var watchedWaitlists: Set<Int> = AppModel.demo ? [] : AutoBook.watchedWaitlists
     @ObservationIgnored var autoBookTask: Task<Void, Never>?
     var standbys: [BruceAPI.ClassHolder] = []
     /// Waitlist entries that turned into bookings. The API drops a promoted entry from `GET /v52/standby` (its
@@ -725,6 +727,7 @@ final class AppModel {
             standbys = fresh
             // The standby list carries the class's current `available_spots`; keep an open class page in step.
             for s in fresh { if let c = s.class, let d = classDetails[c.id], d.availableSpots != c.availableSpots { classDetails[c.id]?.availableSpots = c.availableSpots } }
+            pruneWaitlistWatches()
         }
         bookmarks = (try? await BruceAPI.fetchBookmarks(token: token, userId: uid)) ?? []
         await loadReviewable()
@@ -840,7 +843,8 @@ final class AppModel {
         guard let s = standby(forClass: classId) else { return }
         confirm = PendingAction(title: Copy.leaveWaitlist, message: "", button: "Leave waitlist") { [weak self] in
             guard let self else { return }
-            if AppModel.demo { self.standbys.removeAll { $0.id == s.id }; return }
+            if AppModel.demo { self.standbys.removeAll { $0.id == s.id }; self.pruneWaitlistWatches(); return }
+            if self.isWatchingWaitlist(s.class?.id ?? 0) { await self.setWatchWaitlist(false, classId: s.class?.id ?? 0) }
             guard let req = try? BruceAPI.leaveWaitlistRequest(token: self.token, standbyId: s.id) else { return }
             await self.send(req, label: "Leave waitlist")
             await self.loadMine()

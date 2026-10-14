@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import worker, { localParts, localMidnight, matches, opensAt, scanPlan, book, tick, tickUser } from "../src/worker.js";
+import worker, { localParts, localMidnight, matches, opensAt, scanPlan, book, tick, tickUser, watchWaitlists, LoggedOut } from "../src/worker.js";
 
 const rule = { id: "r1", studioId: 6614, masterId: 77, title: "Reformer", weekday: 3, minuteOfDay: 18 * 60 };
 // Tue 2026-10-20 18:00 Stockholm (CEST, UTC+2) = 16:00Z
@@ -140,4 +140,88 @@ test("HTTP API: users authenticate with their own Bruce login", async () => {
   assert.equal(s.hasSession, true);
   await worker.fetch(req("DELETE", "/me", "good"), { DB }, ctx);
   assert.equal(DB.t.size, 0);
+});
+
+// MARK: Waitlist watches
+
+const watchUser = (watches, extra = {}) => ({ userId: 42, session: { access_token: "t", user_id: 42 }, rules: [], devices: [],
+  state: { upcoming: [], handled: {}, log: [], lastScan: "x", watches }, ...extra });
+const wl = { classId: 5, title: "Reformer", studioId: 6614, start: Date.parse("2026-10-20T16:00:00Z") };
+const NOW = Date.parse("2026-10-20T08:00:00Z");   // 8 hours before: polled every minute
+
+test("watch: waits while the class is full, books when a spot frees up, then stops", async () => {
+  const u = watchUser([{ ...wl }]);
+  let spots = 0, booked = 0, polls = 0;
+  const classFn = async () => { polls++; return { id: 5, available_spots: spots }; };
+  const bookFn = async (s, o) => { booked++; assert.equal(o.classId, 5); return "Booked"; };
+  assert.ok(await watchWaitlists({}, u, NOW, { bookFn, classFn }));
+  assert.equal(booked, 0);
+  assert.equal(u.state.watches.length, 1);
+  spots = 1;
+  assert.ok(await watchWaitlists({}, u, NOW + 60_000, { bookFn, classFn }));
+  assert.equal(booked, 1);
+  assert.equal(u.state.watches.length, 0);
+  assert.match(u.state.log[0].outcome, /^Booked/);
+  await watchWaitlists({}, u, NOW + 120_000, { bookFn, classFn });
+  assert.equal(polls, 2);   // nothing left to watch, no more requests
+});
+
+test("watch: a lost race keeps watching, with a pause, and gives up after repeated failures", async () => {
+  const u = watchUser([{ ...wl }]);
+  let polls = 0;
+  const classFn = async () => { polls++; return { id: 5, available_spots: 1 }; };
+  const bookFn = async () => "Not booked: class is full";
+  await watchWaitlists({}, u, NOW, { bookFn, classFn });
+  assert.equal(u.state.watches.length, 1);
+  await watchWaitlists({}, u, NOW + 60_000, { bookFn, classFn });   // paused for 5 minutes
+  assert.equal(polls, 1);
+  for (let i = 1; i < 5; i++) await watchWaitlists({}, u, NOW + i * 6 * 60_000, { bookFn, classFn });
+  assert.equal(u.state.watches.length, 0);
+  assert.match(u.state.log[0].outcome, /^Waitlist stopped/);
+});
+
+test("watch: drops started or cancelled classes, polls far-away classes rarely, reports a dead login", async () => {
+  const classFn = async () => ({ id: 5, available_spots: 0 });
+  let u = watchUser([{ ...wl }]);
+  await watchWaitlists({}, u, wl.start + 1, { classFn });
+  assert.equal(u.state.watches.length, 0);
+  u = watchUser([{ ...wl }]);
+  await watchWaitlists({}, u, NOW, { classFn: async () => ({ id: 5, canceled: true, available_spots: 3 }), bookFn: async () => assert.fail("booked") });
+  assert.equal(u.state.watches.length, 0);
+  // A week ahead: one poll in five minutes only.
+  const far = { ...wl, start: NOW + 7 * 86400_000 };
+  let polls = 0;
+  for (let m = 0; m < 10; m++) {
+    await watchWaitlists({}, watchUser([far]), NOW + m * 60_000, { classFn: async () => { polls++; return { available_spots: 0 }; } });
+  }
+  assert.equal(polls, 2);
+  u = watchUser([{ ...wl }]);
+  assert.equal(await watchWaitlists({}, u, NOW, { classFn: async () => { throw new LoggedOut(); } }), false);
+});
+
+test("tickUser: runs the watches of a user without rules", async () => {
+  const u = watchUser([{ ...wl }]);
+  let booked = 0;
+  assert.ok(await tickUser({}, u, NOW, { classFn: async () => ({ available_spots: 2 }), bookFn: async () => { booked++; return "Booked"; } }));
+  assert.equal(booked, 1);
+  assert.equal(u.state.watches.length, 0);
+});
+
+test("HTTP API: watch a full class, list it, stop watching; CORS preflight", async () => {
+  const DB = memoryDB();
+  const ctx = { waitUntil() {} };
+  const future = new Date(Date.now() + 3 * 86400_000).toISOString();
+  fakeFetch((url) => (url.includes("/v52/user/42") ? ok({ user: { id: 42 } })
+                    : url.includes("/v52/class/5") ? ok({ class: { id: 5, title: "Reformer", studio_id: 6614, start_time: future, available_spots: 0 } })
+                    : new Response("", { status: 404 })));
+  const req = (method, path) => new Request(`https://x${path}`, { method, headers: { "X-Access-Token": "t", "X-User-Id": "42" } });
+  const pre = await worker.fetch(new Request("https://x/me/waitlist/5", { method: "OPTIONS" }), { DB }, ctx);
+  assert.equal(pre.status, 204);
+  assert.match(pre.headers.get("Access-Control-Allow-Headers"), /X-Access-Token/);
+  assert.equal((await worker.fetch(req("PUT", "/me/waitlist/5"), { DB }, ctx)).status, 200);
+  assert.equal((await worker.fetch(req("PUT", "/me/waitlist/9"), { DB }, ctx)).status, 404);
+  const s = await (await worker.fetch(req("GET", "/me"), { DB }, ctx)).json();
+  assert.deepEqual(s.waitlist.map((w) => w.classId), [5]);
+  await worker.fetch(req("DELETE", "/me/waitlist/5"), { DB }, ctx);
+  assert.equal(DB.t.size, 0);   // nothing else to do for this user: the row (and login) is gone
 });

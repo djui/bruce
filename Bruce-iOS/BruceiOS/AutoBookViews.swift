@@ -117,6 +117,26 @@ struct AutoBookToggle: View {
     }
 }
 
+/// Class page toggle on a full class: the server books it as soon as a waitlist spot frees up.
+struct WaitlistAutoBookToggle: View {
+    @Environment(AppModel.self) var m
+    let c: BruceAPI.BruceClass
+    var body: some View {
+        Toggle(isOn: Binding(get: { m.isWatchingWaitlist(c.id) }, set: { on in Task { await m.setBookWhenSpotOpens(on, classId: c.id) } })) {
+            Label {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Book when a spot opens").font(.system(size: 16, weight: .semibold))
+                    Text(m.isOnWaitlist(c.id) ? "The server books it the moment a waitlist spot is free and notifies you"
+                                              : "Joins the waitlist and books it the moment a spot is free")
+                        .font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                }
+            } icon: { Image(systemName: "bolt.badge.clock") }
+        }
+        .padding(16)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+    }
+}
+
 // MARK: - Notification taps (Book button on the "Booking opens" notification)
 
 final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate {

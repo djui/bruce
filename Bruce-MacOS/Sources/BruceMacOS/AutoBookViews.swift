@@ -117,6 +117,26 @@ enum AutoBookCopy {
     static let server = "Books even when no device is awake: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes your login and classes from the server."
 }
 
+/// Class page toggle on a full class: the server books it as soon as a waitlist spot frees up.
+struct WaitlistAutoBookToggle: View {
+    @Environment(AppModel.self) var m
+    let c: BruceAPI.BruceClass
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "bolt.badge.clock").font(.system(size: 20, weight: .light))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Book when a spot opens").font(.system(size: 17, weight: .medium))
+                Text(m.isOnWaitlist(c.id) ? "The server books it the moment a waitlist spot is free"
+                                          : "Joins the waitlist and books it the moment a spot is free")
+                    .font(.system(size: 14, weight: .light)).foregroundStyle(Theme.tertiary)
+            }
+            Spacer()
+            BlackToggle(isOn: Binding(get: { m.isWatchingWaitlist(c.id) }, set: { on in Task { await m.setBookWhenSpotOpens(on, classId: c.id) } }))
+        }
+        .padding(.top, 22)
+    }
+}
+
 /// Class page toggle.
 struct AutoBookToggle: View {
     @Environment(AppModel.self) var m

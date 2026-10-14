@@ -1,5 +1,5 @@
 // App state and loaders, in the spirit of AppModel.swift: one shared store that views read and re-render from.
-import { Bruce, session, DEFAULT_API } from './api.js';
+import { Bruce, Autobook, session, DEFAULT_API } from './api.js';
 import { ls, setZone, dayKey, todayKey } from './util.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
@@ -16,6 +16,7 @@ export const S = {
   classDetails: new Map(),                       // id -> class
   bookings: new Map(),                           // class id -> booking (with class); drop-ins keyed by "s<id>"
   standbys: new Map(),                           // class id -> standby
+  watches: new Set(),                            // class ids the auto-book server books when a waitlist spot frees up
   bookmarks: new Map(),                          // class id -> bookmark
   favorites: new Map(),                          // studio id -> favorite id
   friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null,
@@ -50,7 +51,7 @@ export function setAuth(a) {
   applySession();
 }
 export function clearData() {
-  ['studios', 'studioDetails', 'classDetails', 'bookings', 'standbys', 'bookmarks', 'favorites', 'classCache'].forEach((k) => S[k].clear());
+  ['studios', 'studioDetails', 'classDetails', 'bookings', 'standbys', 'watches', 'bookmarks', 'favorites', 'classCache'].forEach((k) => S[k].clear());
   Object.assign(S, { friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null, limits: [], user: null, membership: null, block: null, home: null, studiosLoading: null });
 }
 
@@ -103,6 +104,15 @@ export async function loadMine() {
   s.filter((x) => x.class).forEach((x) => S.standbys.set(x.class.id, x));
   bm.filter((x) => x.class).forEach((x) => S.bookmarks.set(x.class.id, x));
   emit();
+}
+/** Reads which classes the auto-book server watches (a request to the server, so only when a class page needs it). */
+export async function loadWatches() {
+  S.watches = new Set(await Autobook.watching(S.settings.autoBookServer));
+  emit();
+}
+export async function setWatch(classId, on) {
+  await Autobook.watch(classId, on, S.settings.autoBookServer);
+  on ? S.watches.add(classId) : S.watches.delete(classId);
 }
 export async function loadFavorites() {
   const f = await Bruce.favorites().catch(() => []);
