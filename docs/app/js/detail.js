@@ -46,6 +46,13 @@ export async function renderClass(el, id, ctx) {
   if (t !== token) return;
   draw(c);
   St.loadStudio(c.studio_id).then(() => { if (t === token) draw(S.classDetails.get(id) || c); }).catch(() => {});
+  // Which classes the auto-book server watches: only asked for a class that can be (or is) waitlisted.
+  {
+    const r = St.rules(c);
+    if (r.start > Date.now() && ((c.available_spots != null && c.available_spots <= 0) || S.standbys.has(c.id))) {
+      St.loadWatches().then(() => { if (t === token) draw(S.classDetails.get(id) || c); }).catch(() => {});
+    }
+  }
   Bruce.attendees(id).then((a) => { if (t === token) { S.attendees = { id, list: a }; drawFriends(c); } }).catch(() => {});
 
   function draw(c) {
@@ -102,12 +109,22 @@ export async function renderClass(el, id, ctx) {
       '<div>' + icon('calendar') + 'Cancel until ' + esc(time(r.lateCancel)) + ', ' + esc(fmt(r.lateCancel, { weekday: 'long', day: 'numeric', month: 'long' })) + '</div></div>' +
       '<div id="class-friends" class="who"></div>' +
       (facilities.length ? '<div class="card facilities">' + facilities.map((f) => '<span>' + icon(f.toLowerCase().includes('shower') ? 'spa' : f.toLowerCase().includes('lock') ? 'door' : 'person') + esc(f) + '</span>').join('') + '</div>' : '') +
+      watchToggle(c, standby, started, booking) +
       '<div class="actions sticky">' + actions + '</div>' +
       (c.description ? '<div class="rich">' + rich(c.description) + '</div>' : '') +
       '<a class="card row-card" href="#/' + ctx.tab + '/studio/' + c.studio_id + '">' + icon('building') + '<div class="grow"><b>' + esc(s.name || lite.name || 'Studio') + '</b><p class="muted">' + esc(lite.address || s.vicinity || '') + '</p></div>' + icon('chevron') + '</a>' +
       '</div>';
     drawFriends(c);
     wire(c, booking, standby, bm);
+  }
+
+  /** "Book when a spot opens": on a full or waitlisted class. The auto-book server books it (see server/README.md). */
+  function watchToggle(c, standby, started, booking) {
+    const full = c.available_spots != null && c.available_spots <= 0;
+    if (started || booking || !(full || standby || S.watches.has(c.id))) return '';
+    return '<div class="card"><label class="toggle"><span>Book when a spot opens<small class="muted">' +
+      (standby ? 'The auto-book server books it the moment a waitlist spot is free. Open My classes to see the result.' : 'Joins the waitlist, then the auto-book server books it the moment a spot is free.') +
+      '</small></span><input type="checkbox" data-watch' + (S.watches.has(c.id) ? ' checked' : '') + '><i></i></label></div>';
   }
 
   function drawFriends(c) {
@@ -127,6 +144,18 @@ export async function renderClass(el, id, ctx) {
 
   // One delegated handler (replaced on each draw), so buttons drawn later, like Invite, work too.
   function wire(c, booking, standby, bm) {
+    el.onchange = (e) => {
+      const box = e.target.closest('[data-watch]');
+      if (!box) return;
+      const on = box.checked;
+      run(box, async () => {
+        try {
+          if (on && !standby) await Bruce.joinWaitlist(c.id);
+          await St.setWatch(c.id, on);
+          if (on) toast("You're on the waitlist. It will be booked for you as soon as a spot opens up.");
+        } finally { await after(); }
+      });
+    };
     el.onclick = (e) => {
       const b = e.target.closest('[data-dact]');
       if (!b) return;
@@ -142,7 +171,11 @@ export async function renderClass(el, id, ctx) {
       else if (a === 'cancel') openRules(c, 'cancel', async () => { await Bruce.cancel(booking.id); toast('Booking cancelled'); await after(); });
       else if (a === 'join') run(b, async () => { await Bruce.joinWaitlist(c.id); toast("You're on the waitlist. You'll get a notification if a spot opens up."); await after(); });
       else if (a === 'leave') confirmSheet('Leave the waitlist?', 'You will lose your place in the queue for ' + c.title + '.', 'Leave waitlist')
-        .then((yes) => yes && run(null, async () => { await Bruce.leaveWaitlist(standby.id); toast('Left the waitlist'); await after(); }));
+        .then((yes) => yes && run(null, async () => {
+          await Bruce.leaveWaitlist(standby.id);
+          if (S.watches.has(c.id)) await St.setWatch(c.id, false).catch(() => {});
+          toast('Left the waitlist'); await after();
+        }));
       else if (a === 'similar') openSimilar(c, ctx.tab);
       else if (a === 'invite') openInvite(c);
       else if (a === 'ticket') openTicket(booking.id);
@@ -154,6 +187,8 @@ export async function renderClass(el, id, ctx) {
   async function after() {
     S.classCache.clear();
     await Promise.all([St.loadMine().catch(() => {}), St.loadClass(id).catch(() => {}), St.loadAccount().catch(() => {})]);
+    // Booked, or no longer waitlisted: the server has nothing left to watch (it drops a booked class by itself).
+    if (S.watches.has(id) && !S.standbys.has(id)) { S.watches.delete(id); St.setWatch(id, false).catch(() => {}); }
     if (t === token) draw(S.classDetails.get(id));
   }
 }

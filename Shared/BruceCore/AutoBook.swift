@@ -84,6 +84,12 @@ enum AutoBook {
         set { UserDefaults.standard.set(Array(newValue.sorted().suffix(500)), forKey: "autoBookHandled") }
     }
 
+    /// Full classes the user asked the server to book as soon as a spot on the waitlist frees up.
+    static var watchedWaitlists: Set<Int> {
+        get { Set((UserDefaults.standard.array(forKey: "autoBookWaitlistWatches") as? [Int]) ?? []) }
+        set { UserDefaults.standard.set(Array(newValue.sorted().suffix(50)), forKey: "autoBookWaitlistWatches") }
+    }
+
     // MARK: Finding the classes
 
     /// Upcoming classes for the rules (start in the future, not yet handled), soonest opening first.
@@ -255,6 +261,9 @@ enum AutoBookServer {
         let upcoming: [Entry]?
         let log: [Entry]?
         let devices: Int?
+        struct Watch: Decodable, Hashable { let classId: Int; let title: String?; let start: String? }
+        /// Full classes the server watches for a free waitlist spot.
+        let waitlist: [Watch]?
     }
 
     private static func request(_ method: String, _ path: String, session: Session, body: Any? = nil) throws -> URLRequest {
@@ -283,6 +292,12 @@ enum AutoBookServer {
 
     static func status(session: Session) async throws -> Status {
         try JSONDecoder().decode(Status.self, from: try await BruceAPI.send(request("GET", "me", session: session)))
+    }
+
+    /// `PUT|DELETE /me/waitlist/<classId>`: the server polls the full class and books it for the user as soon as a
+    /// spot is free (Bruce itself only sends a "Free spot" notification), then sends a push. Also stores the login.
+    static func watchWaitlist(_ on: Bool, classId: Int, session: Session) async throws {
+        try await BruceAPI.send(request(on ? "PUT" : "DELETE", "me/waitlist/\(classId)", session: session))
     }
 
     /// `POST /me/test-push`: a test notification to this user's devices.
@@ -320,6 +335,60 @@ extension AppModel {
             await refreshAutoBook()
             await syncAutoBookServer()
         }
+    }
+
+    // MARK: Waitlist: book as soon as a spot frees up
+
+    /// Whether the server is asked to book this (full, waitlisted) class when a spot opens up.
+    func isWatchingWaitlist(_ classId: Int) -> Bool { watchedWaitlists.contains(classId) }
+
+    /// Class page toggle "Book when a spot opens". Needs the server (the app cannot book while it is closed).
+    func setWatchWaitlist(_ on: Bool, classId: Int) async {
+        if AppModel.demo { if on { watchedWaitlists.insert(classId) } else { watchedWaitlists.remove(classId) }; return }
+        guard tokenUsable, let s = session else { return }
+        guard AutoBookServer.isConfigured, AutoBookServer.booksForMe else {
+            flash("Switch on \"Let the server book for me\" in Auto-book first"); return
+        }
+        do {
+            try await AutoBookServer.watchWaitlist(on, classId: classId, session: s)
+            if on { watchedWaitlists.insert(classId) } else { watchedWaitlists.remove(classId) }
+            AutoBook.watchedWaitlists = watchedWaitlists
+            if on {
+                #if os(iOS)
+                await AutoBook.requestPermission()   // the booking result arrives as a push; also registers for it
+                #endif
+                await syncAutoBookServer()           // sends this device's push token
+                flash("Will book it for you as soon as a spot opens up")
+            }
+        } catch { flash("Server: \(error.localizedDescription)") }
+    }
+
+    /// Whether the class page offers "Book when a spot opens": a class the user could not book (full or already
+    /// waitlisted), not yet started and not booked.
+    func offersWaitlistAutoBook(_ c: BruceAPI.BruceClass) -> Bool {
+        guard isLoggedIn, let start = c.start, start > Date(), booking(forClass: c.id) == nil else { return false }
+        return (c.availableSpots ?? 1) <= 0 || (standby(forClass: c.id) != nil && !isWatchingWaitlist(c.id))
+            || isWatchingWaitlist(c.id)
+    }
+
+    /// The toggle: joins the waitlist first when needed, then asks the server to book when a spot is free.
+    func setBookWhenSpotOpens(_ on: Bool, classId: Int) async {
+        if on, !isOnWaitlist(classId) {
+            await joinWaitlist(classId)
+            guard isOnWaitlist(classId) else { return }
+        }
+        await setWatchWaitlist(on, classId: classId)
+    }
+
+    /// After the waitlist was re-read: a watched class the user is no longer waitlisted for was booked (by the
+    /// server or by hand) or left, so the server stops watching it.
+    func pruneWaitlistWatches() {
+        let gone = watchedWaitlists.filter { standby(forClass: $0) == nil }
+        guard !gone.isEmpty else { return }
+        watchedWaitlists.subtract(gone)
+        AutoBook.watchedWaitlists = watchedWaitlists
+        guard !AppModel.demo, let s = session else { return }
+        Task { for id in gone { try? await AutoBookServer.watchWaitlist(false, classId: id, session: s) } }
     }
 
     /// While "Let the server book for me" is on: sends the rules, the push token and the current login.

@@ -18,6 +18,22 @@ so the server knows next week's class a week before it opens.
   retrying every second for 20 seconds. A class is tried once: if you cancel it later, it is not booked again.
 - The result ("Booked: Reformer", or why not) goes to the user's iPhones as an Apple push; tapping it opens the class.
 
+## Waitlist: book as soon as a spot frees up
+
+Bruce does not book waitlisters itself: a "Free spot" notification only tells them, and the first to book wins
+(see [API.md](../API.md#bookmarks-favourites-waitlist)). On a full class the apps offer **Book when a spot opens**
+(iOS, Mac and web). Switching it on joins the waitlist if needed and asks the server to watch the class.
+
+- The server reads the class (`GET /v52/class/<id>`, one request) and, as soon as `available_spots` is above 0, sends
+  `POST /v52/booking`, then pushes "Booked: Reformer" to the user's iPhones.
+- Polling: every minute in the last 24 hours before the class (a freed spot goes to whoever books first), every
+  5 minutes before that. At most 10 watched classes per user.
+- It stops when the class is booked, started, cancelled or removed from the list, when the user switches it off or
+  leaves the waitlist in the app, or after 5 failed booking attempts on a free spot (it waits 5 minutes between
+  them; a lost race just keeps watching). The last case sends a push too.
+- Each user's watches are separate and use that user's own login. Web users have no push device, so they see the
+  result in My classes.
+
 ## Users and what is stored
 
 There is no shared key. The app signs in with the user's own Bruce login (`X-Access-Token` and `X-User-Id`
@@ -55,13 +71,15 @@ which limits it to roughly 10-20 weekly classes per scan minute across users.
 
 ## HTTP API
 
-All requests need the user's Bruce login: `X-Access-Token: <access token>` and `X-User-Id: <user id>`.
+All requests need the user's Bruce login (CORS is open, the web app calls the server from the browser): `X-Access-Token: <access token>` and `X-User-Id: <user id>`.
 
 | Request | Body | Effect |
 |---|---|---|
 | `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"}}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`) |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], log:[{classId,title,at,outcome}], devices}` |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices}` |
 | `DELETE /me` | | Deletes the user's row |
+| `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
+| `DELETE /me/waitlist/<classId>` | | Stops watching it |
 | `POST /me/test-push` | | Sends a test push to the user's devices |
 
 ## Develop

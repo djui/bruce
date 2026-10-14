@@ -128,6 +128,7 @@ struct ClassDetailView: View {
                         if let b = booking { bookedBox(r, checkedIn: b.checkedInAt.flatMap(BruceDate.parse)) } else { rulesLines(c, r) }
                     }
                     if m.isLoggedIn, c.start.map({ $0 > Date() }) ?? false { AutoBookToggle(c: c) }
+                    if m.offersWaitlistAutoBook(c) { WaitlistAutoBookToggle(c: c) }
                     if let a = c.availableSpots {
                         Text(a > 5 ? "5+ spots left" : a <= 0 ? "Fully booked" : "\(a) spot\(a == 1 ? "" : "s") left")
                             .font(.system(size: 17, weight: .light))
