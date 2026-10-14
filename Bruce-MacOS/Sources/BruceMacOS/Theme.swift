@@ -36,20 +36,28 @@ extension View {
 
 // MARK: - Shared components
 
-/// "HOME"-style header with trailing icon buttons.
+/// "HOME"-style header of a main tab: the tab's own buttons, then Notifications and Menu, which end every
+/// main tab's header so they never move between tabs.
 struct ScreenHeader<Trailing: View>: View {
+    @Environment(AppModel.self) var m
     let title: String
     @ViewBuilder var trailing: Trailing
     var body: some View {
-        HStack(alignment: .center) {
+        HStack(alignment: .center, spacing: 18) {
             Text(title.uppercased()).font(Theme.screenTitle()).lineLimit(1).minimumScaleFactor(0.6)
-            Spacer()
+            Spacer(minLength: 0)
             trailing
+            IconButton(system: "bell", size: 22, badge: m.unreadNotifications) { m.present(.notifications) }.help("Notifications")
+            IconButton(system: "line.3.horizontal", size: 22) { m.present(.menu) }.help("Menu")
         }
         .padding(.horizontal, Theme.gutter)
         .padding(.top, 18)
         .padding(.bottom, 10)
     }
+}
+
+extension ScreenHeader where Trailing == EmptyView {
+    init(title: String) { self.init(title: title) { EmptyView() } }
 }
 
 /// Sheet / pushed-page nav bar: leading X or chevron, centered bold title, optional trailing.

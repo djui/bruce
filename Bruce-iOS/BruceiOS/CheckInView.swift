@@ -96,12 +96,16 @@ struct ScanCorners: Shape {
 
 /// Check in tab: the camera QR scanner with the suggested studio and "Other studios" below it, so scanning
 /// and checking in by studio live in one place. Every check-in asks for confirmation (`askCheckIn`) and
-/// sends a real check-in when logged in.
+/// sends a real check-in when logged in. Same top bar as the other tabs (title, Notifications, Menu), light
+/// on the camera.
 struct CheckInTab: View {
     @State private var showAll = AppModel.demo && AppModel.setting("BRUCE_SCREEN") == "checkinall"
     var body: some View {
         CheckInScanner(inSheet: false, showAll: $showAll)
-            .toolbar(.hidden, for: .navigationBar)
+            .bruceTitle("Check in")
+            .toolbar { MainToolbarButtons() }
+            .toolbarColorScheme(.dark, for: .navigationBar)
+            .environment(\.colorScheme, .dark)
             .navigationDestination(isPresented: $showAll) { OtherStudiosView() }
     }
 }
@@ -116,10 +120,13 @@ struct CheckInScanner: View {
         ZStack {
             camera.ignoresSafeArea()
             VStack(spacing: 12) {
-                HStack {
-                    Text("CHECK IN").font(Theme.screenTitle(26)).foregroundStyle(.white)
-                    Spacer()
-                    if inSheet { Button(role: .close) { scanner.stop(); m.dismissSheets() }.buttonStyle(.glass) }
+                // The tab shows its title in the navigation bar; the sheet has no bar, so it draws its own.
+                if inSheet {
+                    HStack {
+                        Text("CHECK IN").font(Theme.screenTitle(26)).foregroundStyle(.white)
+                        Spacer()
+                        Button(role: .close) { scanner.stop(); m.dismissSheets() }.buttonStyle(.glass)
+                    }
                 }
                 Label("Hold the camera steady over the QR code on the studio door", systemImage: "qrcode.viewfinder")
                     .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)

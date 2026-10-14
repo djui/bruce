@@ -6,14 +6,16 @@ import { S } from './store.js';
 import { classRow, classList, photoCard, underlineTabs, chip, empty, loading, sectionHeader, avatar, toast, makeMap } from './ui.js';
 import { openNotifications, openMenu, openReview, openScanner, openTicket, checkInFlow } from './sheets.js';
 
-/** Page header: big wide uppercase title with glass buttons on the right. */
+/** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
+ *  Menu, which end every tab's header (on wide screens they live in the sidebar instead). */
 function header(title, right) {
-  return '<div class="page-head"><h1 class="screen-title">' + esc(title) + '</h1><div class="head-btns">' + (right || '') + '</div></div>';
+  return '<div class="page-head"><h1 class="screen-title">' + esc(title) + '</h1><div class="head-btns">' + (right || '') + headButtons() + '</div></div>';
 }
-export function headButtons() {
-  const dot = St.unseenNotifications() ? '<i class="dot"></i>' : '';
-  return '<button class="glass-btn" data-act="notifications" aria-label="Notifications">' + icon('bell') + dot + '</button>' +
-    '<button class="glass-btn" data-act="menu" aria-label="Menu">' + icon('menu') + '</button>';
+function headButtons() {
+  // main.js badges() keeps the dot in sync after the header is drawn.
+  const dot = '<i class="dot"' + (St.unseenNotifications() ? '' : ' hidden') + '></i>';
+  return '<button class="glass-btn head-global" data-act="notifications" aria-label="Notifications">' + icon('bell') + dot + '</button>' +
+    '<button class="glass-btn head-global" data-act="menu" aria-label="Menu">' + icon('menu') + '</button>';
 }
 const link = (tab, kind, id) => '#/' + tab + '/' + kind + '/' + id;
 
@@ -37,7 +39,7 @@ async function homeData() {
 export const Home = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
-    el.innerHTML = header('Home', headButtons()) + '<div id="home-body">' + loading() + '</div>';
+    el.innerHTML = header('Home') + '<div id="home-body">' + loading() + '</div>';
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
   },
   refresh() {
@@ -294,7 +296,7 @@ function targetRow(t) {
 export const Friends = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
-    el.innerHTML = header('Friends', headButtons()) + '<div id="fr-body">' + loading() + '</div>';
+    el.innerHTML = header('Friends') + '<div id="fr-body">' + loading() + '</div>';
     St.loadSocial().then(() => this.refresh());
     this.refresh();
   },

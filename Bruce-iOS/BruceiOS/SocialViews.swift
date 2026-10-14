@@ -39,6 +39,7 @@ struct FriendsView: View {
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .bruceTitle("Friends")
+        .toolbar { MainToolbarButtons() }
         .task { await m.loadSocial() }
         .refreshable { await m.loadSocial() }
     }
@@ -98,6 +99,8 @@ struct MyClassesView: View {
                 Text(m.simultaneousLimit.map { "\(m.upcomingBookings.count) / \($0)" } ?? "\(m.upcomingBookings.count)").font(.system(size: 15, weight: .semibold)).monospacedDigit()
                     .padding(.horizontal, 6)
             }
+            ToolbarSpacer(.fixed, placement: .topBarTrailing)
+            MainToolbarButtons()
         }
         .task { await m.loadMine() }
         .refreshable { await m.loadMine() }

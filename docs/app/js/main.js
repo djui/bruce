@@ -6,7 +6,7 @@ import * as St from './store.js';
 import { S } from './store.js';
 import { Home, Explore, CheckIn, Friends, Mine, wireCommon, placeholderPane } from './views.js';
 import { renderClass, renderStudio } from './detail.js';
-import { toast } from './ui.js';
+import { toast, fitTitle } from './ui.js';
 import { openNotifications, openMenu } from './sheets.js';
 
 const TABS = [
@@ -41,6 +41,7 @@ function badges() {
   $$('[data-badge="mine"]').forEach((b) => { b.textContent = n || ''; });
   const dot = St.unseenNotifications();
   $$('.notif-dot').forEach((d) => { d.hidden = !dot; });
+  $$('[data-act="notifications"] .dot').forEach((d) => { d.hidden = !dot; });
 }
 
 function route() {
@@ -66,6 +67,7 @@ function route() {
     if (!isWide() && !r.detail) window.scrollTo(0, 0);
     current.view = View;
     View.render(el, ctx);
+    fitTitle($('.screen-title', el));
   } else if (detailChanged && current.view) {
     current.view.ctx = ctx;
     $$('.selected', main).forEach((x) => x.classList.remove('selected'));
