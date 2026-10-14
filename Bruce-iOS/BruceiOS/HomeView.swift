@@ -33,18 +33,7 @@ struct HomeView: View {
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .bruceTitle("Home")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { m.present(.quickCheckIn) } label: {
-                    Image(systemName: "viewfinder").overlay(alignment: .topTrailing) {
-                        if !m.openWindowTargets.isEmpty { Circle().fill(Theme.red).frame(width: 8, height: 8).offset(x: 3, y: -2) }
-                    }
-                }
-                .accessibilityLabel("Quick check-in")
-            }
-            ToolbarSpacer(.fixed, placement: .topBarTrailing)
-            MainToolbarButtons()
-        }
+        .toolbar { MainToolbarButtons() }
         .refreshable { await m.bootstrap() }
         // Like the original: ask for location the first time Home appears after login (system prompt explains why).
         .task(id: m.isLoggedIn) { if m.isLoggedIn { loc.requestIfNeeded() } }
