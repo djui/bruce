@@ -5,5 +5,10 @@
 	<!-- Push from the auto-book server (server/). Export for TestFlight/App Store switches it to production. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- Apple Health: attended classes are written as workouts (HealthSync.swift). -->
+	<key>com.apple.developer.healthkit</key>
+	<true/>
+	<key>com.apple.developer.healthkit.access</key>
+	<array/>
 </dict>
 </plist>

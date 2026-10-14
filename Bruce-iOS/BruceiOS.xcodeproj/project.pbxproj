@@ -194,6 +194,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera is used to scan the QR code at the studio door to check in.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Your weight is used to estimate the calories of a class, and existing workouts are checked so a class recorded on your watch is not added twice.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Classes and gym visits you attended are saved as workouts with type, time and estimated calories.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used to suggest the gym you're at for check-in and to show nearby studios.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -223,6 +225,8 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera is used to scan the QR code at the studio door to check in.";
+				INFOPLIST_KEY_NSHealthShareUsageDescription = "Your weight is used to estimate the calories of a class, and existing workouts are checked so a class recorded on your watch is not added twice.";
+				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Classes and gym visits you attended are saved as workouts with type, time and estimated calories.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used to suggest the gym you're at for check-in and to show nearby studios.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

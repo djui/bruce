@@ -26,7 +26,9 @@ struct BruceiOSApp: App {
                 .onChange(of: phase) { old, p in
                     if p == .active { location.start() } else if p == .background { location.stop() }
                     // Waitlist spots can turn into bookings while the app is in the background.
-                    if p == .active && old == .background { Task { await model.refreshOnForeground() } }
+                    if p == .active && old == .background {
+                        Task { await model.refreshOnForeground(); await HealthSync.shared.sync(model: model) }
+                    }
                 }
         }
     }
@@ -77,7 +79,7 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.25), value: m.showWelcome)
         .tint(Theme.ink)  // toolbar icons, toggles, links: label colour as in the original
-        .task { await m.bootstrap() }
+        .task { await m.bootstrap(); await HealthSync.shared.sync(model: m) }
         .sheet(item: Binding(get: { m.sheets.first }, set: { if $0 == nil { m.dismissSheets() } })) { first in
             SheetContainer(root: first)
         }

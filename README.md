@@ -115,6 +115,12 @@ My classes tabs, with class and studio pages and account sheets.
   visits counting up, months, your class personality, favourite studio, top time of day, streak, the friend you
   trained with most, how you compare with other Brüce users (anonymous percentiles from the server), and a share
   image.
+- **Apple Health** (iPhone): Settings › Apple Health saves every class you attended as a workout, with the
+  workout type guessed from the class and its category (Hyrox as HIIT, yoga, cycling, swimming…), start and end
+  time and estimated active calories (MET value × duration × your weight from Health, else 75 kg). Solo gym visits
+  count as 60-minute strength workouts (can be switched off); sauna and spa visits are left out. The whole history
+  is added the first time, then new visits whenever the app opens. A class your Apple Watch already recorded is
+  not added again.
 - **Friends' classes**, bookmarks, favourites, membership, credits, strikes,
   receipts, and notification and social settings.
 - **Siri and Shortcuts** (App Intents): ask "What's my next class in Brüce", "Book a class in Brüce"
@@ -314,6 +320,8 @@ so they are **not** included in this repository. Examples in the docs use placeh
   does.
 - Translation uses Apple's Translation framework, which translates on the device. The system may download
   a language model the first time; the texts themselves are not sent to any translation service.
+- Apple Health (iOS, off until you switch it on): the app writes workouts and reads only your latest weight
+  and other apps' workouts at the same time, on the device. Nothing from Health is sent anywhere.
 - Cached studio lists, images and custom areas are stored locally in the app's caches and Application
   Support folders.
 - The web version keeps its access token, settings and a cached studio list in the browser's localStorage for
