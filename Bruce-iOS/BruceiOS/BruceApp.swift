@@ -20,6 +20,8 @@ struct BruceiOSApp: App {
                     location.model = model
                     AppDelegate.openClass = { [model] id in model.dismissSheets(); model.push(.classDetail(id)) }
                     AppDelegate.onDeviceToken = { [model] in Task { await model.syncAutoBookServer() } }
+                    AppDelegate.openTarget = { [model] t in model.open(t) }
+                    AppModel.travelTimeProvider = { q in await CommuteETA.minutes(q) }
                 }
                 .onChange(of: phase) { old, p in
                     if p == .active { location.start() } else if p == .background { location.stop() }
@@ -80,6 +82,7 @@ struct RootView: View {
             SheetContainer(root: first)
         }
         .modifier(ModelAlerts(active: m.sheets.isEmpty))
+        .fullScreenCover(isPresented: Binding(get: { m.wrappedOpen }, set: { m.wrappedOpen = $0 })) { WrappedView() }
         .overlay(alignment: .bottom) {
             if m.sheets.isEmpty, let t = m.toast { ToastView(text: t).padding(.bottom, 110).transition(.move(edge: .bottom).combined(with: .opacity)) }
         }
@@ -132,6 +135,9 @@ extension View {
             case .studio(let id): StudioDetailView(studioId: id)
             case .categories: CategoriesGridView()
             case .category(let id): CategoryView(categoryId: id)
+            case .forYou: ForYouListView()
+            case .goals: GoalsView()
+            case .challenge(let id): ChallengeView(challengeId: id)
             }
         }
     }
@@ -247,6 +253,11 @@ struct SheetScreen: View {
         case .area(let id): AreaMapSheet(areaId: id)
         case .review(let id): ReviewSheet(bookingId: id)
         case .autoBook: AutoBookView()
+        case .places: PlacesView()
+        case .editPlace(let id): EditPlaceView(placeId: id)
+        case .goals: GoalsView(inSheet: true)
+        case .editGoal(let id): GoalEditor(goalId: id)
+        case .newChallenge: NewChallengeSheet()
         }
     }
 }
