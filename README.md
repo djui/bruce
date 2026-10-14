@@ -263,9 +263,12 @@ so they are **not** included in this repository. Examples in the docs use placeh
 - **Use it only with your own account.** Don't use it to access anyone else's data.
 - **Respect Bruce Studios' terms of service and membership rules.** Bookings, cancellations and check-ins
   made with this app are real and count like any others. Only check in where you are physically present.
-- **Don't automate abuse:** no bulk or scripted booking, scraping, sniping spots, load testing, or
-  circumventing limits, strikes or payments. The apps make the same kinds of requests at a similar rate as
-  the official app; please keep it that way.
+- **Don't automate abuse:** no bulk booking, scraping, load testing, or circumventing limits, strikes or
+  payments. The apps make the same kinds of requests at a similar rate as the official app; please keep it
+  that way. Auto-book is the one exception to "only by hand", and it stays within that: for your own
+  account, it sends the single booking request you would send yourself for a class you attend every week,
+  at the moment booking opens, and tries each class once. Don't use it to hold spots you won't use; cancel
+  in time if you can't make it.
 - If Bruce Studios asks for this project to change or be taken down, the author will comply.
 
 ## Notice and trademarks
