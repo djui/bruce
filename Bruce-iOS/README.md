@@ -36,7 +36,7 @@ change local state. `BRUCE_SCREEN=<name>` opens a screen directly (same names as
 `rules`, `booked`, `filter`, `search`, `welcome`, `parakey`, …). The insight features add `foryou` (all picks),
 `places`, `editplace`, `goals`, `goalscard` (My classes with the goals card), `newgoal`, `challenges` (Friends ›
 Challenges), `challenge`, `challengemember` (a participant's detail), `newchallenge`, `wrapped` and `wrappedshare`
-(the last story card); demo mode fakes the server's challenge and percentile answers:
+(the last story card; `BRUCE_WRAPPED_CARD=<n>` starts Wrapped at card n); demo mode fakes the server's challenge and percentile answers:
 
 ```sh
 xcrun simctl install booted build/…/BruceiOS.app
