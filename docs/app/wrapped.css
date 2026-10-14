@@ -26,7 +26,7 @@ dialog.wr::backdrop { background: #000; }
   .wr-nav.prev { left: 10px; } .wr-nav.next { right: 10px; }
   .wr-stage:hover .wr-nav { opacity: 1; }
 }
-.wr-stage.held .wr-prog, .wr-stage.held .wr-close, .wr-stage.held .wr-hint { opacity: 0.25; transition: opacity 0.2s; }
+.wr-stage.held .wr-prog, .wr-stage.held .wr-close, .wr-stage.held .wr-hint.show { opacity: 0.25; transition: opacity 0.2s; }
 .wr-hint { position: absolute; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); left: 0; right: 0; z-index: 6; display: flex; justify-content: space-between; padding: 0 22px; font-size: 12px; font-weight: 700; color: #fff; mix-blend-mode: difference; opacity: 0; transition: opacity 0.4s; pointer-events: none; }
 .wr-hint.show { opacity: 0.7; }
 .wr-toast { position: absolute; left: 50%; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); z-index: 8; transform: translate(-50%, 20px); padding: 10px 16px; border-radius: 99px; background: #fff; color: #000; font-weight: 700; font-size: 14px; opacity: 0; transition: opacity 0.2s, transform 0.2s; pointer-events: none; }
@@ -55,7 +55,7 @@ dialog.wr::backdrop { background: #000; }
 .g-place { background: linear-gradient(160deg, #00c2a8, #0066ff 70%, #2a0d8f); }
 .g-streak { background: radial-gradient(circle at 50% 30%, #ffd400 0, transparent 35%), linear-gradient(170deg, #ff3d00, #ff0066 70%, #6a00ff); }
 .g-top { background: conic-gradient(from 210deg at 50% 40%, #dafc55, #3ae0ff, #b18cff, #dafc55); color: #000; }
-.g-share { background: radial-gradient(circle at 50% 30%, #1d2b0a, #000 70%); padding-top: calc(26px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; }
+.g-share { background: radial-gradient(circle at 50% 30%, #1d2b0a, #000 70%); padding-top: calc(26px + env(safe-area-inset-top, 0px)); padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; }
 .wr-story.on.g-intro, .wr-story.on.g-persona, .wr-story.on.g-streak, .wr-story.on.g-top { background-size: 160% 160%; animation: wr-drift 7s ease-in-out infinite alternate; }
 @keyframes wr-drift { from { background-position: 0% 0%; } to { background-position: 100% 100%; } }
 
@@ -126,6 +126,8 @@ dialog.wr::backdrop { background: #000; }
 .wr-sharecard::before { content: ""; position: absolute; inset: -40%; background: linear-gradient(105deg, transparent 40%, rgba(255, 255, 255, 0.55) 50%, transparent 60%); animation: wr-shine 3.2s ease-in-out infinite; pointer-events: none; }
 @keyframes wr-shine { from { transform: translateX(-60%); } to { transform: translateX(60%); } }
 .wr-sharecard > * { position: relative; }
+.wr-sharecard { flex: none; }
+.wr-sharetitle { font-size: 38px; }
 .wr-sharecard .row-top { display: flex; justify-content: space-between; align-items: flex-start; }
 .wr-sharecard .spin-spark { width: 34px; height: 34px; fill: #000; stroke: none; animation: wr-spin 6s linear infinite; }
 .wr-sharecard .who { font-weight: 700; font-size: 15px; margin: 6px 0 4px; opacity: 0.7; }
@@ -146,6 +148,19 @@ dialog.wr::backdrop { background: #000; }
   .wr-art, .wr .sunrise, .wr .moon, .wr .orb { width: 110px; height: 110px; }
   .wr .flame { width: 80px; height: 80px; }
   .wr-bars { height: 96px; }
+}
+@media (max-height: 720px) {
+  .g-share { overflow-y: auto; }
+  .wr-sharehead { margin-bottom: 10px; }
+  .wr-sharecard { padding: 16px 18px; border-radius: 24px; }
+  .wr-sharetitle { font-size: 28px; }
+  .wr-sharecard .spin-spark { width: 26px; height: 26px; }
+  .wr .persona-tag { margin-bottom: 10px; }
+  .wr .wstat { gap: 8px 12px; }
+  .wr .wstat b { font-size: 21px; }
+  .wr .wstat span { font-size: 11px; }
+  .wr-sharecard .foot { margin-top: 10px; padding-top: 8px; font-size: 12px; }
+  .wr-actions { gap: 8px; padding-top: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

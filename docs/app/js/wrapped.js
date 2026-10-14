@@ -154,7 +154,7 @@ function shareData(d) {
 function shareCard(d) {
   const x = shareData(d);
   return '<div class="wr-sharehead"><span class="wbig">WRAPPED</span></div>' +
-    '<div class="wr-sharecard"><div class="row-top"><div class="wbig" style="font-size:38px">BRÜCE<br>' + x.year + '</div>' + icon('spark', 'spin-spark') + '</div>' +
+    '<div class="wr-sharecard"><div class="row-top"><div class="wbig wr-sharetitle">BRÜCE<br>' + x.year + '</div>' + icon('spark', 'spin-spark') + '</div>' +
     '<div class="who">' + esc(x.name) + '</div><div class="persona-tag">' + icon('spark') + ' ' + esc(x.persona) + '</div>' +
     '<div class="wstat">' + x.tiles.map((t, k) => '<div style="--k:' + k + '"><b>' + esc(t.value) + '</b><span>' + esc(t.label) + '</span></div>').join('') + '</div>' +
     '<div class="foot"><span>' + esc(x.left) + '</span><span>' + esc(x.right) + '</span></div></div>' +
@@ -335,7 +335,7 @@ function makeConfetti(canvas) {
     if (canvas.width === 0 || w === 0) size();
     ctx.clearRect(0, 0, w, h);
     parts = parts.filter((q) => q.y < h + 30);
-    if (colors) while (parts.length < 46) parts.push(spawn(false));
+    if (colors) while (parts.length < 36) parts.push(spawn(false));
     for (const q of parts) {
       q.y += q.vy * dt; q.sway += dt * 2; q.rot += q.vr * dt;
       ctx.save(); ctx.translate(q.x + Math.sin(q.sway) * 14, q.y); ctx.rotate(q.rot); ctx.fillStyle = q.c;
@@ -351,7 +351,7 @@ function makeConfetti(canvas) {
     set(c) {
       const was = colors;
       colors = c;
-      if (c && c !== was) { size(); parts = parts.concat(Array.from({ length: 40 }, () => spawn(true))); }
+      if (c && c !== was) { size(); parts = parts.concat(Array.from({ length: 40 }, () => spawn(true))).slice(-70); }
       if (!raf && (colors || parts.length)) { last = performance.now(); raf = requestAnimationFrame(frame); }
     },
     stop() { colors = null; parts = []; cancelAnimationFrame(raf); raf = 0; window.removeEventListener('resize', size); },
@@ -492,3 +492,6 @@ async function shareImage(d, save, btn) {
     if (btn) btn.disabled = false;
   }
 }
+
+/** The share image of the open Wrapped as a canvas (for checks in the browser console). */
+export const currentShareCanvas = () => (current && current.data ? shareCanvas(shareData(current.data)) : null);
