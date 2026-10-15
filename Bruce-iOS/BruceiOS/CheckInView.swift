@@ -145,11 +145,24 @@ struct CheckInScanner: View {
         }
         .environment(\.colorScheme, .dark)
         .onAppear {
+            visible = true
             scanner.onCode = { handle($0) }
-            scanner.start()
+            if !coveredBySheet { scanner.start() }
         }
-        .onDisappear { scanner.stop() }
+        .onDisappear { visible = false; scanner.stop() }
+        // A sheet over the tab (the ticket after a check-in, notifications, menu) does not fire onDisappear, so the
+        // camera kept running underneath. Pause it while covered: no camera use the user cannot see, and no live
+        // video backdrop under the scanner's glass while the sheet animates in (TestFlight crash Oct 15 in the
+        // system glass renderer right after a check-in).
+        .onChange(of: coveredBySheet) { _, covered in
+            guard visible else { return }
+            if covered { scanner.stop() } else { scanner.start() }
+        }
     }
+
+    @State private var visible = false
+    /// The tab scanner is covered by one of the model's sheets. The sheet variant is itself a sheet, so never.
+    var coveredBySheet: Bool { !inSheet && !m.sheets.isEmpty }
 
     @ViewBuilder var camera: some View {
         if scanner.state == .running {
