@@ -743,3 +743,15 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Explore filter: chip with count, sheet extras, area picker map */
+#x-filter { display: contents; }
+.chip .num { font-variant-numeric: tabular-nums; margin-left: 5px; }
+.chip svg { vertical-align: -3px; }
+.link { background: none; border: 0; padding: 4px 0; color: var(--label); font: 700 15px/1.2 var(--text); cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.glass-btn.txt { width: auto; padding: 0 14px; font: 700 15px/1 var(--text); }
+.glass-btn.txt:disabled { opacity: 0.4; }
+.area-note { margin: -4px 0 0; }
+.sheet-go { position: sticky; bottom: 0; margin-top: 22px; }
+.filter-foot { display: flex; gap: 6px; margin: 16px auto; width: auto; }
+.map.na-map { height: 300px; margin: 8px 0 14px; }
