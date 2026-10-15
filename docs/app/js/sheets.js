@@ -352,7 +352,7 @@ function openSettings() {
     try { if (th.value) localStorage.setItem('theme', th.value); else localStorage.removeItem('theme'); } catch (e) { /* private mode */ }
     if (th.value) document.documentElement.dataset.theme = th.value; else delete document.documentElement.dataset.theme;
   });
-  $('#set-city', s.el).addEventListener('change', (e) => { S.settings.cityId = +e.target.value; St.saveSettings(); S.classCache.clear(); S.home = null; window.dispatchEvent(new Event('bruce:city')); toast('City set to ' + St.city().name); });
+  $('#set-city', s.el).addEventListener('change', (e) => { St.selectCity(e.target.value); toast('City set to ' + St.city().name); });
   $('#set-api', s.el).addEventListener('change', (e) => { S.settings.apiBase = e.target.value.trim() || 'https://api.bruce.app'; St.saveSettings(); St.applySession(); toast('API server saved'); });
   $('#set-social', s.el).addEventListener('change', (e) => run(null, async () => { await Bruce.setSocial(e.target.checked); if (S.user) S.user.social = e.target.checked; toast(e.target.checked ? 'Social is on' : 'Social is off'); }));
   Bruce.notificationSetting().then((ns) => {

@@ -6,6 +6,7 @@ import { visitsFrom, local, weekOf, addMonths } from '../js/visits.js';
 import { counts, progress, summary, weekStreak, longestWeekStreak, calendar, suggestions, goalTitle, remindPayload } from '../js/goals.js';
 import { travelMinutes, detourMinutes, recommend, slotOf } from '../js/recommend.js';
 import { wrappedStats, archetype, together, longestStreak, topPercent, cardsFor } from '../js/wrapped-stats.js';
+import { loadState, tierOK, inPolygon, studioInArea, rectangle, studioPasses, classPasses, activeCount, clearFilters, selectedArea } from '../js/filters.js';
 import { challengeIdFromHash, challengeShareUrl, challengeRoute } from '../js/links.js';
 
 const Z = 'Europe/Stockholm';
@@ -254,4 +255,66 @@ test('a day list keeps only classes that start on that day in Stockholm', async 
   assert.equal(onDay({ start_time: '2026-10-17T22:30:00Z' }, '2026-10-18'), true);   // 00:30 on the 18th
   assert.equal(onDay({ start_time: '2026-10-19T08:00:00Z' }, '2026-10-18'), false);
   assert.equal(onDay({}, '2026-10-18'), false);
+});
+
+// ---------------------------------------------------------------- Explore filter
+
+const sq = [{ lat: 0, lon: 0 }, { lat: 0, lon: 2 }, { lat: 2, lon: 2 }, { lat: 2, lon: 0 }];
+const lim = (b, k, e) => ({ items: [{ label: 'BASE', limit: b }, { label: 'BLACK', limit: k }, { label: 'EPIC', limit: e }] });
+
+test('old saved explore state still loads, with new fields defaulted', () => {
+  const f = loadState({ tab: 'classes', favs: true, free: true, map: false, q: 'x' });
+  assert.deepEqual([f.tab, f.favs, f.free, f.q, f.solo, f.areaId], ['classes', true, true, '', false, null]);
+  assert.deepEqual(f.tiers, []);
+  assert.deepEqual(loadState({ tiers: ['Base', 'Bogus'] }).tiers, ['Base']);
+  assert.equal(loadState('junk').tab, 'studios');
+});
+
+test('area membership uses a polygon; studios without coordinates are outside', () => {
+  assert.equal(inPolygon(sq, 1, 1), true);
+  assert.equal(inPolygon(sq, 3, 1), false);
+  assert.equal(inPolygon(sq.slice(0, 2), 1, 1), false);
+  const a = { points: rectangle({ north: 2, south: 0, east: 2, west: 0 }) };
+  assert.equal(studioInArea({ lat: 1, lon: 1 }, a), true);
+  assert.equal(studioInArea({ lat: 5, lon: 1 }, a), false);
+  assert.equal(studioInArea({}, a), false);
+  assert.equal(studioInArea({}, null), true);
+});
+
+test('access tiers: limit -1 means no access, Wellness is the label, Free needs a FREE item', () => {
+  const s = { limits: lim(-1, 4, 0).items };
+  assert.equal(tierOK(s, []), true);
+  assert.equal(tierOK(s, ['Base']), false);
+  assert.equal(tierOK(s, ['Black']), true);
+  assert.equal(tierOK(s, ['Base', 'Epic']), true);
+  assert.equal(tierOK({ label: 'wellness' }, ['Wellness']), true);
+  assert.equal(tierOK({ limits: [{ label: 'FREE', limit: 2 }] }, ['Free']), true);
+  assert.equal(tierOK({ limits: [] }, ['Free']), false);
+});
+
+test('studio and class rules, count and clear', () => {
+  const favs = new Set([1]);
+  const f = loadState({});
+  assert.equal(studioPasses({ id: 2 }, f, favs, null), true);
+  f.favs = true; f.solo = true;
+  assert.equal(studioPasses({ id: 1, openings: true }, f, favs, null), true);
+  assert.equal(studioPasses({ id: 1 }, f, favs, null), false);
+  assert.equal(studioPasses({ id: 2, openings: true }, f, favs, null), false);
+  f.favs = false; f.solo = false; f.free = true;
+  assert.equal(classPasses({ studio_id: 1, available_spots: 0 }, {}, f, favs, null), false);
+  assert.equal(classPasses({ studio_id: 1, available_spots: 3 }, {}, f, favs, null), true);
+  const area = { points: sq };
+  assert.equal(classPasses({ studio_id: 1, available_spots: 3 }, { lat: 1, lon: 1 }, f, favs, area), true);
+  assert.equal(classPasses({ studio_id: 1, available_spots: 3 }, { lat: 9, lon: 1 }, f, favs, area), false);
+  f.tiers = ['Base', 'Epic'];
+  assert.equal(activeCount(f, true, area), 5);
+  clearFilters(f);
+  assert.equal(activeCount(f, false, null), 0);
+});
+
+test('a selected area only counts in its own city', () => {
+  const list = [{ id: 'a1', cityId: 1 }];
+  assert.equal(selectedArea(list, 'a1', 1).id, 'a1');
+  assert.equal(selectedArea(list, 'a1', 2), null);
+  assert.equal(selectedArea(list, null, 1), null);
 });

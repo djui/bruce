@@ -5,6 +5,8 @@ import * as St from './store.js';
 import { S } from './store.js';
 import { classRow, classList, photoCard, underlineTabs, chip, empty, loading, sectionHeader, avatar, toast, makeMap } from './ui.js';
 import { openNotifications, openMenu, openReview, openScanner, openTicket, checkInFlow } from './sheets.js';
+import { ex, saveEx, areas, selectedArea, studioPasses, classPasses, activeCount } from './filters.js';
+import { openFilters } from './filtersheet.js';
 import { forYouHTML, forYouClick } from './foryou.js';
 import { challengesHTML, challengesClick, openNewChallenge, loadIfAllowed } from './challenges.js';
 import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
@@ -92,12 +94,11 @@ export const Home = {
 
 // ---------------------------------------------------------------- Explore
 
-const ex = ls.get('bruce.explore', { tab: 'studios', q: '', favs: false, free: false, map: false });
-const saveEx = () => ls.set('bruce.explore', { tab: ex.tab, favs: ex.favs, free: ex.free, map: ex.map, q: '' });
+const curArea = () => selectedArea(areas, ex.areaId, S.settings.cityId);
 const classCache = (key) => S.classCache.get(S.settings.cityId + ':' + key);
 
 function studioMatches(s, q, cat) {
-  if (ex.favs && !S.favorites.has(s.id)) return false;
+  if (!studioPasses(s, ex, S.favorites, curArea())) return false;
   if (cat && !(s.cats || []).includes(cat.title)) return false;
   if (!q) return true;
   return [s.name, s.vicinity, s.address, ...(s.cats || [])].some((x) => x && x.toLowerCase().includes(q));
@@ -110,12 +111,11 @@ function filteredStudios(cat) {
 }
 function filteredClasses(list, cat, day) {
   const q = ex.q.trim().toLowerCase();
-  const now = Date.now();
+  const now = Date.now(), area = curArea();
   return (list || []).filter((c) => {
     if (!isListed(c)) return false;
     if (day === todayKey() && c.end_time && new Date(c.end_time) < now) return false;
-    if (ex.free && !(c.available_spots > 0)) return false;
-    if (ex.favs && !S.favorites.has(c.studio_id)) return false;
+    if (!classPasses(c, St.studio(c.studio_id), ex, S.favorites, area)) return false;
     if (cat && !(c.class_categories || []).some((x) => x.category_id === cat.id)) return false;
     if (q) {
       const s = St.studio(c.studio_id) || {};
@@ -137,8 +137,8 @@ export const Explore = {
     el.innerHTML = header('Explore', '<button class="glass-btn" data-x="map" aria-pressed="' + ex.map + '" aria-label="Map">' + icon(ex.map ? 'menu' : 'map') + '</button>') +
       '<div class="sticky-tools"><div id="x-tabs"></div>' +
       '<label class="search">' + icon('search') + '<input type="search" id="xq" placeholder="Studios, classes, instructors" value="' + esc(ex.q) + '" aria-label="Search"></label>' +
-      '<div class="chips">' + chip(icon('heart'), ex.favs, 'data-x="favs" aria-label="Favourites"') + (ex.tab === 'classes' ? chip('Free spots', ex.free, 'data-x="free"') : '') +
-      S.categories.map((c) => chip(esc(c.title), this.cat && this.cat.id === c.id, 'data-cat="' + c.id + '"')).join('') + '</div>' +
+      '<div class="chips">' + '<span id="x-filter">' + this.filterChip() + '</span>' + chip(icon('heart'), ex.favs, 'data-x="favs" aria-label="Favourites"') +
+      St.chipCategories().map((c) => chip(esc(c.title), this.cat && this.cat.id === c.id, 'data-cat="' + c.id + '"')).join('') + chip('···', false, 'data-x="filter" aria-label="More filters"') + '</div>' +
       (ex.tab === 'classes' ? '<div class="chips days">' + days.map((d) => { const [a, b] = dayChip(d); return chip(a + '<small>' + b + '</small>', d === this.day, 'data-day="' + d + '"'); }).join('') + '</div>' : '') +
       '</div><div id="x-list"></div>';
     const qEl = $('#xq', el);
@@ -147,6 +147,7 @@ export const Explore = {
       const x = e.target.closest('[data-x]');
       if (x) {
         const k = x.dataset.x;
+        if (k === 'filter') { openFilters(this); return; }
         if (k === 'map') { ex.map = !ex.map; saveEx(); ctx.rerender(); return; }
         ex[k] = !ex[k]; saveEx(); x.setAttribute('aria-pressed', ex[k]); this.refresh(); return;
       }
@@ -162,6 +163,7 @@ export const Explore = {
     this.loadClasses();
     this.refresh();
   },
+  filterChip() { const n = activeCount(ex, !!this.cat, curArea()); return chip(icon('filter') + (n ? '<span class="num">' + n + '</span>' : ''), n > 0, 'data-x="filter" aria-label="Filter"'); },
   href(change) {
     const p = new URLSearchParams();
     const tab = change.tab || ex.tab;
@@ -191,6 +193,8 @@ export const Explore = {
     const el = this.el;
     if (!el || !el.isConnected) return;
     const sel = this.ctx.detail;
+    $('#x-filter', el).innerHTML = this.filterChip();
+    const fav = $('[data-x="favs"]', el); if (fav) fav.setAttribute('aria-pressed', ex.favs);
     const studios = filteredStudios(this.cat);
     const cc = classCache(this.day);
     const classes = filteredClasses(cc && cc.classes, this.cat, this.day);
@@ -198,6 +202,7 @@ export const Explore = {
       { key: 'studios', title: 'Studios', badge: S.studios.size ? studios.length : '' },
       { key: 'classes', title: 'Classes', badge: cc && cc.done ? classes.length : '' }], ex.tab, 'data-xtab');
     const box = $('#x-list', el);
+    const foot = activeCount(ex, !!this.cat, curArea()) ? '<button class="btn glass sm filter-foot" data-x="filter">' + icon('filter') + ' Filter active</button>' : '';
     if (ex.tab === 'studios') {
       if (ex.map) {
         if (!box.querySelector('.map')) { box.innerHTML = '<div class="map big"></div>'; }
@@ -212,17 +217,17 @@ export const Explore = {
         topLeft: rating(s.rating) ? '<span class="glass-pill">' + icon('star') + rating(s.rating) + '</span>' : '<span></span>',
         topRight: (S.favorites.has(s.id) ? '<span class="glass-pill">' + icon('heart', 'fill') + '</span>' : '') + ((s.cats || [])[0] ? '<span class="glass-pill">' + esc(s.cats[0]) + '</span>' : ''),
         selected: sel && sel.kind === 'studio' && sel.id === s.id,
-      })).join('') + '</div>' + (studios.length > this.shown ? '<button class="btn glass more" data-more>Show more (' + (studios.length - this.shown) + ')</button>' : '');
+      })).join('') + '</div>' + (studios.length > this.shown ? '<button class="btn glass more" data-more>Show more (' + (studios.length - this.shown) + ')</button>' : '') + foot;
     } else {
       if (!cc || (!cc.classes.length && !cc.done)) { box.innerHTML = loading('Loading classes…'); return; }
       box.innerHTML = classes.length
-        ? '<div class="list">' + classes.map((c) => classRow(c, '#/explore/class/' + c.id + location.hash.replace(/^[^?]*/, ''), { selected: sel && sel.id === c.id })).join('') + '</div>' + (cc.done ? '' : loading('Loading more…'))
+        ? '<div class="list">' + classes.map((c) => classRow(c, '#/explore/class/' + c.id + location.hash.replace(/^[^?]*/, ''), { selected: sel && sel.id === c.id })).join('') + '</div>' + (cc.done ? '' : loading('Loading more…')) + foot
         : (cc.done ? empty('calendar', 'No classes match.') : loading('Loading classes…'));
     }
   },
   async drawMap(el, studios) {
     const pts = studios.map((s) => ({ lat: s.lat, lon: s.lon, label: s.name, fav: S.favorites.has(s.id), href: '#/explore/studio/' + s.id + '?tab=studios' }));
-    const sig = pts.length + ':' + ex.q + ':' + ex.favs + ':' + (this.cat && this.cat.id);
+    const sig = pts.length + ':' + ex.q + ':' + ex.favs + ':' + (this.cat && this.cat.id) + ':' + ex.tiers + ex.solo + ex.areaId;
     if (el.dataset.sig === sig) return;
     el.dataset.sig = sig;
     if (el._map) { el._map.map.remove(); el._map = null; el.innerHTML = ''; }

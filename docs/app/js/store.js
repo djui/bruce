@@ -75,6 +75,12 @@ export const studioName = (id, fallback) => (studio(id) || {}).name || (fallback
 export const isWellness = (id) => (studio(id) || {}).label === 'WELLNESS';
 export const cityStudios = () => [...S.studios.values()].filter((s) => s.city_id === S.settings.cityId);
 
+/** Switches the city (Settings and the Explore filter): drops city caches and tells the app. */
+export function selectCity(id) {
+  S.settings.cityId = +id; saveSettings(); S.classCache.clear(); S.home = null;
+  window.dispatchEvent(new Event('bruce:city'));
+}
+
 export function loadStudios(onProgress) {
   if (S.studiosLoading) return S.studiosLoading;
   const key = 'bruce.studios.' + (isDemo() ? 'demo' : country());
@@ -333,3 +339,11 @@ export function syncGoals(list) {
   Server.putGoals(body).then(() => ls.set(key, sig)).catch(() => {});
 }
 export { goalTitle };
+/** Explore chip row: the first Home category (e.g. Gym) pinned, then alphabetical (as in the app). */
+export function chipCategories() {
+  const sorted = [...S.categories].sort((a, b) => (a.title || '').localeCompare(b.title || '', 'sv'));
+  const home = S.home && S.home.find((s) => s.type === 'CATEGORIES');
+  const pin = (home && home.items[0] && home.items[0].category_id) || (sorted.find((c) => /^gym$/i.test(c.title)) || {}).id;
+  const first = sorted.find((c) => c.id === pin);
+  return first ? [first, ...sorted.filter((c) => c !== first)] : sorted;
+}
