@@ -87,7 +87,8 @@ switch it off with `"nudges": false`), logic in `src/habits.js`:
 
 - A **habit** is the same class title at the same studio, weekday and local start time, visited at least **3 weeks
   in a row**. It is **broken** when the next week's slot passed without a visit and the user then visited nothing
-  and has **no upcoming booking** for **4 days** (a Saturday class: on Wednesday). Of several, the longest run wins.
+  and has **no upcoming booking** for **4 days** (a Saturday class: on Wednesday; the user can pick 1-7 with
+  `"nudgeDays"`, the apps offer 2, 4 and 7, where 7 is the morning of the next slot). Of several, the longest run wins.
   Each break is told once; the next week's slot ends it.
 - **Picks**: classes in the next 7 days at the habit's studio and the user's other most visited studio (at most
   4 class-list pages each), listed, not full and bookable before they start, scored like the apps' For you: the
@@ -148,8 +149,8 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 
 | Request | Body | Effect |
 |---|---|---|
-| `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices, email, nudges}` |
+| `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes, `nudgeDays` (1-7, default 4) sets their quiet days |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays}` |
 | `DELETE /me` | | Deletes the user's row and history; in a challenge it keeps the login and clears rules, watches and goals |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |

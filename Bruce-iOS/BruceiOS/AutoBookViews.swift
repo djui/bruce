@@ -10,6 +10,7 @@ struct AutoBookView: View {
     @State private var working = false
     @State private var booksForMe = AutoBookServer.booksForMe
     @State private var habitNudges = AutoBookServer.habitNudges
+    @State private var habitNudgeDays = AutoBookServer.habitNudgeDays
     @State private var showServerFields = false
 
     var body: some View {
@@ -38,7 +39,16 @@ struct AutoBookView: View {
                     })) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Suggest classes when I skip a habit")
-                            Text(AutoBookCopy.habitNudges).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                            Text(AutoBookCopy.habitNudges(days: habitNudgeDays)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                        }
+                    }
+                    if habitNudges {
+                        Picker("Quiet days before the suggestion", selection: Binding(get: { habitNudgeDays }, set: { d in
+                            habitNudgeDays = d
+                            AutoBookServer.habitNudgeDays = d
+                            run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                        })) {
+                            ForEach(AutoBookServer.habitNudgeDayChoices, id: \.self) { Text("\($0) days").tag($0) }
                         }
                     }
                 }
@@ -103,7 +113,9 @@ struct ServerError: LocalizedError {
 
 enum AutoBookCopy {
     static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. The server books it at that moment and sends you a notification. Without the server, you get a notification with a Book button instead. Swipe to remove a class. Cancelling an auto-booked class does not rebook it."
-    static let habitNudges = "Did a class 3 weeks in a row, then skipped it and booked nothing for 4 days? You get a morning notification with classes picked from your history."
+    static func habitNudges(days: Int) -> String {
+        "Did a class 3 weeks in a row, then skipped it and booked nothing for \(days) days? You get a morning notification with classes picked from your history."
+    }
     static let server = "Books even when your phone is locked or offline: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login to book with; switching it off removes your login and classes from the server."
 }
 

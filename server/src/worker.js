@@ -26,7 +26,7 @@ import {
   localDay, addDays, monthStart, visitsFromBookings, dailyRows, fromDetail, goalReminders, challengePeriod, challengeStats,
   cleanChallenge, cohortValues, percentiles, PERCENTILE_METRICS,
 } from "./insights.js";
-import { brokenHabit, recommendClasses, nudgeMessage, HABIT_LOOKBACK_DAYS, RECOMMEND_DAYS } from "./habits.js";
+import { brokenHabit, recommendClasses, nudgeMessage, cleanLapseDays, HABIT_LOOKBACK_DAYS, RECOMMEND_DAYS, LAPSE_DAYS } from "./habits.js";
 
 const API = "https://api.bruce.app";
 const USER_AGENT = "Bruce/14.4.2_538 (iOS27.0.0; Apple)";
@@ -343,7 +343,7 @@ async function db(env) {
 
 // statsFrom/statsAt/detailFrom: how far back daily_counts (and its detail) are filled and when they were last read;
 // goals: goals with "Reminder when behind" (PUT /me/goals); goalPings: when each goal last pushed a reminder;
-// nudges: false when the user switched off skipped-habit pushes (on by default).
+// nudges: false when the user switched off skipped-habit pushes (on by default); nudgeDays: their quiet days (default 4).
 const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null, watches: [],
                             goals: [], goalPings: {}, statsFrom: null, statsAt: null, detailFrom: null, nudges: true });
 
@@ -577,7 +577,7 @@ export async function refreshHistory(env, u, now, { maxPages = BACKFILL_PAGES, f
  */
 export async function planNudge(env, u, bookings, now, budget, classesFn = fetchClasses) {
   if (budget <= 0) return 0;
-  const habit = brokenHabit(bookings, now);
+  const habit = brokenHabit(bookings, now, { lapseDays: u.state.nudgeDays ?? LAPSE_DAYS });
   if (!habit) return 0;
   const DB = await db(env);
   const prev = await DB.prepare("SELECT habit, missed_day FROM nudges WHERE user_id = ?").bind(u.userId).first();
@@ -944,6 +944,7 @@ export default {
         const d = cleanDevice(body.device);
         if (d) u.devices = [d, ...u.devices.filter((x) => x.token !== d.token)].slice(0, MAX_DEVICES);
         if (typeof body.nudges === "boolean") u.state.nudges = body.nudges;
+        if (cleanLapseDays(body.nudgeDays)) u.state.nudgeDays = body.nudgeDays;
         if (rulesChanged) await tickUser(env, u, Date.now(), { force: true }).catch((e) => console.log("scan failed:", e.message));
         await saveUser(env, u);
         return json({ ok: true, rules: u.rules.length, push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
@@ -954,7 +955,8 @@ export default {
         return json({ hasSession: !!u, rules: u?.rules ?? [], lastScan: u?.state.lastScan ?? null,
                       upcoming: (u?.state.upcoming ?? []).map(opens),
                       waitlist: (u?.state.watches ?? []).map((w) => ({ classId: w.classId, title: w.title, start: new Date(w.start).toISOString() })), log: u?.state.log ?? [], devices: u?.devices.length ?? 0,
-                      email: u ? emailTo(env, u) : null, nudges: u ? u.state.nudges !== false : true });
+                      email: u ? emailTo(env, u) : null, nudges: u ? u.state.nudges !== false : true,
+                      nudgeDays: u?.state.nudgeDays ?? LAPSE_DAYS });
       }
       case "DELETE /me": {
         // Auto-book off: forget rules, watches and goals. The login stays while the user is in a challenge.
