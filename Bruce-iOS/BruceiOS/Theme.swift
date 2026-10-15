@@ -8,6 +8,8 @@ enum Theme {
     static let limeInk = Color(light: Color(red: 0.36, green: 0.46, blue: 0.0), dark: lime)
 
     static let ink = Color(.label)
+    /// Track of an "on" switch: ink in light mode, lime in dark mode (white ink would hide the white knob).
+    static let switchOn = Color(light: Color(.label), dark: lime)
     static let secondary = Color(.secondaryLabel)
     static let tertiary = Color(.tertiaryLabel)
     static let background = Color(.systemBackground)
@@ -474,5 +476,12 @@ struct UnderlineTabs: View {
             Spacer()
         }
         .padding(.horizontal, Theme.gutter)
+    }
+}
+
+/// System switch with a track colour that stays visible against the white knob in dark mode.
+struct BruceSwitch: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Toggle(configuration).toggleStyle(.switch).tint(Theme.switchOn)
     }
 }

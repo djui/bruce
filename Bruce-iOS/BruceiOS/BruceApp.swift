@@ -78,7 +78,8 @@ struct RootView: View {
             }
         }
         .animation(.easeOut(duration: 0.25), value: m.showWelcome)
-        .tint(Theme.ink)  // toolbar icons, toggles, links: label colour as in the original
+        .tint(Theme.ink)  // toolbar icons, links: label colour as in the original
+        .toggleStyle(BruceSwitch())
         .task { await m.bootstrap(); await HealthSync.shared.sync(model: m) }
         .sheet(item: Binding(get: { m.sheets.first }, set: { if $0 == nil { m.dismissSheets() } })) { first in
             SheetContainer(root: first)
@@ -163,6 +164,7 @@ struct SheetContainer: View {
                 .environment(\.sheetIsRoot, true)
                 .navigationDestination(for: SheetRoute.self) { SheetScreen(route: $0).environment(\.sheetIsRoot, false) }
         }
+        .toggleStyle(BruceSwitch())
         .presentationDetents(detents)
         .presentationDragIndicator(.visible)
         .modifier(ModelAlerts(active: true))
