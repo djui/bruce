@@ -1,5 +1,5 @@
 // The five tabs (BruceApp.swift RootView): Home, Explore, Check in, Friends, My classes.
-import { $, esc, icon, fmt, time, todayKey, addDays, dayChip, dayHeader, instructor, isListed, rating, distance, metres, byDay, ls, media as photoMedia, byStart } from './util.js';
+import { $, esc, icon, fmt, time, todayKey, addDays, dayChip, dayHeader, instructor, isListed, rating, distance, metres, byDay, ls, media as photoMedia, byStart, onDay } from './util.js';
 import { Bruce } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
@@ -181,7 +181,7 @@ export const Explore = {
     const entry = { at: Date.now(), classes: [], loading: true, done: false };
     S.classCache.set(key, entry);
     try {
-      await Bruce.classes(day, { cityId: S.settings.cityId }, (items, all) => { entry.classes = all.slice().sort(byStart); if (this.day === day) this.refresh(); });
+      await Bruce.classes(day, { cityId: S.settings.cityId }, (items, all) => { entry.classes = all.filter((c) => onDay(c, day)).sort(byStart); if (this.day === day) this.refresh(); });
       entry.done = true;
     } catch (e) { entry.error = e.message; S.classCache.delete(key); }
     entry.loading = false;

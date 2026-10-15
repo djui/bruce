@@ -29,6 +29,8 @@ export function byInstant(a, b) {
 }
 /** Sort comparator for classes by start time. */
 export const byStart = (a, b) => byInstant(a.start_time, b.start_time);
+/** Whether a class starts on `day` (YYYY-MM-DD in the city's time zone). A studio's day query also returns classes from other days. */
+export const onDay = (c, day) => !!c.start_time && dayKey(c.start_time) === day;
 /** YYYY-MM-DD of an instant in the city's time zone. */
 export function dayKey(d) {
   const p = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(d));

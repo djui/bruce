@@ -1,6 +1,6 @@
 // App state and loaders, in the spirit of AppModel.swift: one shared store that views read and re-render from.
 import { Bruce, Autobook, Server, session, DEFAULT_API } from './api.js';
-import { ls, setZone, dayKey, todayKey, getZone, byStart, byInstant } from './util.js';
+import { ls, setZone, dayKey, todayKey, getZone, byStart, byInstant, onDay } from './util.js';
 import { visitsFrom } from './visits.js';
 import { remindPayload, goalTitle } from './goals.js';
 import { DEFAULT_PREFS } from './recommend.js';
@@ -279,7 +279,7 @@ export async function dayClasses(day) {
   if (c && c.loading && c.promise) return c.promise;
   const entry = { at: Date.now(), classes: [], loading: true, done: false };
   entry.promise = Bruce.classes(day, { cityId: S.settings.cityId }).then((all) => {
-    entry.classes = all.slice().sort(byStart);
+    entry.classes = all.filter((c) => onDay(c, day)).sort(byStart);
     entry.done = true; entry.loading = false;
     return entry.classes;
   }).catch((e) => { S.classCache.delete(key); throw e; });
