@@ -175,17 +175,24 @@ export const Explore = {
     const d = this.ctx.detail;
     return '#/explore' + (d ? '/' + d.kind + '/' + d.id : '') + '?' + p.toString();
   },
+  /** Loads the day's classes unless a fresh (under 90 s old) or loading copy is cached. A stale copy stays on screen
+   * until the new one is complete, so a reload (after booking, say) does not blank the list or lose its scroll. */
   async loadClasses() {
     const day = this.day;
     const key = S.settings.cityId + ':' + day;
     const c = S.classCache.get(key);
-    if (c && (c.done || c.loading) && Date.now() - c.at < 90000) return;
-    const entry = { at: Date.now(), classes: [], loading: true, done: false };
+    if (c && (c.loading || Date.now() - c.at < 90000)) return;
+    const prev = c && c.done ? c.classes : null;
+    const entry = { at: Date.now(), classes: prev || [], loading: true, done: !!prev };
     S.classCache.set(key, entry);
     try {
-      await Bruce.classes(day, { cityId: S.settings.cityId }, (items, all) => { entry.classes = all.filter((c) => onDay(c, day)).sort(byStart); if (this.day === day) this.refresh(); });
+      const all = await Bruce.classes(day, { cityId: S.settings.cityId }, (items, all) => {
+        if (prev) return;
+        entry.classes = all.filter((c) => onDay(c, day)).sort(byStart); if (this.day === day) this.refresh();
+      });
+      entry.classes = all.filter((c) => onDay(c, day)).sort(byStart);
       entry.done = true;
-    } catch (e) { entry.error = e.message; S.classCache.delete(key); }
+    } catch (e) { entry.error = e.message || String(e); }   // kept, so the list shows the error; retried after 90 s
     entry.loading = false;
     if (this.day === day) this.refresh();
   },
@@ -196,6 +203,7 @@ export const Explore = {
     $('#x-filter', el).innerHTML = this.filterChip();
     const fav = $('[data-x="favs"]', el); if (fav) fav.setAttribute('aria-pressed', ex.favs);
     const studios = filteredStudios(this.cat);
+    if (ex.tab === 'classes') this.loadClasses();   // the cache can be cleared or expire under us (a class page reloads after booking)
     const cc = classCache(this.day);
     const classes = filteredClasses(cc && cc.classes, this.cat, this.day);
     $('#x-tabs', el).innerHTML = underlineTabs([
@@ -219,9 +227,10 @@ export const Explore = {
         selected: sel && sel.kind === 'studio' && sel.id === s.id,
       })).join('') + '</div>' + (studios.length > this.shown ? '<button class="btn glass more" data-more>Show more (' + (studios.length - this.shown) + ')</button>' : '') + foot;
     } else {
+      if (cc && cc.error && !cc.done) { box.innerHTML = empty('info', cc.error); return; }
       if (!cc || (!cc.classes.length && !cc.done)) { box.innerHTML = loading('Loading classes…'); return; }
       box.innerHTML = classes.length
-        ? '<div class="list">' + classes.map((c) => classRow(c, '#/explore/class/' + c.id + location.hash.replace(/^[^?]*/, ''), { selected: sel && sel.id === c.id })).join('') + '</div>' + (cc.done ? '' : loading('Loading more…')) + foot
+        ? '<div class="list">' + classes.map((c) => classRow(c, '#/explore/class/' + c.id + location.hash.replace(/^[^?]*/, ''), { selected: sel && sel.id === c.id })).join('') + '</div>' + (cc.done || !cc.loading ? '' : loading('Loading more…')) + foot
         : (cc.done ? empty('calendar', 'No classes match.') : loading('Loading classes…'));
     }
   },

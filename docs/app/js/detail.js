@@ -186,7 +186,7 @@ export async function renderClass(el, id, ctx) {
     };
   }
   async function after() {
-    S.classCache.clear();
+    S.classCache.forEach((e) => { e.at = 0; });   // spot counts changed: reload the day lists, but keep showing them meanwhile
     await Promise.all([St.loadMine().catch(() => {}), St.loadClass(id).catch(() => {}), St.loadAccount().catch(() => {})]);
     // Booked, or no longer waitlisted: the server has nothing left to watch (it drops a booked class by itself).
     if (S.watches.has(id) && !S.standbys.has(id)) { S.watches.delete(id); St.setWatch(id, false).catch(() => {}); }

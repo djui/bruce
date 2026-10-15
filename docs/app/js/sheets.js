@@ -26,7 +26,8 @@ export function openRules(c, mode, action) {
   if (mode === 'cancel') {
     cost = now < r.lateCancel ? 'Cancelling now is free.' : now < r.shortNotice ? 'This is a late cancellation and gives 1 strike.' : 'This is a very late cancellation and gives 2 strikes.';
   }
-  const unlock = St.city().user_strike_block_un_lock_price;
+  const ore = St.city().user_strike_block_un_lock_price;
+  const unlock = ore ? Math.round(ore / 100) : null;
   const s = sheet('', '<h2 class="sheet-title">' + esc(c.title.toUpperCase()) + '</h2><p class="center muted">' + esc(classDateLine(c)) + ' at ' + esc(St.studioName(c.studio_id, c.studio)) + '</p>' +
     '<div class="card rule-list">' + rows.map(([ic, t, d]) => '<div>' + icon(ic) + '<div><b>' + esc(t) + '</b><p class="muted">' + esc(d) + '</p></div></div>').join('') + '</div>' +
     (cost ? '<p class="center"><b>' + esc(cost) + '</b></p>' : '') +
