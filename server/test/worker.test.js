@@ -208,3 +208,41 @@ test("HTTP API: watch a full class, list it, stop watching; CORS preflight", asy
   await worker.fetch(req("DELETE", "/me/waitlist/5"), { DB }, ctx);
   assert.equal(DB.t.size, 0);   // nothing else to do for this user: the row (and login) is gone
 });
+
+// MARK: Email
+
+test("email: booking results go to the Bruce email, with a working unsubscribe link", async () => {
+  const DB = memoryDB();
+  const ctx = { waitUntil() {} };
+  const env = { DB, RESEND_API_KEY: "re_test", EMAIL_FROM: "Brüce <autobook@example.com>" };
+  fakeFetch((url) => (url.includes("/v52/user/42") ? ok({ user: { id: 42, email: "a@b.se", first_name: "A" } }) : ok({ classes: [], metadata: {} })));
+  const req = (method, path, body) => new Request(`https://x${path}`, { method, headers: { "X-Access-Token": "t", "X-User-Id": "42" }, body: body && JSON.stringify(body) });
+  const put = await (await worker.fetch(req("PUT", "/me", { rules: [rule] }), env, ctx)).json();
+  assert.equal(put.email, "a@b.se");
+
+  const opens = Date.parse("2026-10-13T16:00:00Z");
+  const state = JSON.parse(DB.t.get(42).state);
+  DB.sql.prepare("UPDATE users SET state = ? WHERE user_id = 42").run(JSON.stringify({ ...state, upcoming: upcoming(opens - 5000), lastScan: "x" }));
+  const sent = [];
+  globalThis.fetch = async (url, init = {}) => { if (String(url).startsWith("https://api.resend.com/")) sent.push(JSON.parse(init.body)); return ok({ booking: { id: 9 } }); };
+  await tick(env, opens + 1000);
+  assert.equal(sent.length, 1);
+  assert.deepEqual(sent[0].to, ["a@b.se"]);
+  assert.equal(sent[0].subject, "Booked: Reformer");
+  assert.match(sent[0].text, /#\/home\/class\/1/);
+  const off = sent[0].text.match(/https:\/\/\S+\/email\/off\?\S+/)[0];
+
+  assert.equal((await worker.fetch(new Request(off.replace("&t=", "&t=x")), env, ctx)).status, 400);
+  assert.equal((await worker.fetch(new Request(off), env, ctx)).status, 200);
+  assert.equal(JSON.parse(DB.t.get(42).state).emailOff, true);
+  fakeFetch((url) => (url.includes("/v52/user/42") ? ok({ user: { id: 42, email: "a@b.se" } }) : ok({})));
+  assert.equal((await (await worker.fetch(req("GET", "/me"), env, ctx)).json()).email, null);
+  assert.equal((await (await worker.fetch(req("PUT", "/me/email", { enabled: true }), env, ctx)).json()).email, "a@b.se");
+});
+
+test("email: nothing is sent without a Resend key", async () => {
+  const u = watchUser([{ ...wl }], { state: { upcoming: [], handled: {}, log: [], lastScan: "x", watches: [{ ...wl }], email: "a@b.se" } });
+  const calls = fakeFetch(() => ok({}));
+  await watchWaitlists({}, u, NOW, { bookFn: async () => "Booked", classFn: async () => ({ id: 5, available_spots: 1 }) });
+  assert.equal(calls.filter((c) => c.url.includes("resend")).length, 0);
+});

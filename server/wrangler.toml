@@ -18,3 +18,6 @@ migrations_dir = "migrations"
 
 [vars]
 APNS_TOPIC = "net.dauernheim.bruce"
+# Booking-result emails go out through Resend (resend.com, free tier: 3,000 a month, 100 a day) from a domain verified
+# there; set the key with: npx wrangler secret put RESEND_API_KEY. Without the key no email is sent.
+EMAIL_FROM = "Brüce auto-book <autobook@dauernheim.net>"
