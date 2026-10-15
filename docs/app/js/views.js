@@ -1,5 +1,5 @@
 // The five tabs (BruceApp.swift RootView): Home, Explore, Check in, Friends, My classes.
-import { $, esc, icon, fmt, time, todayKey, addDays, dayChip, dayHeader, instructor, isListed, rating, distance, metres, byDay, ls, media as photoMedia } from './util.js';
+import { $, esc, icon, fmt, time, todayKey, addDays, dayChip, dayHeader, instructor, isListed, rating, distance, metres, byDay, ls, media as photoMedia, byStart } from './util.js';
 import { Bruce } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
@@ -57,7 +57,7 @@ export const Home = {
       html += '<div class="card prompt"><div>' + icon('star') + '</div><div class="grow"><b>How was ' + esc(rv.class.title) + '?</b><p class="muted">' +
         esc(dayHeader(rv.class.start_time)) + ' at ' + esc(St.studioName(rv.class.studio_id, rv.class.studio)) + '</p></div><button class="btn lime sm" data-review="' + rv.id + '">Rate</button></div>';
     }
-    const next = St.upcomingBookings().sort((a, c) => a.class.start_time.localeCompare(c.class.start_time))[0];
+    const next = St.upcomingBookings().sort((a, c) => byStart(a.class, c.class))[0];
     if (next) {
       const open = St.openWindowTargets().find((o) => o.c.id === next.class.id);
       html += '<h2 class="sec-title">Next up</h2><div class="list">' + classRow(next.class, link('home', 'class', next.class.id), { meta: dayHeader(next.class.start_time), selected: sel && sel.id === next.class.id }) + '</div>' +
@@ -181,7 +181,7 @@ export const Explore = {
     const entry = { at: Date.now(), classes: [], loading: true, done: false };
     S.classCache.set(key, entry);
     try {
-      await Bruce.classes(day, { cityId: S.settings.cityId }, (items, all) => { entry.classes = all.slice().sort((a, b) => a.start_time.localeCompare(b.start_time)); if (this.day === day) this.refresh(); });
+      await Bruce.classes(day, { cityId: S.settings.cityId }, (items, all) => { entry.classes = all.slice().sort(byStart); if (this.day === day) this.refresh(); });
       entry.done = true;
     } catch (e) { entry.error = e.message; S.classCache.delete(key); }
     entry.loading = false;
@@ -318,7 +318,7 @@ export const Friends = {
     if (!b) return;
     const sel = this.ctx.detail;
     const items = S.friendsBookings.filter((x) => x.class && new Date(x.class.start_time) > Date.now() - 3600000)
-      .sort((a, c) => a.class.start_time.localeCompare(c.class.start_time));
+      .sort((a, c) => byStart(a.class, c.class));
     const pending = St.pendingInvites().length;
     $('#fr-head', this.el).innerHTML = this.tab === 'challenges' ? '<button class="glass-btn" data-fnew aria-label="New challenge">' + icon('plus') + '</button>' : '';
     $('#fr-tabs', this.el).innerHTML = underlineTabs([{ key: 'classes', title: 'Classes', badge: items.length || '' },
@@ -373,7 +373,7 @@ export const Mine = {
     $('#mine-tabs', this.el).innerHTML = underlineTabs([
       { key: 'bookings', title: 'Bookings', badge: bookings.length || '' }, { key: 'waitlist', title: 'Waitlist', badge: waits.length || '' },
       { key: 'bookmarks', title: 'Bookmarks' }], this.tab, 'data-mtab');
-    const list = { bookings, waitlist: waits, bookmarks: marks }[this.tab].sort((a, c) => a.start_time.localeCompare(c.start_time));
+    const list = { bookings, waitlist: waits, bookmarks: marks }[this.tab].sort(byStart);
     const msg = { bookings: ['mine', 'You have no bookings.'], waitlist: ['bell', "You're not on any waitlists."], bookmarks: ['bookmark', 'No bookmarked classes yet.'] }[this.tab];
     const rv = this.tab === 'bookings' ? St.pendingReviews() : [];
     b.innerHTML = (this.tab === 'bookings' ? goalsCardHTML() : '') + rv.map((r) => '<div class="card prompt">' + icon('star') + '<div class="grow"><b>Rate ' + esc(r.class.title) + '</b><p class="muted">' + esc(dayHeader(r.class.start_time)) + '</p></div><button class="btn lime sm" data-review="' + r.id + '">Rate</button></div>').join('') +

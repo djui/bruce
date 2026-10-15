@@ -1,6 +1,8 @@
 // Offline demo backend: answers the same /v52 routes as api.bruce.app with placeholder data (no personal data,
 // modelled on Shared/BruceCore/Demo.swift). Nothing leaves the browser in demo mode.
 
+import { byStart } from './util.js';
+
 function at(dayOffset, h, m) {
   const d = new Date();
   d.setDate(d.getDate() + dayOffset);
@@ -251,7 +253,7 @@ export function handle(method, path, q, body) {
     const to = q.start_time_before ? new Date(q.start_time_before) : new Date(8.64e15);
     let l = Object.values(classes).filter((c) => new Date(c.start_time) >= from && new Date(c.start_time) < to);
     if (q.studio_id) l = l.filter((c) => c.studio_id === +q.studio_id);
-    return list('classes', l.sort((a, b) => a.start_time.localeCompare(b.start_time)));
+    return list('classes', l.sort(byStart));
   }
   if ((m = path.match(/^v52\/class\/(\d+)\/invite$/)) && P) return ok({ invited: (body.user_ids || []).map((id) => users[id]).filter(Boolean) });
   if ((m = path.match(/^v52\/class\/(\d+)$/))) {
