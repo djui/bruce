@@ -160,7 +160,7 @@ paths:
         - { name: studio_id, in: query, schema: { type: integer } }
         - { name: presentation_studio_id, in: query, schema: { type: integer } }
         - { name: start_time_after, in: query, schema: { type: string, example: "2026-10-11T00:00:00" } }
-        - { name: start_time_before, in: query, schema: { type: string, example: "2026-10-12T00:00:00" } }
+        - { name: start_time_before, in: query, description: "Ignored when studio_id is set (the list then runs past the day).", schema: { type: string, example: "2026-10-12T00:00:00" } }
         - { name: opening, in: query, schema: { type: boolean }, description: "true = opening-hour slots instead of classes" }
         - { name: studio_status, in: query, schema: { type: string, example: live } }
         - { name: deleted, in: query, schema: { type: boolean, example: false }, description: "Not sent by the official app; without it soft-deleted classes (deleted:true) are included" }
