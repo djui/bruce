@@ -491,7 +491,9 @@ dialog.sheet::backdrop { background: rgba(0, 0, 0, 0.4); animation: fade 0.2s; }
 .strikes i { width: 28px; height: 10px; border-radius: 5px; background: var(--fill-2); }
 .strikes i.on { background: var(--red); }
 .strikes b { margin-left: auto; }
-.toggle { display: flex; align-items: center; gap: 14px; padding: 6px 0; cursor: pointer; }
+/* position: relative keeps the hidden checkbox inside its scrolling pane: positioned against <body> it sat below the
+   wide layout's 100vh, and focusing it scrolled the whole page up, leaving a blank strip at the bottom. */
+.toggle { position: relative; display: flex; align-items: center; gap: 14px; padding: 6px 0; cursor: pointer; }
 .toggle > span { flex: 1; display: flex; flex-direction: column; gap: 2px; }
 .toggle small { font-size: 13px; }
 .toggle input { position: absolute; opacity: 0; pointer-events: none; }
