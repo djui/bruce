@@ -199,7 +199,7 @@ export function handle(method, path, q, body) {
   const G = method === 'GET', P = method === 'POST', D = method === 'DELETE';
   if (D && path === 'v52/access/logout') return ok({});
   if (path === 'v52/location/city') return ok({ cities: [
-    { id: 1, name: 'Stockholm', code: 'STO', time_zone: 'Europe/Stockholm', coordinates: { latitude: 59.3293, longitude: 18.0686 }, country: { code: 'SE' }, user_strike_block_un_lock_price: 140 },
+    { id: 1, name: 'Stockholm', code: 'STO', time_zone: 'Europe/Stockholm', coordinates: { latitude: 59.3293, longitude: 18.0686 }, country: { code: 'SE' }, user_strike_block_un_lock_price: 14000 },
     { id: 2, name: 'Göteborg', code: 'GOT', time_zone: 'Europe/Stockholm', coordinates: { latitude: 57.7089, longitude: 11.9746 }, country: { code: 'SE' } }] });
   if (path === 'v52/category') return ok({ categories });
   if (path === 'v52/home_screen') {
