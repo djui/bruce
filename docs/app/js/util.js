@@ -22,6 +22,13 @@ export function fmt(iso, opts) {
   try { return new Intl.DateTimeFormat('en-GB', Object.assign({ timeZone: zone }, opts)).format(new Date(iso)); } catch (e) { return ''; }
 }
 export const time = (iso) => fmt(iso, { hour: '2-digit', minute: '2-digit', hour12: false });
+/** Orders two timestamps by the instant they name, not their text: the API mixes "Z" and offset spellings. Missing ones go last. */
+export function byInstant(a, b) {
+  const x = a ? Date.parse(a) : NaN, y = b ? Date.parse(b) : NaN;
+  return (isNaN(x) ? Infinity : x) - (isNaN(y) ? Infinity : y) || 0;
+}
+/** Sort comparator for classes by start time. */
+export const byStart = (a, b) => byInstant(a.start_time, b.start_time);
 /** YYYY-MM-DD of an instant in the city's time zone. */
 export function dayKey(d) {
   const p = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(new Date(d));

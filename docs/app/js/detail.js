@@ -1,5 +1,5 @@
 // Class and studio pages (DetailViews.swift). On wide screens they open in the right-hand pane next to the list.
-import { $, esc, icon, rich, fmt, time, dayKey, todayKey, addDays, dayChip, dayHeader, classDateLine, instructor, isListed, rating, slug, money } from './util.js';
+import { $, esc, icon, rich, fmt, time, dayKey, todayKey, addDays, dayChip, dayHeader, classDateLine, instructor, isListed, rating, slug, money, byStart } from './util.js';
 import { Bruce } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
@@ -285,7 +285,7 @@ export async function renderStudio(el, id, ctx) {
     try {
       const list = await Bruce.classes(day, { studioId: id });
       if (t !== token || state.day !== day) return;
-      state.classes = list.filter(isListed).filter((c) => day !== todayKey() || !c.end_time || new Date(c.end_time) > Date.now()).sort((x, y) => x.start_time.localeCompare(y.start_time));
+      state.classes = list.filter(isListed).filter((c) => day !== todayKey() || !c.end_time || new Date(c.end_time) > Date.now()).sort(byStart);
     } catch (e) { state.classes = []; state.error = e.message; }
     drawDay();
   }

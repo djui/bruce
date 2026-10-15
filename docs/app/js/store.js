@@ -1,6 +1,6 @@
 // App state and loaders, in the spirit of AppModel.swift: one shared store that views read and re-render from.
 import { Bruce, Autobook, Server, session, DEFAULT_API } from './api.js';
-import { ls, setZone, dayKey, todayKey, getZone } from './util.js';
+import { ls, setZone, dayKey, todayKey, getZone, byStart, byInstant } from './util.js';
 import { visitsFrom } from './visits.js';
 import { remindPayload, goalTitle } from './goals.js';
 import { DEFAULT_PREFS } from './recommend.js';
@@ -238,7 +238,7 @@ export function openWindowTargets() {
 }
 export function recentTargets(visits) {
   const seen = new Set(); const out = [];
-  for (const v of (visits || []).concat([...S.bookings.values()]).filter((b) => b.checked_in_at).sort((a, b) => b.checked_in_at.localeCompare(a.checked_in_at))) {
+  for (const v of (visits || []).concat([...S.bookings.values()]).filter((b) => b.checked_in_at).sort((a, b) => byInstant(b.checked_in_at, a.checked_in_at))) {
     const sid = v.studio_id || (v.class && v.class.studio_id);
     if (!sid || seen.has(sid)) continue;
     seen.add(sid);
@@ -279,7 +279,7 @@ export async function dayClasses(day) {
   if (c && c.loading && c.promise) return c.promise;
   const entry = { at: Date.now(), classes: [], loading: true, done: false };
   entry.promise = Bruce.classes(day, { cityId: S.settings.cityId }).then((all) => {
-    entry.classes = all.slice().sort((a, b) => a.start_time.localeCompare(b.start_time));
+    entry.classes = all.slice().sort(byStart);
     entry.done = true; entry.loading = false;
     return entry.classes;
   }).catch((e) => { S.classCache.delete(key); throw e; });

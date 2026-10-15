@@ -4,6 +4,7 @@
 // speed plus a fixed overhead (parking, waiting). Places never leave the device.
 
 import { local } from './visits.js';
+import { byStart } from './util.js';
 
 export const MODES = {
   walk: { kmh: 4.8, detour: 1.3, fixed: 0, icon: 'walk', label: 'Walk' },
@@ -151,7 +152,7 @@ export function recommend(input) {
     const match = Math.max(20, Math.min(99, Math.round(100 * (1 - Math.exp(-s / 42)))));
     out.push({ class: c, score: s, match, reasons, friends: going.map((f) => f.userId) });
   }
-  out.sort((a, b) => b.score - a.score || a.class.start_time.localeCompare(b.class.start_time));
+  out.sort((a, b) => b.score - a.score || byStart(a.class, b.class));
   // One pick per class title at a studio, so a recurring class does not fill the list.
   const seen = new Set();
   const picks = out.filter((r) => { const k = norm(r.class.title) + '|' + r.class.studio_id; if (seen.has(k)) return false; seen.add(k); return true; });

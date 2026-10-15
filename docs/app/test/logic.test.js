@@ -236,3 +236,14 @@ test('challenge share links', () => {
   assert.equal(challengeShareUrl('abcd'), 'https://djui.github.io/bruce/app/#challenge/abcd');
   assert.equal(challengeRoute('abcd'), '#/friends/challenge/abcd?tab=challenges');
 });
+
+test('classes sort by the instant they start, whatever the timestamp spelling', async () => {
+  const { byStart } = await import('../js/util.js');
+  const list = [
+    { id: 1, start_time: '2026-10-18T10:00:00Z' },        // 12:00 in Stockholm
+    { id: 2, start_time: '2026-10-18T17:00:00.000Z' },    // 19:00
+    { id: 3, start_time: '2026-10-18T10:00:00+02:00' },   // 10:00
+    { id: 4 },
+  ];
+  assert.deepEqual(list.sort(byStart).map((c) => c.id), [3, 1, 2, 4]);
+});
