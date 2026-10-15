@@ -17,11 +17,16 @@
 // Challenges with friends, goal reminders and Wrapped percentiles (tables from ../migrations): a daily cron reads each
 // stored user's booking history and keeps per-day counts in `daily_counts` (plus per-visit detail while the user is
 // in a challenge). The pure logic is in ./insights.js.
+//
+// Skipped habits: the same daily read spots a weekly class the user did 3+ weeks in a row and then skipped (nothing
+// visited or booked for 4 days after), picks upcoming classes from their history and pushes them at 08:00 local
+// (table `nudges`). The pure logic is in ./habits.js.
 
 import {
   localDay, addDays, monthStart, visitsFromBookings, dailyRows, fromDetail, goalReminders, challengePeriod, challengeStats,
   cleanChallenge, cohortValues, percentiles, PERCENTILE_METRICS,
 } from "./insights.js";
+import { brokenHabit, recommendClasses, nudgeMessage, HABIT_LOOKBACK_DAYS, RECOMMEND_DAYS } from "./habits.js";
 
 const API = "https://api.bruce.app";
 const USER_AGENT = "Bruce/14.4.2_538 (iOS27.0.0; Apple)";
@@ -54,6 +59,10 @@ const MAX_GOALS = 10;
 const SHARE_URL = "https://djui.github.io/bruce/app/#challenge/";
 const DEFAULT_PUBLIC_URL = "https://bruce-autobook.uwe-af1.workers.dev";
 const CLASS_URL = "https://djui.github.io/bruce/app/#/home/class/";
+/// Skipped-habit pushes go out at this local hour (the daily run plans them at night).
+const NUDGE_HOUR = 8;
+/// Class list pages per studio when picking classes for a skipped-habit push (30 classes each).
+const NUDGE_PAGES = 4;
 
 // MARK: Time in Europe/Stockholm
 
@@ -125,10 +134,10 @@ function bruce(method, path, token, { query, body } = {}) {
   return fetch(url, { method, headers, body: body ? JSON.stringify(body) : undefined });
 }
 
-async function fetchClasses(token, studioId, from, to) {
+export async function fetchClasses(token, studioId, from, to, { maxPages = 10, meter = {} } = {}) {
   const out = [];
   let cursor;
-  for (let page = 0; page < 10; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const query = [
       ["studio_id", String(studioId)], ["presentation_studio_id", String(studioId)],
       ["start_time_after", new Date(from).toISOString().replace(/\.\d{3}Z$/, "Z")],
@@ -138,6 +147,7 @@ async function fetchClasses(token, studioId, from, to) {
     ];
     if (cursor) query.push(["next_cursor", cursor]);
     const res = await bruce("GET", "/v52/class", token, { query });
+    meter.pages = (meter.pages ?? 0) + 1;
     if (res.status === 401) throw new LoggedOut();
     if (!res.ok) throw new Error(`classes HTTP ${res.status}`);
     const r = await res.json();
@@ -332,9 +342,10 @@ async function db(env) {
 }
 
 // statsFrom/statsAt/detailFrom: how far back daily_counts (and its detail) are filled and when they were last read;
-// goals: goals with "Reminder when behind" (PUT /me/goals); goalPings: when each goal last pushed a reminder.
+// goals: goals with "Reminder when behind" (PUT /me/goals); goalPings: when each goal last pushed a reminder;
+// nudges: false when the user switched off skipped-habit pushes (on by default).
 const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null, watches: [],
-                            goals: [], goalPings: {}, statsFrom: null, statsAt: null, detailFrom: null });
+                            goals: [], goalPings: {}, statsFrom: null, statsAt: null, detailFrom: null, nudges: true });
 
 function rowToUser(r) {
   return { userId: r.user_id, session: { access_token: r.access_token, user_id: r.user_id },
@@ -355,7 +366,8 @@ async function saveUser(env, u) {
 }
 
 async function deleteUser(env, userId) {
-  await (await db(env)).prepare("DELETE FROM users WHERE user_id = ?").bind(userId).run();
+  const DB = await db(env);
+  await DB.batch([DB.prepare("DELETE FROM users WHERE user_id = ?").bind(userId), DB.prepare("DELETE FROM nudges WHERE user_id = ?").bind(userId)]);
 }
 
 /** Writes only the history fields of a user's state, so the daily refresh does not undo the minute cron's changes. */
@@ -490,6 +502,20 @@ export async function tick(env, now) {
     }
     if (JSON.stringify([u.state, u.devices]) !== before) await saveUser(env, u);
   }));
+  await sendNudges(env, now).catch((e) => console.log("nudges failed:", e.message));
+}
+
+/** Pushes the skipped-habit recommendations planned by the daily run whose time has come. */
+export async function sendNudges(env, now) {
+  const DB = await db(env);
+  const { results } = await DB.prepare("SELECT * FROM nudges WHERE sent_at IS NULL AND send_at <= ?").bind(now).all();
+  for (const n of results) {
+    await DB.prepare("UPDATE nudges SET sent_at = ? WHERE user_id = ?").bind(now, n.user_id).run();
+    const u = await getUser(env, n.user_id);
+    if (!u?.devices.length || u.state.nudges === false) continue;
+    const gone = await push(env, u.devices, n.title, n.body, JSON.parse(n.data), "RECOMMENDATION");
+    if (gone.length) { u.devices = u.devices.filter((d) => !gone.includes(d.token)); await saveUser(env, u); }
+  }
 }
 
 // MARK: History (daily cron): challenges, goal reminders, Wrapped percentiles
@@ -497,10 +523,11 @@ export async function tick(env, now) {
 /**
  * Re-reads one user's booking history into `daily_counts`. The first read goes back to January 1 (or the start of the
  * user's earliest challenge); later reads only the last few days (a check-in can be recorded late) and, with goal
- * reminders, the current month. Per-visit detail is stored only while the user is in a challenge. Sends due goal
- * reminders. Returns the number of Bruce requests made. Throws LoggedOut if Bruce rejects the login.
+ * reminders, the current month (with skipped-habit pushes, the last 6 weeks). Per-visit detail is stored only while
+ * the user is in a challenge. Sends due goal reminders and plans a skipped-habit push. Returns the number of Bruce
+ * requests made. Throws LoggedOut if Bruce rejects the login.
  */
-export async function refreshHistory(env, u, now, { maxPages = BACKFILL_PAGES, fetchFn = fetchBookings } = {}) {
+export async function refreshHistory(env, u, now, { maxPages = BACKFILL_PAGES, fetchFn = fetchBookings, classesFn = fetchClasses } = {}) {
   const DB = await db(env);
   const s = u.state;
   const today = localDay(now);
@@ -513,6 +540,9 @@ export async function refreshHistory(env, u, now, { maxPages = BACKFILL_PAGES, f
   const full = !s.statsFrom || s.statsFrom > want || (detail && (!s.detailFrom || s.detailFrom > want));
   let from = full ? want : [want, addDays(localDay(Date.parse(s.statsAt)), -3)].sort()[1];
   if (s.goals?.length && monthStart(today) < from) from = monthStart(today);
+  // Skipped habits need the last few weeks, and the upcoming bookings (the first page of the list).
+  const nudging = s.nudges !== false && u.devices.length > 0 && apnsConfigured(env);
+  if (nudging && addDays(today, -HABIT_LOOKBACK_DAYS) < from) from = addDays(today, -HABIT_LOOKBACK_DAYS);
   const [y, m, d] = from.split("-").map(Number);
   const { bookings, pages, complete } = await fetchFn(u.session.access_token, u.userId, localMidnight(y, m, d), maxPages);
   let visits = visitsFromBookings(bookings, now);
@@ -537,11 +567,48 @@ export async function refreshHistory(env, u, now, { maxPages = BACKFILL_PAGES, f
     u.devices = u.devices.filter((x) => !gone.includes(x.token));
     s.goalPings[r.goal.id] = now;
   }
-  return pages;
+  return pages + (nudging ? await planNudge(env, u, bookings, now, maxPages - pages, classesFn) : 0);
+}
+
+/**
+ * Skipped habit: when the history shows a weekly class done 3+ weeks in a row and then skipped (nothing visited or
+ * booked since), picks upcoming classes at that studio and the user's other favourite studio and plans a push for
+ * 08:00 local (sent by the minute cron). Each break is told once. Returns the number of Bruce requests made.
+ */
+export async function planNudge(env, u, bookings, now, budget, classesFn = fetchClasses) {
+  if (budget <= 0) return 0;
+  const habit = brokenHabit(bookings, now);
+  if (!habit) return 0;
+  const DB = await db(env);
+  const prev = await DB.prepare("SELECT habit, missed_day FROM nudges WHERE user_id = ?").bind(u.userId).first();
+  if (prev && prev.habit === habit.key && prev.missed_day === habit.missedDay) return 0;
+  const counts = new Map();
+  for (const v of visitsFromBookings(bookings, now)) if (v.studioId != null) counts.set(v.studioId, (counts.get(v.studioId) ?? 0) + 1);
+  const other = [...counts].filter(([id]) => id !== habit.studioId).sort((a, b) => b[1] - a[1])[0]?.[0];
+  const meter = { pages: 0 };
+  const classes = [];
+  for (const studioId of [habit.studioId, other].filter((x) => x != null)) {
+    if (meter.pages >= budget) break;
+    try {
+      classes.push(...await classesFn(u.session.access_token, studioId, now, now + RECOMMEND_DAYS * 86400_000,
+                                      { maxPages: Math.min(NUDGE_PAGES, budget - meter.pages), meter }));
+    } catch (e) {
+      if (e instanceof LoggedOut) throw e;
+      console.log("nudge classes failed:", u.userId, studioId, e.message);
+    }
+  }
+  const picks = recommendClasses(classes, bookings, habit, now, opensAt);
+  const { title, body } = nudgeMessage(habit, picks);
+  const p = localParts(now);
+  const sendAt = Math.max(now, localMidnight(p.y, p.m, p.d) + NUDGE_HOUR * 3600_000);
+  await DB.prepare(`INSERT INTO nudges (user_id, habit, missed_day, send_at, sent_at, title, body, data) VALUES (?1, ?2, ?3, ?4, NULL, ?5, ?6, ?7)
+      ON CONFLICT(user_id) DO UPDATE SET habit = ?2, missed_day = ?3, send_at = ?4, sent_at = NULL, title = ?5, body = ?6, data = ?7`)
+    .bind(u.userId, habit.key, habit.missedDay, sendAt, title, body, JSON.stringify({ recommend: picks.map((x) => x.classId) })).run();
+  return meter.pages;
 }
 
 /** The daily cron: refreshes users not yet refreshed today, least recently refreshed first, within DAILY_BUDGET. */
-export async function daily(env, now, { fetchFn = fetchBookings } = {}) {
+export async function daily(env, now, { fetchFn = fetchBookings, classesFn = fetchClasses } = {}) {
   const { results } = await (await db(env)).prepare("SELECT * FROM users").all();
   const users = results.map(rowToUser).sort((a, b) => String(a.state.statsAt ?? "").localeCompare(String(b.state.statsAt ?? "")));
   let budget = +(env.DAILY_BUDGET ?? DAILY_BUDGET);
@@ -550,7 +617,7 @@ export async function daily(env, now, { fetchFn = fetchBookings } = {}) {
     if (budget <= 0) break;
     if (u.state.statsAt && localDay(Date.parse(u.state.statsAt)) === today) continue;
     try {
-      budget -= await refreshHistory(env, u, now, { maxPages: Math.min(budget, BACKFILL_PAGES), fetchFn });
+      budget -= await refreshHistory(env, u, now, { maxPages: Math.min(budget, BACKFILL_PAGES), fetchFn, classesFn });
       await saveStats(env, u);
     } catch (e) {
       if (!(e instanceof LoggedOut)) { console.log("history failed:", u.userId, e.message); continue; }
@@ -876,6 +943,7 @@ export default {
         u.rules = cleanRules(body.rules);
         const d = cleanDevice(body.device);
         if (d) u.devices = [d, ...u.devices.filter((x) => x.token !== d.token)].slice(0, MAX_DEVICES);
+        if (typeof body.nudges === "boolean") u.state.nudges = body.nudges;
         if (rulesChanged) await tickUser(env, u, Date.now(), { force: true }).catch((e) => console.log("scan failed:", e.message));
         await saveUser(env, u);
         return json({ ok: true, rules: u.rules.length, push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
@@ -886,7 +954,7 @@ export default {
         return json({ hasSession: !!u, rules: u?.rules ?? [], lastScan: u?.state.lastScan ?? null,
                       upcoming: (u?.state.upcoming ?? []).map(opens),
                       waitlist: (u?.state.watches ?? []).map((w) => ({ classId: w.classId, title: w.title, start: new Date(w.start).toISOString() })), log: u?.state.log ?? [], devices: u?.devices.length ?? 0,
-                      email: u ? emailTo(env, u) : null });
+                      email: u ? emailTo(env, u) : null, nudges: u ? u.state.nudges !== false : true });
       }
       case "DELETE /me": {
         // Auto-book off: forget rules, watches and goals. The login stays while the user is in a challenge.

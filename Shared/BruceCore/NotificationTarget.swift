@@ -83,15 +83,19 @@ extension AppModel {
     }
 }
 
-/// Where a push from our server leads: a challenge invite (`CHALLENGE_INVITE`, payload `challengeId`) or a goal
-/// reminder (`GOAL_REMINDER`, payload `goalId`).
+/// Where a push from our server leads: a challenge invite (`CHALLENGE_INVITE`, payload `challengeId`), a goal
+/// reminder (`GOAL_REMINDER`, payload `goalId`) or skipped-habit picks (`RECOMMENDATION`, payload `recommend`:
+/// class ids, best first).
 enum PushTarget: Equatable {
     case challenge(String)
     case goals
+    /// The best pick, if any.
+    case recommendation(Int?)
 
     init?(userInfo: [AnyHashable: Any]) {
         if let id = userInfo["challengeId"] as? String, !id.isEmpty { self = .challenge(id); return }
         if userInfo["goalId"] != nil { self = .goals; return }
+        if let ids = userInfo["recommend"] as? [Any] { self = .recommendation((ids.first as? NSNumber)?.intValue); return }
         return nil
     }
 }
@@ -107,6 +111,10 @@ extension AppModel {
         case .goals:
             tab = .myClasses
             stacks[.myClasses] = [.goals]
+        case .recommendation(let id):
+            // The best pick on top of For you, so Back shows the rest.
+            tab = .home
+            stacks[.home] = [.forYou] + (id.map { [Route.classDetail($0)] } ?? [])
         }
     }
 }

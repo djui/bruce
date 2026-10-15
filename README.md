@@ -105,6 +105,10 @@ My classes tabs, with class and studio pages and account sheets.
   work with its days and hours, and how you get around; MapKit travel times on the iPhone, a distance estimate on
   the web). Each pick says why ("2 friends going · 8 min from work · you do Yoga often"). Places never leave the
   device.
+- **Skipped a habit?** (iPhone, needs the [server](server/README.md#skipped-a-habit)): did the same class 3 weeks
+  in a row, then skipped it and booked nothing for 4 days (a Saturday class: by Wednesday)? A morning push
+  "Missing your Saturday morning Reformer?" names up to three upcoming classes picked from your history; tapping it
+  opens the best one on top of For you. Menu › Auto-book › "Suggest classes when I skip a habit" turns it off.
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.

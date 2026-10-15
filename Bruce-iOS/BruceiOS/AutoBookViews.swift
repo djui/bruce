@@ -9,6 +9,7 @@ struct AutoBookView: View {
     @State private var server: AutoBookServer.Status?
     @State private var working = false
     @State private var booksForMe = AutoBookServer.booksForMe
+    @State private var habitNudges = AutoBookServer.habitNudges
     @State private var showServerFields = false
 
     var body: some View {
@@ -29,6 +30,18 @@ struct AutoBookView: View {
                     run { await m.setServerBooksForMe(on); if let n = m.autoBookServerNote { throw ServerError(n) } }
                 }))
                 if booksForMe, let s = server { serverSummary(s) }
+                if booksForMe {
+                    Toggle(isOn: Binding(get: { habitNudges }, set: { on in
+                        habitNudges = on
+                        AutoBookServer.habitNudges = on
+                        run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                    })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Suggest classes when I skip a habit")
+                            Text(AutoBookCopy.habitNudges).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                        }
+                    }
+                }
                 if booksForMe, (server?.devices ?? 0) > 0 {
                     Button("Send a test notification") {
                         guard let s = m.session else { return }
@@ -90,6 +103,7 @@ struct ServerError: LocalizedError {
 
 enum AutoBookCopy {
     static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. The server books it at that moment and sends you a notification. Without the server, you get a notification with a Book button instead. Swipe to remove a class. Cancelling an auto-booked class does not rebook it."
+    static let habitNudges = "Did a class 3 weeks in a row, then skipped it and booked nothing for 4 days? You get a morning notification with classes picked from your history."
     static let server = "Books even when your phone is locked or offline: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login to book with; switching it off removes your login and classes from the server."
 }
 
