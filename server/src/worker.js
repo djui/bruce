@@ -11,7 +11,8 @@
 // (`GET /v52/user/<id>`), so nobody can read or change another user's data. Storage: D1 table `users`, one row per
 // Bruce user (login, rules, push device tokens, state). Optional `ALLOWED_USERS` (comma-separated Bruce user ids)
 // limits who may use the server. Push: APNs token auth (`APNS_KEY` .p8 contents, `APNS_KEY_ID`, `APNS_TEAM_ID`,
-// `APNS_TOPIC` = app bundle id). HTTP API: see ../README.md.
+// `APNS_TOPIC` = app bundle id). Email: the same booking results go to the address on the user's Bruce account, sent
+// with Resend (`RESEND_API_KEY` secret, `EMAIL_FROM` var); without the key no email is sent. HTTP API: see ../README.md.
 //
 // Challenges with friends, goal reminders and Wrapped percentiles (tables from ../migrations): a daily cron reads each
 // stored user's booking history and keeps per-day counts in `daily_counts` (plus per-visit detail while the user is
@@ -56,6 +57,8 @@ const BACKFILL_PAGES = 40;
 const MAX_INVITES = 20;
 const MAX_GOALS = 10;
 const SHARE_URL = "https://djui.github.io/bruce/app/#challenge/";
+const DEFAULT_PUBLIC_URL = "https://bruce-autobook.uwe-af1.workers.dev";
+const CLASS_URL = "https://djui.github.io/bruce/app/#/home/class/";
 /// Skipped-habit pushes go out at this local hour (the daily run plans them at night).
 const NUDGE_HOUR = 8;
 /// Class list pages per studio when picking classes for a skipped-habit push (30 classes each).
@@ -284,6 +287,45 @@ export async function push(env, devices, title, body, data = {}, category = "AUT
   return gone;
 }
 
+// MARK: Email (Resend)
+
+export const emailConfigured = (env) => !!(env.RESEND_API_KEY && env.EMAIL_FROM);
+const hex = (buf) => [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+
+/** The token in a user's unsubscribe link: HMAC-SHA256 of the user id, keyed with the Resend key. */
+export async function unsubscribeToken(env, userId) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(env.RESEND_API_KEY), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return hex(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`unsubscribe:${userId}`))).slice(0, 32);
+}
+
+const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+
+/** Sends one booking result to the user's Bruce email (if known, not unsubscribed and Resend is set up). */
+export async function email(env, u, title, body, classId) {
+  const to = u.state.email;
+  if (!emailConfigured(env) || !to || u.state.emailOff) return;
+  const off = `${env.PUBLIC_URL ?? DEFAULT_PUBLIC_URL}/email/off?u=${u.userId}&t=${await unsubscribeToken(env, u.userId)}`;
+  const link = classId ? CLASS_URL + classId : null;
+  const text = [body, link && `Open the class: ${link}`, "", `Sent by the Brüce auto-book server. No more emails: ${off}`].filter((l) => l != null).join("\n");
+  const html = `<p style="font-size:16px">${escapeHtml(body)}</p>${link ? `<p><a href="${link}">Open the class</a></p>` : ""}`
+    + `<p style="color:#888;font-size:12px">Sent by the Brüce auto-book server. <a href="${off}" style="color:#888">No more emails</a></p>`;
+  try {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${env.RESEND_API_KEY}`, "content-type": "application/json" },
+      body: JSON.stringify({ from: env.EMAIL_FROM, to: [to], subject: title, text, html,
+                             headers: { "List-Unsubscribe": `<${off}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } }),
+    });
+    if (!res.ok) console.log("email", res.status, await res.text());
+  } catch (e) { console.log("email failed:", e.message); }
+}
+
+/** A booking result: an Apple push to the user's iPhones and an email; drops the devices Apple says are gone. */
+async function notify(env, u, title, body, classId) {
+  const [gone] = await Promise.all([push(env, u.devices, title, body, classId ? { classId } : {}), email(env, u, title, body, classId)]);
+  u.devices = u.devices.filter((d) => !gone.includes(d.token));
+}
+
 // MARK: Users (D1)
 
 // `users` predates migrations and is created on first use; challenges, participants and daily_counts come from
@@ -403,8 +445,7 @@ export async function watchWaitlists(env, u, now, { bookFn = book, classFn = fet
     if (outcome === "Booked" || outcome === "Already booked") {
       keep.pop();
       state.log.unshift({ classId: w.classId, title: w.title, at: new Date().toISOString(), outcome: `${outcome} (waitlist)` });
-      const gone = await push(env, u.devices, `${outcome}: ${w.title}`, `${when(w.start)} · a waitlist spot opened`, { classId: w.classId });
-      u.devices = u.devices.filter((d) => !gone.includes(d.token));
+      await notify(env, u, `${outcome}: ${w.title}`, `${when(w.start)} · a waitlist spot opened`, w.classId);
       continue;
     }
     // Spot taken by someone else in the meantime, or Bruce refuses (visit limit, ...): wait and look again.
@@ -413,8 +454,7 @@ export async function watchWaitlists(env, u, now, { bookFn = book, classFn = fet
     if (w.fails >= MAX_WATCH_FAILS) {
       keep.pop();
       state.log.unshift({ classId: w.classId, title: w.title, at: new Date().toISOString(), outcome: `Waitlist stopped: ${outcome}` });
-      const gone = await push(env, u.devices, `Waitlist watch stopped: ${w.title}`, outcome, { classId: w.classId });
-      u.devices = u.devices.filter((d) => !gone.includes(d.token));
+      await notify(env, u, `Waitlist watch stopped: ${w.title}`, outcome, w.classId);
     }
   }
   state.watches = keep;
@@ -432,8 +472,7 @@ export async function tickUser(env, u, now, { force = false, bookFn = book, clas
     state.handled[o.classId] = o.start;
     state.log.unshift({ classId: o.classId, title: o.title, at: new Date().toISOString(), outcome });
     if (outcome === "Login expired") { loggedOut = true; continue; }
-    const gone = await push(env, u.devices, `${outcome}: ${o.title}`, `${when(o.start)} · auto-book`, { classId: o.classId });
-    u.devices = u.devices.filter((d) => !gone.includes(d.token));
+    await notify(env, u, `${outcome}: ${o.title}`, `${when(o.start)} · auto-book`, o.classId);
   }
   state.upcoming = state.upcoming.filter((o) => !state.handled[o.classId] && o.start > now);
   if (state.watches?.length && !loggedOut && !(await watchWaitlists(env, u, now, { bookFn, classFn }))) loggedOut = true;
@@ -457,7 +496,7 @@ export async function tick(env, now) {
     const before = JSON.stringify([u.state, u.devices]);
     if (!(await tickUser(env, u, now))) {
       // Bruce rejected the login: forget it, and tell the user to open the app (which sends the new one).
-      await push(env, u.devices, "Auto-book paused", "Your Bruce login expired. Open Brüce to continue.");
+      await notify(env, u, "Auto-book paused", "Your Bruce login expired. Open Brüce to continue.");
       await deleteUser(env, u.userId);
       return;
     }
@@ -601,12 +640,25 @@ function json(data, status = 200) {
   return new Response(status === 204 ? null : JSON.stringify(data), { status, headers: { "Content-Type": "application/json", ...CORS } });
 }
 
+/** `GET|POST /email/off?u=<userId>&t=<token>`: the unsubscribe link in every email (POST is the one-click header). */
+async function unsubscribeRoute(request, env) {
+  const q = new URL(request.url).searchParams;
+  const userId = parseInt(q.get("u") ?? "", 10);
+  const page = (msg, status = 200) => new Response(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width">`
+    + `<title>Brüce auto-book</title><p style="font:17px -apple-system,sans-serif;margin:3em auto;max-width:30em;padding:0 1em">${msg}</p>`,
+    { status, headers: { "Content-Type": "text/html; charset=utf-8" } });
+  if (!emailConfigured(env) || !userId || q.get("t") !== (await unsubscribeToken(env, userId))) return page("This link is not valid.", 400);
+  const u = await getUser(env, userId);
+  if (u && !u.state.emailOff) { u.state.emailOff = true; await saveUser(env, u); }
+  return page("Done. The auto-book server won't email you any more. Push notifications in the app stay on.");
+}
+
 /** `PUT|DELETE /me/waitlist/<classId>`: start or stop watching a full class. Creates the user's row if needed. */
 async function watchRoute(request, env, classId) {
   const auth = await authenticate(request, env);
   if (!auth) return json({ error: "unauthorized" }, 401);
   const u = (await getUser(env, auth.userId)) ?? { userId: auth.userId, rules: [], devices: [], state: emptyState() };
-  u.session = { access_token: auth.token, user_id: auth.userId };
+  signIn(u, auth);
   if (request.method === "DELETE") {
     u.state.watches = u.state.watches.filter((w) => w.classId !== classId);
     // Keep the row only while it has something to do.
@@ -636,7 +688,15 @@ export async function authenticate(request, env) {
   const res = await bruce("GET", `/v52/user/${userId}`, token, { query: [["locale", "en"]] }).catch(() => null);
   if (!res?.ok) return null;
   const body = await res.json().catch(() => null);
-  return body?.user?.id === userId ? { userId, token, name: String(body.user.first_name ?? body.user.display_name ?? "").slice(0, 60) } : null;
+  if (body?.user?.id !== userId) return null;
+  const email = typeof body.user.email === "string" && /^[^\s@]+@[^\s@]+$/.test(body.user.email) ? body.user.email.slice(0, 200) : null;
+  return { userId, token, email, name: String(body.user.first_name ?? body.user.display_name ?? "").slice(0, 60) };
+}
+
+/** Stores the caller's current login and Bruce email on their row. */
+function signIn(u, auth) {
+  u.session = { access_token: auth.token, user_id: auth.userId };
+  if (auth.email) u.state.email = auth.email;
 }
 
 function cleanRules(rules) {
@@ -650,6 +710,9 @@ function cleanDevice(d) {
 }
 
 // MARK: Challenges, goals and percentiles (HTTP)
+
+/** The address booking results are emailed to, or null (no Resend key, no address, or unsubscribed). */
+const emailTo = (env, u) => (emailConfigured(env) && !u.state.emailOff && u.state.email) || null;
 
 const newId = () => {
   const abc = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789";
@@ -676,7 +739,7 @@ function summary({ ch, participants }, userId, today) {
 /** The caller's row with their current login, created if needed (joining a challenge stores the login, auto-book or not). */
 async function rememberLogin(env, auth) {
   const u = (await getUser(env, auth.userId)) ?? { userId: auth.userId, rules: [], devices: [], state: emptyState() };
-  u.session = { access_token: auth.token, user_id: auth.userId };
+  signIn(u, auth);
   await saveUser(env, u);
   return u;
 }
@@ -863,9 +926,10 @@ export default {
     if (path === "/challenges" || path.startsWith("/challenges/") || path === "/wrapped/percentiles" || route === "PUT /me/goals") {
       return insightsRoute(request, env, ctx, path);
     }
+    if (path === "/email/off" && (request.method === "GET" || request.method === "POST")) return unsubscribeRoute(request, env);
     const watch = path.match(/^\/me\/waitlist\/(\d+)$/);
     if (watch && (request.method === "PUT" || request.method === "DELETE")) return watchRoute(request, env, +watch[1]);
-    if (!["PUT /me", "GET /me", "DELETE /me", "POST /me/test-push"].includes(route)) return json({ error: "not found" }, 404);
+    if (!["PUT /me", "GET /me", "DELETE /me", "POST /me/test-push", "PUT /me/email"].includes(route)) return json({ error: "not found" }, 404);
     const auth = await authenticate(request, env);
     if (!auth) return json({ error: "unauthorized" }, 401);
     switch (route) {
@@ -874,7 +938,7 @@ export default {
         const body = await request.json().catch(() => ({}));
         if (!Array.isArray(body.rules)) return json({ error: "rules must be an array" }, 400);
         const u = (await getUser(env, auth.userId)) ?? { userId: auth.userId, rules: [], devices: [], state: emptyState() };
-        u.session = { access_token: auth.token, user_id: auth.userId };
+        signIn(u, auth);
         const rulesChanged = JSON.stringify(u.rules) !== JSON.stringify(cleanRules(body.rules));
         u.rules = cleanRules(body.rules);
         const d = cleanDevice(body.device);
@@ -882,7 +946,7 @@ export default {
         if (typeof body.nudges === "boolean") u.state.nudges = body.nudges;
         if (rulesChanged) await tickUser(env, u, Date.now(), { force: true }).catch((e) => console.log("scan failed:", e.message));
         await saveUser(env, u);
-        return json({ ok: true, rules: u.rules.length, push: apnsConfigured(env) && u.devices.length > 0 });
+        return json({ ok: true, rules: u.rules.length, push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
       }
       case "GET /me": {
         const u = await getUser(env, auth.userId);
@@ -890,7 +954,7 @@ export default {
         return json({ hasSession: !!u, rules: u?.rules ?? [], lastScan: u?.state.lastScan ?? null,
                       upcoming: (u?.state.upcoming ?? []).map(opens),
                       waitlist: (u?.state.watches ?? []).map((w) => ({ classId: w.classId, title: w.title, start: new Date(w.start).toISOString() })), log: u?.state.log ?? [], devices: u?.devices.length ?? 0,
-                      nudges: u ? u.state.nudges !== false : true });
+                      email: u ? emailTo(env, u) : null, nudges: u ? u.state.nudges !== false : true });
       }
       case "DELETE /me": {
         // Auto-book off: forget rules, watches and goals. The login stays while the user is in a challenge.
@@ -905,11 +969,25 @@ export default {
         await (await db(env)).prepare("DELETE FROM daily_counts WHERE user_id = ?").bind(auth.userId).run();
         return json({ ok: true });
       }
-      case "POST /me/test-push": {
+      case "PUT /me/email": {
+        // {"enabled": false} stops the booking emails, {"enabled": true} starts them again.
+        const body = await request.json().catch(() => ({}));
         const u = await getUser(env, auth.userId);
-        if (!u?.devices.length || !apnsConfigured(env)) return json({ error: "no device or push not configured" }, 409);
-        await push(env, u.devices, "Auto-book is set up", "You'll get a push like this when a class is booked.");
-        return json({ ok: true });
+        if (!u) return json({ error: "auto-book is off" }, 404);
+        signIn(u, auth);
+        u.state.emailOff = body.enabled === false;
+        await saveUser(env, u);
+        return json({ ok: true, email: emailTo(env, u) });
+      }
+      case "POST /me/test-push": {
+        // Also a test email, so the test button checks both ways a booking result arrives.
+        const u = await getUser(env, auth.userId);
+        if (u) { signIn(u, auth); await saveUser(env, u); }
+        const canPush = !!u?.devices.length && apnsConfigured(env);
+        if (!canPush && !(u && emailTo(env, u))) return json({ error: "no device or push not configured" }, 409);
+        await Promise.all([canPush && push(env, u.devices, "Auto-book is set up", "You'll get a push like this when a class is booked."),
+                           email(env, u, "Auto-book is set up", "You'll get an email like this when a class is booked.")]);
+        return json({ ok: true, email: emailTo(env, u) });
       }
     }
   },

@@ -1,7 +1,7 @@
 # Auto-book and challenges server
 
 A small [Cloudflare Worker](https://developers.cloudflare.com/workers/) that books the weekly classes of every app
-user who switches it on, the moment their booking window opens, and tells them with an Apple push. The apps work
+user who switches it on, the moment their booking window opens, and tells them with an Apple push and an email. The apps work
 without it: the Mac app books while it runs, and the iPhone shows a notification with a **Book** button at the open
 moment. Back to the [project README](../README.md).
 
@@ -17,6 +17,19 @@ so the server knows next week's class a week before it opens.
 - **In the minute before a class opens** it waits for the open moment and sends `POST /v52/booking`,
   retrying every second for 20 seconds. A class is tried once: if you cancel it later, it is not booked again.
 - The result ("Booked: Reformer", or why not) goes to the user's iPhones as an Apple push; tapping it opens the class.
+  It also goes by email, see below.
+
+## Email
+
+Every push about a booking (auto-book result, waitlist spot booked, waitlist watch stopped, login expired) is also
+sent as an email to the address on the user's Bruce account (`email` in `GET /v52/user/<id>`, read when the app signs
+in). Web users, who have no push device, learn about bookings this way too. The email links to the class in the
+web app and has a "No more emails" link (`/email/off`, also sent as a one-click `List-Unsubscribe` header); the
+apps can switch it with `PUT /me/email`. Push stays on either way.
+
+Sending uses [Resend](https://resend.com) (free tier: 3,000 emails a month, 100 a day), because Cloudflare's own
+Email Service only sends to arbitrary addresses on the Workers Paid plan. `EMAIL_FROM` in `wrangler.toml` is the
+sender; its domain has to be verified in Resend. Without the `RESEND_API_KEY` secret no email is sent.
 
 ## Waitlist: book as soon as a spot frees up
 
@@ -94,7 +107,7 @@ headers), and the server checks it with Bruce (`GET /v52/user/<id>`) on every re
 changes their own data. Set `ALLOWED_USERS` (comma-separated Bruce user ids) to limit who may use the server.
 
 One row per user in a D1 table: the Bruce access token (to book with), the rules (studio, weekday, time, class
-series), push device tokens, upcoming classes and a short log. Bruce's server does not expire access tokens in
+series), push device tokens, the Bruce email address (for booking emails), upcoming classes and a short log. Bruce's server does not expire access tokens in
 practice (see API.md "Refresh"), so whoever can read the database can use those accounts until they log out of
 Bruce. Switching "Let the server book for me" off in the app deletes the user's row, unless they are in a challenge:
 then only the rules, watches and goals go and the login stays (joining a challenge stores it, auto-book on or off).
@@ -111,6 +124,7 @@ npx wrangler d1 create bruce-autobook          # paste the database_id into wran
 npx wrangler secret put APNS_KEY               # contents of the APNs AuthKey_XXXXXXXXXX.p8
 npx wrangler secret put APNS_KEY_ID            # its Key ID
 npx wrangler secret put APNS_TEAM_ID           # Apple team id
+npx wrangler secret put RESEND_API_KEY         # optional: Resend API key, for booking emails
 npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges
 npx wrangler deploy
 ```
@@ -135,11 +149,13 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | Request | Body | Effect |
 |---|---|---|
 | `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices, nudges}` |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices, email, nudges}` |
 | `DELETE /me` | | Deletes the user's row and history; in a challenge it keeps the login and clears rules, watches and goals |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |
-| `POST /me/test-push` | | Sends a test push to the user's devices |
+| `POST /me/test-push` | | Sends a test push to the user's devices and a test email |
+| `PUT /me/email` | `{"enabled":false}` | Stops (or with `true` restarts) the booking emails → `{email}`: the address used, or null |
+| `GET /email/off?u=<userId>&t=<token>` | | The unsubscribe link in each email (no login needed; `POST` for one-click) |
 | `PUT /me/goals` | `{"goals":[{"id","title","category","studioId","target","remind"}]}` | Stores the goals with `remind` for "Behind on your goal" pushes (max 10; `[]` clears) |
 | `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366), invites friends by push → 201 `{challenge}` |
 | `GET /challenges` | | `{challenges:[…], usesBruce:[userId]}`: the caller's challenges and invites, and which friends use the server |

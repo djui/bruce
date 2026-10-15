@@ -40,7 +40,7 @@ dark setting on GitHub; every screen is in [`docs/screenshots/`](docs/screenshot
 | **BruceMacOS** ([`Bruce-MacOS/`](Bruce-MacOS/README.md)) | Phone-sized SwiftUI app for macOS 14+, run with `swift run` |
 | **Brüce Web** ([`docs/app/`](docs/app), [live](https://djui.github.io/bruce/app/)) | Browser version on GitHub Pages: plain HTML, CSS and JavaScript, no build step |
 | **BruceCore** ([`Shared/BruceCore/`](Shared/BruceCore)) | Code shared by both apps: API client, models, Keychain session, app state, booking rules, demo data |
-| **Auto-book server** ([`server/`](server/README.md)) | Cloudflare Worker that books users' weekly classes the moment they open and pushes the result |
+| **Auto-book server** ([`server/`](server/README.md)) | Cloudflare Worker that books users' weekly classes the moment they open and sends the result by push and email |
 | **API map** ([`API.md`](API.md), [`openapi.yaml`](openapi.yaml), [`swagger.html`](swagger.html)) | The Bruce Studios v52 API as observed from the official iOS app 14.4.2 |
 
 ## Features
@@ -69,7 +69,8 @@ My classes tabs, with class and studio pages and account sheets.
   Mac app books by itself at that moment while it runs; the iPhone shows a notification at that moment
   whose **Book** button books from the lock screen (and books by itself while the app is open). An optional
   small server ([`server/`](server/README.md), a Cloudflare Worker) books even when no device is awake and
-  sends you a push with the result; the app signs in to it with your Bruce login and syncs your classes by
+  sends you the result by push and by email (to your Bruce account's address; every email has a link to
+  stop them); the app signs in to it with your Bruce login and syncs your classes by
   itself (one switch turns that off). Menu › Auto-book lists the classes and the
   server settings.
 - **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
