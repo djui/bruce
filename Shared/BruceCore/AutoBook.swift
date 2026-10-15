@@ -240,6 +240,12 @@ enum AutoBookServer {
         get { UserDefaults.standard.object(forKey: "autoBookServerBooks") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "autoBookServerBooks") }
     }
+    /// "Suggest classes when I skip a habit": the server pushes picks when a weekly class done 3+ weeks in a row is
+    /// skipped and nothing is booked for 4 days (server/README.md). On by default; sent with the rules.
+    static var habitNudges: Bool {
+        get { UserDefaults.standard.object(forKey: "habitNudges") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "habitNudges") }
+    }
     /// This device's APNs token (hex) once iOS registered for push; sent with the rules.
     static var deviceToken: String? {
         get { UserDefaults.standard.string(forKey: "autoBookDeviceToken") }
@@ -279,10 +285,11 @@ enum AutoBookServer {
         return req
     }
 
-    /// `PUT /me`: the rules (same JSON as stored locally), this device's push token, and with them the login.
+    /// `PUT /me`: the rules (same JSON as stored locally), this device's push token, the skipped-habit setting, and
+    /// with them the login.
     static func sync(_ rules: [AutoBookRule], session: Session) async throws {
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
-        var body: [String: Any] = ["rules": try JSONSerialization.jsonObject(with: enc.encode(rules))]
+        var body: [String: Any] = ["rules": try JSONSerialization.jsonObject(with: enc.encode(rules)), "nudges": habitNudges]
         if let t = deviceToken { body["device"] = ["token": t, "env": pushEnvironment] }
         try await BruceAPI.send(request("PUT", "me", session: session, body: body))
     }

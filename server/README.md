@@ -67,6 +67,26 @@ are behind pace, at most once a week per goal.
 other stored users (checked-in visits, minutes, studios, longest weekly streak) and returns only percentiles, and
 nothing when fewer than 5 other users have data.
 
+## Skipped a habit
+
+The same daily run looks for a broken weekly habit in each user's history (users with a push device who did not
+switch it off with `"nudges": false`), logic in `src/habits.js`:
+
+- A **habit** is the same class title at the same studio, weekday and local start time, visited at least **3 weeks
+  in a row**. It is **broken** when the next week's slot passed without a visit and the user then visited nothing
+  and has **no upcoming booking** for **4 days** (a Saturday class: on Wednesday). Of several, the longest run wins.
+  Each break is told once; the next week's slot ends it.
+- **Picks**: classes in the next 7 days at the habit's studio and the user's other most visited studio (at most
+  4 class-list pages each), listed, not full and bookable before they start, scored like the apps' For you: the
+  same class, the user's classes and categories, the studio, closeness to the habit's time and weekday, and sooner
+  first. Up to three, one per class.
+- The push ("Missing your Saturday morning Reformer?", body "3 Saturdays in a row at 09:00, then a break. Picked
+  for you: Reformer, Sat 09:00 at STC Rosenlundsparken · …", category `RECOMMENDATION`, payload
+  `{"recommend":[classId,…]}`) is planned in table `nudges` (`migrations/0002_nudges.sql`) and sent by the minute
+  cron at **08:00 local**. Tapping it opens the best pick on top of For you.
+- Cost: the history read covers the last 6 weeks (often one or two pages instead of one), plus at most 8 class-list
+  requests on a day with a broken habit, all within `DAILY_BUDGET`.
+
 ## Users and what is stored
 
 There is no shared key. The app signs in with the user's own Bruce login (`X-Access-Token` and `X-User-Id`
@@ -79,7 +99,8 @@ practice (see API.md "Refresh"), so whoever can read the database can use those 
 Bruce. Switching "Let the server book for me" off in the app deletes the user's row, unless they are in a challenge:
 then only the rules, watches and goals go and the login stays (joining a challenge stores it, auto-book on or off).
 A 401 from Bruce deletes the row too (and pushes "Auto-book paused"; the app sends the new login on its next start).
-Challenge, participant and history tables: see "Challenges with friends" above.
+Challenge, participant and history tables: see "Challenges with friends" above; the `nudges` table (one row per user:
+the last skipped habit told and its push) under "Skipped a habit".
 
 ## Set up
 
@@ -90,7 +111,7 @@ npx wrangler d1 create bruce-autobook          # paste the database_id into wran
 npx wrangler secret put APNS_KEY               # contents of the APNs AuthKey_XXXXXXXXXX.p8
 npx wrangler secret put APNS_KEY_ID            # its Key ID
 npx wrangler secret put APNS_TEAM_ID           # Apple team id
-npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts
+npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges
 npx wrangler deploy
 ```
 
@@ -113,8 +134,8 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 
 | Request | Body | Effect |
 |---|---|---|
-| `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"}}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`) |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices}` |
+| `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices, nudges}` |
 | `DELETE /me` | | Deletes the user's row and history; in a challenge it keeps the login and clears rules, watches and goals |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |
