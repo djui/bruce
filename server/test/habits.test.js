@@ -34,7 +34,18 @@ test("broken habit: three Saturdays in a row, then nothing until Wednesday", () 
   // Too early (Tuesday), and gone once the next Saturday has come.
   assert.equal(brokenHabit(HISTORY, Date.parse("2026-10-13T02:30:00Z")), null);
   assert.ok(brokenHabit(HISTORY, Date.parse("2026-10-16T02:30:00Z")));
-  assert.equal(brokenHabit(HISTORY, Date.parse("2026-10-17T02:30:00Z")), null);
+  assert.ok(brokenHabit(HISTORY, Date.parse("2026-10-17T02:30:00Z")));       // the next slot's morning, before the class
+  assert.equal(brokenHabit(HISTORY, Date.parse("2026-10-18T02:30:00Z")), null);
+});
+
+test("broken habit: the user's quiet days", () => {
+  const at = (day) => Date.parse(`${day}T02:30:00Z`);
+  assert.equal(brokenHabit(HISTORY, at("2026-10-11"), { lapseDays: 2 }), null);   // Sunday
+  assert.ok(brokenHabit(HISTORY, at("2026-10-12"), { lapseDays: 2 }));            // Monday
+  assert.equal(brokenHabit(HISTORY, at("2026-10-16"), { lapseDays: 7 }), null);
+  assert.ok(brokenHabit(HISTORY, at("2026-10-17"), { lapseDays: 7 }));            // next Saturday morning
+  // Still booking: the next slot booked on its morning means no nudge.
+  assert.equal(brokenHabit([...HISTORY, booking(6, "2026-10-17T07:00:00Z", { checked: false })], at("2026-10-17"), { lapseDays: 7 }), null);
 });
 
 test("broken habit: none while the user is still booking or visiting", () => {

@@ -4,13 +4,16 @@
 //
 // A habit is the same class (title) at the same studio, weekday and local start time, visited at least
 // HABIT_MIN_WEEKS weeks in a row. It is broken when the next week's slot passed without a visit, and the user then
-// neither visited anything nor booked anything for LAPSE_DAYS days (a Saturday habit nudges on Wednesday).
+// neither visited anything nor booked anything for LAPSE_DAYS days (a Saturday habit nudges on Wednesday). The user
+// can pick another number of days, 1-7 (the apps offer 2, 4 and 7; 7 nudges on the morning of the next slot).
 
 import { visitsFromBookings, addDays, diffDays, localDay } from "./insights.js";
 
 const TZ = "Europe/Stockholm";
 export const HABIT_MIN_WEEKS = 3;
 export const LAPSE_DAYS = 4;
+/** The user's quiet days (`nudgeDays` in PUT /me), or null when it is not a whole number of days from 1 to 7. */
+export const cleanLapseDays = (n) => (Number.isInteger(n) && n >= 1 && n <= 7 ? n : null);
 /// How far back the history must reach to see a habit (the daily read covers at least this many days).
 export const HABIT_LOOKBACK_DAYS = 42;
 /// Upcoming classes considered for recommendations, and how many go into the push.
@@ -65,8 +68,8 @@ export function brokenHabit(bookings, now, { minWeeks = HABIT_MIN_WEEKS, lapseDa
     if (weeks < minWeeks) continue;
     const missedDay = addDays(days[0], 7);
     const since = diffDays(missedDay, today);
-    // Only the latest break, from `lapseDays` after the missed slot until the habit's next slot.
-    if (since < lapseDays || since >= 7) continue;
+    // Only the latest break, from `lapseDays` after the missed slot until the habit's next slot (that morning included).
+    if (since < lapseDays || since > 7) continue;
     if (all.some((v) => v.day >= missedDay)) continue;
     if (!best || weeks > best.weeks || (weeks === best.weeks && days[0] > best.lastDay)) {
       best = { key: g.key, title: g.title, studioId: g.studioId, studio: g.studio, categories: g.categories,
