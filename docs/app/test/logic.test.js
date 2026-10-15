@@ -247,3 +247,11 @@ test('classes sort by the instant they start, whatever the timestamp spelling', 
   ];
   assert.deepEqual(list.sort(byStart).map((c) => c.id), [3, 1, 2, 4]);
 });
+
+test('a day list keeps only classes that start on that day in Stockholm', async () => {
+  const { onDay } = await import('../js/util.js');
+  assert.equal(onDay({ start_time: '2026-10-18T10:00:00Z' }, '2026-10-18'), true);
+  assert.equal(onDay({ start_time: '2026-10-17T22:30:00Z' }, '2026-10-18'), true);   // 00:30 on the 18th
+  assert.equal(onDay({ start_time: '2026-10-19T08:00:00Z' }, '2026-10-18'), false);
+  assert.equal(onDay({}, '2026-10-18'), false);
+});
