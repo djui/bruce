@@ -912,10 +912,14 @@ export default {
         return json({ ok: true, email: emailTo(env, u) });
       }
       case "POST /me/test-push": {
+        // Also a test email, so the test button checks both ways a booking result arrives.
         const u = await getUser(env, auth.userId);
-        if (!u?.devices.length || !apnsConfigured(env)) return json({ error: "no device or push not configured" }, 409);
-        await push(env, u.devices, "Auto-book is set up", "You'll get a push like this when a class is booked.");
-        return json({ ok: true });
+        if (u) { signIn(u, auth); await saveUser(env, u); }
+        const canPush = !!u?.devices.length && apnsConfigured(env);
+        if (!canPush && !(u && emailTo(env, u))) return json({ error: "no device or push not configured" }, 409);
+        await Promise.all([canPush && push(env, u.devices, "Auto-book is set up", "You'll get a push like this when a class is booked."),
+                           email(env, u, "Auto-book is set up", "You'll get an email like this when a class is booked.")]);
+        return json({ ok: true, email: emailTo(env, u) });
       }
     }
   },
