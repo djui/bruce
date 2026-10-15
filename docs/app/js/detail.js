@@ -112,7 +112,7 @@ export async function renderClass(el, id, ctx) {
       watchToggle(c, standby, started, booking) +
       '<div class="actions sticky">' + actions + '</div>' +
       (c.description ? '<div class="rich">' + rich(c.description) + '</div>' : '') +
-      '<a class="card row-card" href="#/' + ctx.tab + '/studio/' + c.studio_id + '">' + icon('building') + '<div class="grow"><b>' + esc(s.name || lite.name || 'Studio') + '</b><p class="muted">' + esc(lite.address || s.vicinity || '') + '</p></div>' + icon('chevron') + '</a>' +
+      '<a class="card row-card" href="' + ctx.link('studio', c.studio_id) + '">' + icon('building') + '<div class="grow"><b>' + esc(s.name || lite.name || 'Studio') + '</b><p class="muted">' + esc(lite.address || s.vicinity || '') + '</p></div>' + icon('chevron') + '</a>' +
       '</div>';
     drawFriends(c);
     wire(c, booking, standby, bm);
@@ -177,7 +177,7 @@ export async function renderClass(el, id, ctx) {
           if (S.watches.has(c.id)) await St.setWatch(c.id, false).catch(() => {});
           toast('Left the waitlist'); await after();
         }));
-      else if (a === 'similar') openSimilar(c, ctx.tab);
+      else if (a === 'similar') openSimilar(c, ctx.link);
       else if (a === 'invite') openInvite(c);
       else if (a === 'ticket') openTicket(booking.id);
       else if (a === 'rate') { const r = S.reviewable.find((x) => x.class_id === c.id); if (r) openReview(r); }
@@ -293,7 +293,7 @@ export async function renderStudio(el, id, ctx) {
     const box = $('#studio-classes', el);
     if (!box) return;
     if (!state.classes) { box.innerHTML = loading('Loading classes…'); return; }
-    box.innerHTML = state.classes.length ? state.classes.map((c) => classRow(c, '#/' + ctx.tab + '/class/' + c.id, { hideStudio: true })).join('') : empty('calendar', 'No classes this day.');
+    box.innerHTML = state.classes.length ? state.classes.map((c) => classRow(c, ctx.link('class', c.id), { hideStudio: true })).join('') : empty('calendar', 'No classes this day.');
   }
 
   async function drawReviews() {

@@ -38,10 +38,10 @@ export function openRules(c, mode, action) {
 
 // ---------------------------------------------------------------- similar classes, invite, visit limit
 
-export function openSimilar(c, tab) {
+export function openSimilar(c, link) {
   const s = sheet('Similar classes', '<p class="center muted">Similar classes to</p><h3 class="center">' + esc(c.title) + ', ' + esc(time(c.start_time)) + '</h3><p class="center muted small">nearby ' + esc(St.studioName(c.studio_id, c.studio)) + '</p><div class="list" id="sim">' + loading() + '</div>');
   Bruce.similar(c.id).then((cards) => {
-    $('#sim', s.el).innerHTML = cards.length ? cards.map((k) => '<a class="crow" href="#/' + tab + '/class/' + k.id + '" data-close>' +
+    $('#sim', s.el).innerHTML = cards.length ? cards.map((k) => '<a class="crow" href="' + link('class', k.id) + '" data-close>' +
       '<div class="crow-time"><b>' + time(k.start_time) + '</b><small>' + (minutes(k.start_time, k.end_time) || '') + ' min</small></div>' +
       '<div class="crow-body"><h3>' + esc(k.title) + '</h3><p>' + esc(k.studio && k.studio.name) + '</p>' + (k.distance ? '<p class="muted">' + (k.distance < 1000 ? k.distance + ' m' : (k.distance / 1000).toFixed(1).replace('.', ',') + ' km') + '</p>' : '') + '</div></a>').join('')
       : empty('search', 'No similar classes right now.');

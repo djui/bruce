@@ -21,6 +21,15 @@ const pane = $('#pane');
 const wideQuery = window.matchMedia('(min-width: 900px)');
 const isWide = () => wideQuery.matches;
 let current = { tab: null, query: null, detail: null, view: null };
+// Details opened from another detail (a class from a studio's schedule, the studio from a class, a similar class),
+// newest last, so the pane's close button returns to the detail it came from instead of the empty pane.
+// Only links outside the list (the pane, a sheet) stack up; picking another row in the list replaces the detail.
+let backStack = [];
+let linkOutsideList = false;
+document.addEventListener('click', (e) => {
+  const a = e.target.closest && e.target.closest('a[href^="#/"]');
+  linkOutsideList = !!a && !main.contains(a);
+}, true);
 
 function parse() {
   const h = location.hash.replace(/^#\/?/, '');
@@ -60,12 +69,14 @@ function route() {
   if (!r.tab) { location.replace('#/home'); return; }
   const tabChanged = r.tab !== current.tab || r.query !== current.query;
   const detailChanged = JSON.stringify(r.detail) !== JSON.stringify(current.detail);
+  trackBack(r, detailChanged);
   markTab(r.tab);
   document.body.classList.toggle('has-detail', !!r.detail);
   const ctx = {
     tab: r.tab, params: r.params, detail: r.detail, wide: isWide(),
     rerender: () => { current.tab = null; route(); },
-    close: () => { location.hash = '#/' + r.tab + (r.query ? '?' + r.query : ''); },
+    close: () => { location.hash = backStack.length ? backStack[backStack.length - 1] : '#/' + r.tab + (r.query ? '?' + r.query : ''); },
+    link: (kind, id) => '#/' + r.tab + '/' + kind + '/' + id + (r.query ? '?' + r.query : ''),
   };
   if (tabChanged || !current.view) {
     const View = TABS.find((t) => t[0] === r.tab)[3];
@@ -93,8 +104,19 @@ function route() {
     else if (r.detail && r.detail.kind === 'challenge') renderChallenge(el, r.detail.id, ctx);
     else if (isWide()) placeholderPane(el, r.tab);
   }
-  current = Object.assign(current, { tab: r.tab, query: r.query, detail: r.detail });
+  current = Object.assign(current, { tab: r.tab, query: r.query, detail: r.detail, hash: location.hash });
   badges();
+}
+
+function trackBack(r, detailChanged) {
+  const fromDetail = linkOutsideList;
+  linkOutsideList = false;
+  if (!r.detail || r.tab !== current.tab) { backStack = []; return; }
+  if (!detailChanged) return;
+  const at = backStack.indexOf(location.hash);
+  if (at >= 0) { backStack.length = at; return; } // went back (close or browser back) to a detail already on the stack
+  if (current.detail && fromDetail) backStack.push(current.hash);
+  else backStack = [];
 }
 
 // ---------------------------------------------------------------- login
