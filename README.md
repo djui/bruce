@@ -62,7 +62,7 @@ My classes tabs, with class and studio pages and account sheets.
   with a sheet that shows whether your account is linked and opens Parakey.
 - **Book, cancel and join waitlists** through a booking-rules sheet that shows the "book until",
   "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked. A "Free spot"
-  notification does not book for you: the class page then offers Book next to Leave waitlist. A fully booked class also offers **Book when a spot opens** (the auto-book server joins the waitlist for you and books the spot the moment one frees up) and **Similar classes**: nearby classes
+  notification does not book for you: the class page then offers Book next to Leave waitlist. A fully booked class also offers **Book when a spot opens** (the auto-book server joins the waitlist for you and books the spot the moment one frees up; once cancelling would cost a strike it asks first, see [Late spots](server/README.md#late-spots-ask-before-booking-what-costs-a-strike-to-cancel)) and **Similar classes**: nearby classes
   around the same time, as swipeable cards.
 - **Auto-book** a weekly class: switch on "Book every week" on a class page. A class opens for booking a
   fixed time before it starts (7 days for almost all classes), so the apps know the moment in advance. The

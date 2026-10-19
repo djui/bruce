@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { d1 as memoryDB } from "./d1.js";
-import worker, { localParts, localMidnight, matches, opensAt, scanPlan, book, tick, tickUser, watchWaitlists, LoggedOut } from "../src/worker.js";
+import worker, { localParts, localMidnight, matches, opensAt, scanPlan, book, tick, tickUser, watchWaitlists, LoggedOut,
+  freeCancelUntil, lateSpotAction, cancelNote } from "../src/worker.js";
 
 const rule = { id: "r1", studioId: 6614, masterId: 77, title: "Reformer", weekday: 3, minuteOfDay: 18 * 60 };
 // Tue 2026-10-20 18:00 Stockholm (CEST, UTC+2) = 16:00Z
@@ -94,6 +95,8 @@ test("tickUser: books a due class once and pushes the result", async () => {
   assert.equal(apns[0].headers["apns-topic"], "net.dauernheim.bruce");
   assert.match(apns[0].headers.authorization, /^bearer [\w-]+\.[\w-]+\.[\w-]+$/);
   assert.equal(JSON.parse(apns[0].body).aps.alert.title, "Booked: Reformer");
+  assert.equal(JSON.parse(apns[0].body).aps.category, "AUTOBOOK_BOOKED");   // with a Cancel button
+  assert.match(JSON.parse(apns[0].body).aps.alert.body, /Free cancel until 06:00\./);
 });
 
 test("tick: a 401 at booking deletes the user", async () => {
@@ -127,8 +130,9 @@ test("HTTP API: users authenticate with their own Bruce login", async () => {
 
 // MARK: Waitlist watches
 
+// lateSpots "book": these tests run 8 h before the class, where the default ("ask") would only offer the spot.
 const watchUser = (watches, extra = {}) => ({ userId: 42, session: { access_token: "t", user_id: 42 }, rules: [], devices: [],
-  state: { upcoming: [], handled: {}, log: [], lastScan: "x", watches }, ...extra });
+  state: { upcoming: [], handled: {}, log: [], lastScan: "x", watches, lateSpots: "book" }, ...extra });
 const wl = { classId: 5, title: "Reformer", studioId: 6614, start: Date.parse("2026-10-20T16:00:00Z") };
 const NOW = Date.parse("2026-10-20T08:00:00Z");   // 8 hours before: polled every minute
 
@@ -245,4 +249,74 @@ test("email: nothing is sent without a Resend key", async () => {
   const calls = fakeFetch(() => ok({}));
   await watchWaitlists({}, u, NOW, { bookFn: async () => "Booked", classFn: async () => ({ id: 5, available_spots: 1 }) });
   assert.equal(calls.filter((c) => c.url.includes("resend")).length, 0);
+});
+
+// MARK: Late spots (after the free cancellation)
+
+const H = 3600_000;
+
+test("late spots: booked while cancelling is free, then as chosen, under 3 h always offered", () => {
+  const start = wl.start, free = start - 12 * H;
+  assert.equal(freeCancelUntil({ start_time: cls.start_time }), Date.parse(cls.start_time) - 12 * H);
+  assert.equal(freeCancelUntil({ start_time: cls.start_time, unbookable_latest: 7200 }), Date.parse(cls.start_time) - 2 * H);
+  assert.equal(freeCancelUntil({ start_time: cls.start_time, unbookable_latest_time: "2026-10-20T06:00:00Z" }), Date.parse("2026-10-20T06:00:00Z"));
+  for (const pref of [undefined, "ask", "book"]) assert.equal(lateSpotAction(start, free, start - 13 * H, pref), "book");
+  assert.equal(lateSpotAction(start, free, start - 8 * H, undefined), "ask");
+  assert.equal(lateSpotAction(start, free, start - 8 * H, "book"), "book");
+  assert.equal(lateSpotAction(start, free, start - 2 * H, "book"), "ask");
+  assert.match(cancelNote(start, free, start - 13 * H), /^Free cancel until 06:00\./);   // 18:00 in Stockholm
+  assert.match(cancelNote(start, free, start - 8 * H), /Cancel before 15:00: 1 strike/);
+  assert.match(cancelNote(start, free, start - 2 * H), /2 strikes/);
+});
+
+test("late spots: by default a waitlist spot 8 h before is offered once per freed spot, not booked", async () => {
+  const u = watchUser([{ ...wl }]);
+  delete u.state.lateSpots;
+  let spots = 1;
+  const classFn = async () => ({ id: 5, available_spots: spots });
+  const bookFn = async () => assert.fail("booked");
+  await watchWaitlists({}, u, NOW, { bookFn, classFn });
+  assert.equal(u.state.watches.length, 1);
+  assert.equal(u.state.log[0].outcome, "Spot offered (waitlist)");
+  await watchWaitlists({}, u, NOW + 60_000, { bookFn, classFn });
+  assert.equal(u.state.log.length, 1);   // the same free spot is offered once
+  spots = 0;
+  await watchWaitlists({}, u, NOW + 120_000, { bookFn, classFn });
+  spots = 1;
+  await watchWaitlists({}, u, NOW + 180_000, { bookFn, classFn });
+  assert.equal(u.state.log.length, 2);   // freed again: offered again
+});
+
+test("late spots: a spot under 3 h before is offered even with \"book\"; 13 h before it is booked even with \"ask\"", async () => {
+  let u = watchUser([{ ...wl }]);
+  await watchWaitlists({}, u, wl.start - 2 * H, { classFn: async () => ({ id: 5, available_spots: 1 }), bookFn: async () => assert.fail("booked") });
+  assert.equal(u.state.log[0].outcome, "Spot offered (waitlist)");
+  u = watchUser([{ ...wl }]);
+  u.state.lateSpots = "ask";
+  let booked = 0;
+  await watchWaitlists({}, u, wl.start - 13 * H, { classFn: async () => ({ id: 5, available_spots: 1 }), bookFn: async () => { booked++; return "Booked"; } });
+  assert.equal(booked, 1);
+});
+
+test("late spots: a weekly class found after its free cancellation is offered, not booked", async () => {
+  const start = Date.parse(cls.start_time);
+  const u = { userId: 42, session: { access_token: "t" }, rules: [rule], devices: [],
+              state: { upcoming: [{ classId: 1, title: "Reformer", start, opens: start - 7 * 24 * H, freeUntil: start - 12 * H }], handled: {}, log: [], lastScan: "x" } };
+  assert.ok(await tickUser({}, u, start - 5 * H, { bookFn: async () => assert.fail("booked") }));
+  assert.equal(u.state.log[0].outcome, "Offered (opened late)");
+  assert.ok(u.state.handled[1]);
+  assert.equal(u.state.upcoming.length, 0);
+});
+
+test("late spots: PUT /me stores the choice, GET /me returns it (default ask)", async () => {
+  const DB = memoryDB();
+  const ctx = { waitUntil() {} };
+  fakeFetch((url) => (url.includes("/v52/user/42") ? ok({ user: { id: 42 } }) : ok({ classes: [], metadata: {} })));
+  const req = (method, path, body) => new Request(`https://x${path}`, { method, headers: { "X-Access-Token": "t", "X-User-Id": "42" },
+                                                                        body: body && JSON.stringify(body) });
+  await worker.fetch(req("PUT", "/me", { rules: [rule] }), { DB }, ctx);
+  assert.equal((await (await worker.fetch(req("GET", "/me"), { DB }, ctx)).json()).lateSpots, "ask");
+  await worker.fetch(req("PUT", "/me", { rules: [rule], lateSpots: "book" }), { DB }, ctx);
+  await worker.fetch(req("PUT", "/me", { rules: [rule], lateSpots: "nonsense" }), { DB }, ctx);
+  assert.equal((await (await worker.fetch(req("GET", "/me"), { DB }, ctx)).json()).lateSpots, "book");
 });

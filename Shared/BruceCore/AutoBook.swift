@@ -84,6 +84,19 @@ enum AutoBook {
         set { UserDefaults.standard.set(Array(newValue.sorted().suffix(500)), forKey: "autoBookHandled") }
     }
 
+    // MARK: Late spots
+
+    /// Cancelling costs a strike from the class's `unbookable_latest_time` (12 h before) and 2 strikes under 3 h before
+    /// (Copy.swift). So a spot found after the free cancellation is booked or offered as the user chose
+    /// (`AutoBookServer.lateSpots`), and under 3 h before always offered (a notification with a Book button). The server
+    /// decides the same way (`lateSpotAction` in server/src/worker.js).
+    static let alwaysAsk: TimeInterval = 3 * 3600
+    static func offersInstead(start: Date, freeUntil: Date, now: Date = Date(), choice: AutoBookServer.LateSpots) -> Bool {
+        if now < freeUntil { return false }
+        if start.timeIntervalSince(now) < alwaysAsk { return true }
+        return choice == .ask
+    }
+
     /// Full classes the user asked the server to book as soon as a spot on the waitlist frees up.
     static var watchedWaitlists: Set<Int> {
         get { Set((UserDefaults.standard.array(forKey: "autoBookWaitlistWatches") as? [Int]) ?? []) }
@@ -165,11 +178,18 @@ enum AutoBook {
     #if os(iOS)
     static let category = "AUTOBOOK"
     static let bookAction = "AUTOBOOK_BOOK"
+    /// Server pushes: a spot offered instead of booked (Book button), a booking the server made (Cancel button).
+    static let lateSpotCategory = "LATE_SPOT"
+    static let bookedCategory = "AUTOBOOK_BOOKED"
+    static let cancelAction = "AUTOBOOK_CANCEL"
 
     static func registerCategory() {
         let book = UNNotificationAction(identifier: bookAction, title: "Book", options: [])
+        let cancel = UNNotificationAction(identifier: cancelAction, title: "Cancel booking", options: [.destructive, .authenticationRequired])
         UNUserNotificationCenter.current().setNotificationCategories([
             UNNotificationCategory(identifier: category, actions: [book], intentIdentifiers: [], options: []),
+            UNNotificationCategory(identifier: lateSpotCategory, actions: [book], intentIdentifiers: [], options: []),
+            UNNotificationCategory(identifier: bookedCategory, actions: [cancel], intentIdentifiers: [], options: []),
         ])
     }
 
@@ -199,23 +219,58 @@ enum AutoBook {
         }
     }
 
-    /// Handles a tap on the notification or its Book button: books with the stored session and reports the outcome
-    /// as a follow-up notification. Works while the app is in the background.
+    /// Handles a tap on the notification or its Book or Cancel button: books (or cancels) with the stored session and
+    /// reports the outcome as a follow-up notification. Works while the app is in the background.
     static func handle(_ response: UNNotificationResponse) async -> Int? {
-        let info = response.notification.request.content.userInfo
-        // A server push ("Booked: …") only opens the class.
-        if response.notification.request.content.categoryIdentifier == "AUTOBOOK_RESULT" { return info["classId"] as? Int }
-        guard response.notification.request.content.categoryIdentifier == category,
-              let classId = info["classId"] as? Int else { return nil }
-        let opens = (info["opens"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? .distantPast
+        let content = response.notification.request.content
+        let info = content.userInfo
+        guard let classId = info["classId"] as? Int else { return nil }
         let s = TokenStore.resolve()
-        let outcome = await book(token: s?.accessToken ?? "", userId: s?.userId, classId: classId, opens: opens)
-        handled.insert(classId)
+        switch content.categoryIdentifier {
+        case "AUTOBOOK_RESULT":
+            return classId   // a server push ("Not booked: …") only opens the class
+        case bookedCategory:
+            guard response.actionIdentifier == cancelAction else { return classId }
+            await report(await cancel(token: s?.accessToken ?? "", userId: s?.userId, classId: classId), about: content.title, classId: classId)
+            return nil
+        case lateSpotCategory:
+            // Only the Book button books an offered spot; a tap opens the class.
+            guard response.actionIdentifier == bookAction else { return classId }
+            let outcome = await book(token: s?.accessToken ?? "", userId: s?.userId, classId: classId)
+            await report(outcome.message, about: content.title, classId: classId)
+            if outcome == .booked || outcome == .alreadyBooked, let s, watchedWaitlists.contains(classId) {
+                watchedWaitlists.remove(classId)
+                try? await AutoBookServer.watchWaitlist(false, classId: classId, session: s)
+            }
+            return classId
+        case category:
+            let opens = (info["opens"] as? Double).map(Date.init(timeIntervalSince1970:)) ?? .distantPast
+            let outcome = await book(token: s?.accessToken ?? "", userId: s?.userId, classId: classId, opens: opens)
+            handled.insert(classId)
+            await report(outcome.message, about: content.title, classId: classId)
+            return classId
+        default:
+            return nil
+        }
+    }
+
+    /// The follow-up notification: "Booked" / "Cancelled" (or why not) and the class from the original title.
+    private static func report(_ outcome: String, about title: String, classId: Int) async {
         let content = UNMutableNotificationContent()
-        content.title = outcome.message
-        content.body = response.notification.request.content.title.replacingOccurrences(of: "Booking opens: ", with: "")
+        content.title = outcome
+        content.body = title.replacingOccurrences(of: #"^[^:]*: "#, with: "", options: .regularExpression)
         try? await UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "autobook-result-\(classId)", content: content, trigger: nil))
-        return classId
+    }
+
+    /// Cancels the user's booking of a class (the Cancel button on a "Booked" push); late cancelling costs strikes.
+    static func cancel(token: String, userId: Int?, classId: Int) async -> String {
+        guard !token.isEmpty, let userId else { return "Not cancelled: please log in again" }
+        guard let mine = try? await BruceAPI.fetchBookings(token: token, userId: userId, maxPages: 2),
+              let b = mine.first(where: { ($0.classId ?? $0.class?.id) == classId }) else { return "Not cancelled: booking not found" }
+        guard let req = try? BruceAPI.cancelRequest(token: token, bookingId: b.id), let (code, body) = try? await BruceAPI.perform(req) else {
+            return "Not cancelled: no answer"
+        }
+        return (200..<300).contains(code) ? "Cancelled" : "Not cancelled: \(BruceAPI.errorMessage(body) ?? "HTTP \(code)")"
     }
     #endif
 }
@@ -246,6 +301,15 @@ enum AutoBookServer {
         get { UserDefaults.standard.object(forKey: "habitNudges") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "habitNudges") }
     }
+    /// What happens to a spot found after the free cancellation, 3-12 h before the class (under 3 h it is always offered,
+    /// see `AutoBook.offersInstead`). Sent with the rules only once chosen here or read from the server, so a device that
+    /// never showed the setting does not overwrite another's choice.
+    enum LateSpots: String, CaseIterable { case ask, book }
+    static var lateSpots: LateSpots {
+        get { UserDefaults.standard.string(forKey: "autoBookLateSpots").flatMap(LateSpots.init) ?? .ask }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: "autoBookLateSpots") }
+    }
+    static var lateSpotsChosen: Bool { UserDefaults.standard.string(forKey: "autoBookLateSpots") != nil }
     /// Quiet days after the skipped class before the push: 2, 4 (default) or 7 (the next slot's morning).
     static let habitNudgeDayChoices = [2, 4, 7]
     static var habitNudgeDays: Int {
@@ -276,6 +340,8 @@ enum AutoBookServer {
         struct Watch: Decodable, Hashable { let classId: Int; let title: String?; let start: String? }
         /// Full classes the server watches for a free waitlist spot.
         let waitlist: [Watch]?
+        /// "ask" or "book" (`LateSpots`).
+        let lateSpots: String?
     }
 
     static func request(_ method: String, _ path: String, session: Session, body: Any? = nil) throws -> URLRequest {
@@ -291,12 +357,13 @@ enum AutoBookServer {
         return req
     }
 
-    /// `PUT /me`: the rules (same JSON as stored locally), this device's push token, the skipped-habit setting, and
-    /// with them the login.
+    /// `PUT /me`: the rules (same JSON as stored locally), this device's push token, the skipped-habit and late-spot
+    /// settings, and with them the login.
     static func sync(_ rules: [AutoBookRule], session: Session) async throws {
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
         var body: [String: Any] = ["rules": try JSONSerialization.jsonObject(with: enc.encode(rules)), "nudges": habitNudges, "nudgeDays": habitNudgeDays]
         if let t = deviceToken { body["device"] = ["token": t, "env": pushEnvironment] }
+        if lateSpotsChosen { body["lateSpots"] = lateSpots.rawValue }
         try await BruceAPI.send(request("PUT", "me", session: session, body: body))
     }
 
@@ -476,6 +543,11 @@ extension AppModel {
         autoBookUpcoming.removeAll { $0.classId == o.classId }
         AutoBook.handled.insert(o.classId)
         guard booking(forClass: o.classId) == nil else { return }
+        // Opened while the app was not running and cancelling already costs a strike: leave it to the user.
+        if AutoBook.offersInstead(start: o.start, freeUntil: o.start.addingTimeInterval(-43_200), choice: AutoBookServer.lateSpots) {
+            flash("Not booked automatically: \(o.title), \(BruceDate.format(o.start, "EEE HH:mm")). Cancelling would cost a strike; book it yourself if you'll go.")
+            return
+        }
         let outcome = await AutoBook.book(token: token, userId: userId, classId: o.classId, opens: o.opens)
         if outcome == .loggedOut { expireSession() }
         flash("\(outcome.message): \(o.title), \(BruceDate.format(o.start, "EEE HH:mm"))")

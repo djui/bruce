@@ -47,6 +47,12 @@ const WATCH_FAR_EVERY_MIN = 5;
 /// After a failed booking attempt on a free spot the watch waits this long, and is dropped after MAX_WATCH_FAILS.
 const WATCH_RETRY_MS = 5 * 60_000;
 const MAX_WATCH_FAILS = 5;
+/// Late spots (Bruce's strike policy, Copy.swift): cancelling is free until the class's `unbookable_latest_time`
+/// (12 h before when the class does not say), costs 1 strike until 3 h before, then 2, as does a no-show. A spot that
+/// frees up after the free cancellation is booked or offered as the user chose (`lateSpots`, default "ask"); under 3 h
+/// before the class it is always offered: a push with a Book button (category LATE_SPOT), not a booking.
+const FREE_CANCEL_S = 12 * 3600;
+const ALWAYS_ASK_MS = 3 * 3600_000;
 /// The daily history refresh (challenges, goal reminders, Wrapped percentiles); must match a cron in wrangler.toml.
 export const DAILY_CRON = "30 2 * * *";
 /// Bruce requests (booking pages of 30) one daily run may spend; users not refreshed today go first. The Workers free
@@ -122,6 +128,38 @@ export function scanPlan(rules, now) {
     }
   }
   return [...plan.values()];
+}
+
+// MARK: Late spots
+
+/** When cancelling a booking of this class starts to cost a strike. */
+export function freeCancelUntil(c) {
+  const t = c.unbookable_latest_time ? Date.parse(c.unbookable_latest_time) : NaN;
+  if (!Number.isNaN(t)) return t;
+  const s = Number.isFinite(+c.unbookable_latest) && c.unbookable_latest != null ? +c.unbookable_latest : FREE_CANCEL_S;
+  return Date.parse(c.start_time) - s * 1000;
+}
+
+/** "book" or "ask" for a spot that is free now: booked while cancelling is free, then as the user chose, under 3 h asked. */
+export function lateSpotAction(start, freeUntil, now, lateSpots) {
+  if (now < freeUntil) return "book";
+  if (start - now < ALWAYS_ASK_MS) return "ask";
+  return lateSpots === "book" ? "book" : "ask";
+}
+
+const strikes = (start, now) => (start - now < ALWAYS_ASK_MS ? "2 strikes" : "1 strike");
+
+/** The line about cancelling under a "Booked" push. */
+export function cancelNote(start, freeUntil, now) {
+  if (now < freeUntil) return `Free cancel until ${clock(freeUntil)}.`;
+  if (start - now < ALWAYS_ASK_MS) return "Cancelling or a no-show now costs 2 strikes.";
+  return `Can't make it? Cancel before ${clock(start - ALWAYS_ASK_MS)}: 1 strike. After that, or a no-show: 2.`;
+}
+
+/** The push for a spot that is offered instead of booked. */
+export function askMessage(title, start, now, waitlist) {
+  return { title: `${waitlist ? "Spot free" : "Open for booking"}: ${title}`,
+           body: `${when(start)}. Cancelling after booking costs ${strikes(start, now)}. Book only if you'll go.` };
 }
 
 // MARK: Bruce API
@@ -320,9 +358,12 @@ export async function email(env, u, title, body, classId) {
   } catch (e) { console.log("email failed:", e.message); }
 }
 
-/** A booking result: an Apple push to the user's iPhones and an email; drops the devices Apple says are gone. */
-async function notify(env, u, title, body, classId) {
-  const [gone] = await Promise.all([push(env, u.devices, title, body, classId ? { classId } : {}), email(env, u, title, body, classId)]);
+/**
+ * A booking result: an Apple push to the user's iPhones and an email; drops the devices Apple says are gone. Category
+ * AUTOBOOK_BOOKED (a booking: Cancel button), LATE_SPOT (an offered spot: Book button) or AUTOBOOK_RESULT (the rest).
+ */
+async function notify(env, u, title, body, classId, category = "AUTOBOOK_RESULT") {
+  const [gone] = await Promise.all([push(env, u.devices, title, body, classId ? { classId } : {}, category), email(env, u, title, body, classId)]);
   u.devices = u.devices.filter((d) => !gone.includes(d.token));
 }
 
@@ -343,7 +384,8 @@ async function db(env) {
 
 // statsFrom/statsAt/detailFrom: how far back daily_counts (and its detail) are filled and when they were last read;
 // goals: goals with "Reminder when behind" (PUT /me/goals); goalPings: when each goal last pushed a reminder;
-// nudges: false when the user switched off skipped-habit pushes (on by default); nudgeDays: their quiet days (default 4).
+// nudges: false when the user switched off skipped-habit pushes (on by default); nudgeDays: their quiet days (default 4);
+// lateSpots: "book" or "ask" (default) for spots that free up after the free cancellation (see FREE_CANCEL_S).
 const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null, watches: [],
                             goals: [], goalPings: {}, statsFrom: null, statsAt: null, detailFrom: null, nudges: true });
 
@@ -405,7 +447,8 @@ export async function scan(rules, session, state, now) {
       const start = Date.parse(c.start_time);
       if (start <= now || state.handled[c.id] || found.has(c.id)) continue;
       const rule = rules.find((r) => matches(r, c));
-      if (rule) found.set(c.id, { classId: c.id, ruleId: rule.id, title: c.title, studioId: c.studio_id, start, opens: opensAt(c) });
+      if (rule) found.set(c.id, { classId: c.id, ruleId: rule.id, title: c.title, studioId: c.studio_id, start, opens: opensAt(c),
+                                  freeUntil: freeCancelUntil(c) });
     }
   }
   state.upcoming = [...found.values()].sort((a, b) => a.opens - b.opens);
@@ -413,12 +456,14 @@ export async function scan(rules, session, state, now) {
 }
 
 const when = (ms) => new Date(ms).toLocaleString("en-GB", { timeZone: TZ, weekday: "short", hour: "2-digit", minute: "2-digit" });
+const clock = (ms) => new Date(ms).toLocaleString("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit" });
 
 /**
  * Waitlist watches ("book me as soon as a spot frees up"). Bruce does not book waitlisters itself (a "Free spot"
  * only notifies, see API.md), so the server polls the class and books when `available_spots` is above 0.
  * A watch ends when the class is booked, started, gone, or the user removes it; a lost race (someone else was
- * faster) keeps it. Returns false if the login died.
+ * faster) keeps it. After the free cancellation a free spot may be offered instead (`lateSpotAction`): one push per
+ * freed spot (`offered` until the class is full again), and the watch stays. Returns false if the login died.
  */
 export async function watchWaitlists(env, u, now, { bookFn = book, classFn = fetchClass } = {}) {
   const { state, session } = u;
@@ -439,13 +484,24 @@ export async function watchWaitlists(env, u, now, { bookFn = book, classFn = fet
       continue;
     }
     if (!c || c.deleted || c.deleted_at || c.canceled) { keep.pop(); continue; }
-    if (!(c.available_spots > 0)) continue;
+    if (!(c.available_spots > 0)) { delete w.offered; continue; }
+    const start = Date.parse(c.start_time) || w.start;
+    const freeUntil = freeCancelUntil({ ...c, start_time: new Date(start).toISOString() });
+    if (lateSpotAction(start, freeUntil, now, state.lateSpots) === "ask") {
+      if (w.offered) continue;
+      w.offered = true;
+      state.log.unshift({ classId: w.classId, title: w.title, at: new Date().toISOString(), outcome: "Spot offered (waitlist)" });
+      const m = askMessage(w.title, start, now, true);
+      await notify(env, u, m.title, m.body, w.classId, "LATE_SPOT");
+      continue;
+    }
     const outcome = await bookFn(session, { classId: w.classId, opens: 0 });
     if (outcome === "Login expired") { ok = false; continue; }
     if (outcome === "Booked" || outcome === "Already booked") {
       keep.pop();
       state.log.unshift({ classId: w.classId, title: w.title, at: new Date().toISOString(), outcome: `${outcome} (waitlist)` });
-      await notify(env, u, `${outcome}: ${w.title}`, `${when(w.start)} · a waitlist spot opened`, w.classId);
+      await notify(env, u, `${outcome}: ${w.title}`, `${when(w.start)} · a waitlist spot opened. ${cancelNote(start, freeUntil, now)}`,
+                   w.classId, "AUTOBOOK_BOOKED");
       continue;
     }
     // Spot taken by someone else in the meantime, or Bruce refuses (visit limit, ...): wait and look again.
@@ -461,18 +517,33 @@ export async function watchWaitlists(env, u, now, { bookFn = book, classFn = fet
   return ok;
 }
 
-/** One user's minute: book what opens now, rescan when it is this user's turn. Returns false if the login died. */
+/**
+ * One user's minute: book what opens now, rescan when it is this user's turn. A class that only opens (or is only
+ * found) after its free cancellation is offered instead as `lateSpotAction` says. Returns false if the login died.
+ */
 export async function tickUser(env, u, now, { force = false, bookFn = book, classFn = fetchClass } = {}) {
   const { rules, session, state } = u;
   let loggedOut = false;
   const due = state.upcoming.filter((o) => o.opens <= now + DUE_AHEAD_MS && o.start > now && !state.handled[o.classId]);
-  const results = await Promise.all(due.map((o) => bookFn(session, o).then((outcome) => ({ o, outcome }))));
+  // At the open moment; an occurrence from before freeUntil was stored counts 12 h.
+  const freeUntil = (o) => o.freeUntil ?? o.start - FREE_CANCEL_S * 1000;
+  const at = (o) => Math.max(now, o.opens);
+  const offer = due.filter((o) => lateSpotAction(o.start, freeUntil(o), at(o), state.lateSpots) === "ask");
+  for (const o of offer) {
+    state.handled[o.classId] = o.start;
+    state.log.unshift({ classId: o.classId, title: o.title, at: new Date().toISOString(), outcome: "Offered (opened late)" });
+    const m = askMessage(o.title, o.start, at(o), false);
+    await notify(env, u, m.title, m.body, o.classId, "LATE_SPOT");
+  }
+  const results = await Promise.all(due.filter((o) => !offer.includes(o)).map((o) => bookFn(session, o).then((outcome) => ({ o, outcome }))));
   for (const { o, outcome } of results) {
     // Tried once: an auto-booked class that is cancelled later is not booked again.
     state.handled[o.classId] = o.start;
     state.log.unshift({ classId: o.classId, title: o.title, at: new Date().toISOString(), outcome });
     if (outcome === "Login expired") { loggedOut = true; continue; }
-    await notify(env, u, `${outcome}: ${o.title}`, `${when(o.start)} · auto-book`, o.classId);
+    const booked = outcome === "Booked" || outcome === "Already booked";
+    await notify(env, u, `${outcome}: ${o.title}`, `${when(o.start)} · auto-book${booked ? `. ${cancelNote(o.start, freeUntil(o), at(o))}` : ""}`,
+                 o.classId, booked ? "AUTOBOOK_BOOKED" : "AUTOBOOK_RESULT");
   }
   state.upcoming = state.upcoming.filter((o) => !state.handled[o.classId] && o.start > now);
   if (state.watches?.length && !loggedOut && !(await watchWaitlists(env, u, now, { bookFn, classFn }))) loggedOut = true;
@@ -945,6 +1016,7 @@ export default {
         if (d) u.devices = [d, ...u.devices.filter((x) => x.token !== d.token)].slice(0, MAX_DEVICES);
         if (typeof body.nudges === "boolean") u.state.nudges = body.nudges;
         if (cleanLapseDays(body.nudgeDays)) u.state.nudgeDays = body.nudgeDays;
+        if (body.lateSpots === "book" || body.lateSpots === "ask") u.state.lateSpots = body.lateSpots;
         if (rulesChanged) await tickUser(env, u, Date.now(), { force: true }).catch((e) => console.log("scan failed:", e.message));
         await saveUser(env, u);
         return json({ ok: true, rules: u.rules.length, push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
@@ -956,7 +1028,7 @@ export default {
                       upcoming: (u?.state.upcoming ?? []).map(opens),
                       waitlist: (u?.state.watches ?? []).map((w) => ({ classId: w.classId, title: w.title, start: new Date(w.start).toISOString() })), log: u?.state.log ?? [], devices: u?.devices.length ?? 0,
                       email: u ? emailTo(env, u) : null, nudges: u ? u.state.nudges !== false : true,
-                      nudgeDays: u?.state.nudgeDays ?? LAPSE_DAYS });
+                      nudgeDays: u?.state.nudgeDays ?? LAPSE_DAYS, lateSpots: u?.state.lateSpots ?? "ask" });
       }
       case "DELETE /me": {
         // Auto-book off: forget rules, watches and goals. The login stays while the user is in a challenge.
