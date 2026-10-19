@@ -83,11 +83,12 @@ export async function renderClass(el, id, ctx) {
     } else if (standby) {
       actions = '<div class="row2"><button class="btn red" data-dact="leave">Leave waitlist</button>' +
         (c.available_spots > 0 ? '<button class="btn lime" data-dact="book">Book</button>' : '<button class="btn glass" data-dact="similar">Similar classes</button>') + '</div>';
+    } else if (c.available_spots != null && c.available_spots <= 0) {
+      // Full: the waitlist comes before the visit-limit drop-in ("Buy for SEK n").
+      actions = '<div class="row2"><button class="btn orange" data-dact="join">Join waitlist</button><button class="btn glass" data-dact="similar">Similar classes</button></div>';
     } else if (att.visit_limit_reached) {
       actions = att.price > 0 ? '<button class="btn lime" data-dact="dropin">Buy for ' + esc(money(att.price, att.currency || c.currency)) + '</button>'
         : '<button class="btn glass" disabled>Visit limit reached</button>';
-    } else if (c.available_spots != null && c.available_spots <= 0) {
-      actions = '<div class="row2"><button class="btn orange" data-dact="join">Join waitlist</button><button class="btn glass" data-dact="similar">Similar classes</button></div>';
     } else if (r.bookUntil < now) {
       actions = '<button class="btn glass" disabled>Booking has closed</button>';
     } else {

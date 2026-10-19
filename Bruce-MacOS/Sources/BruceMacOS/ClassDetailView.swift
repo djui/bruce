@@ -100,6 +100,15 @@ struct ClassDetailView: View {
                             else { similarButton(c) }
                         }
                         .padding(.top, 24)
+                    } else if (c.availableSpots ?? 1) <= 0 {
+                        // Fully booked: waitlist plus "Similar classes", as in the official app. Comes before the
+                        // visit-limit drop-in, so a full class offers the waitlist rather than "Buy for SEK n".
+                        HStack(spacing: 12) {
+                            RedButton(title: "Join waitlist") { Task { await m.joinWaitlist(c.id) } }
+                            similarButton(c)
+                        }
+                        .padding(.top, 24)
+                        if m.visitLimitReached(c) { limitNotice.padding(.top, 16) }
                     } else if m.visitLimitReached(c) {
                         // Plan's visits at this studio are used up: the original offers a paid drop-in instead of
                         // Book. The purchase call was never captured, so the button only explains that.
@@ -110,13 +119,6 @@ struct ClassDetailView: View {
                                 .frame(maxWidth: .infinity).frame(height: 54).background(Capsule().fill(Theme.chipGrey)).padding(.top, 24)
                         }
                         limitNotice.padding(.top, 16)
-                    } else if (c.availableSpots ?? 1) <= 0 {
-                        // Fully booked: waitlist plus "Similar classes", as in the official app.
-                        HStack(spacing: 12) {
-                            RedButton(title: "Join waitlist") { Task { await m.joinWaitlist(c.id) } }
-                            similarButton(c)
-                        }
-                        .padding(.top, 24)
                     } else {
                         LimeButton(title: "Book") { m.present(.bookingRules(c.id)) }.padding(.top, 24)
                     }

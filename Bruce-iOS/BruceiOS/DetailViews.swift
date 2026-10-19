@@ -170,6 +170,16 @@ struct ClassDetailView: View {
                     if (c.availableSpots ?? 0) > 0 { LimeButton(title: "Book") { m.present(.bookingRules(c.id)) } }
                     else { similarButton(c) }
                 }
+            } else if (c.availableSpots ?? 1) <= 0 {
+                // Fully booked: waitlist plus "Similar classes", as in the official app. Comes before the
+                // visit-limit drop-in, so a full class offers the waitlist rather than "Buy for SEK n".
+                HStack(spacing: 10) {
+                    Button { Task { await m.joinWaitlist(c.id) } } label: {
+                        Text("Join waitlist").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
+                    }
+                    .buttonStyle(.glassProminent).tint(Theme.waitlistOrange).controlSize(.large)
+                    similarButton(c)
+                }
             } else if limitReached(c) {
                 // Plan's visits at this studio are used up: the original offers a paid drop-in instead of Book.
                 // The purchase call was never captured, so the button only explains that.
@@ -180,15 +190,6 @@ struct ClassDetailView: View {
                         Text("Visit limit reached").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
                     }
                     .buttonStyle(.glass).controlSize(.large).disabled(true)
-                }
-            } else if (c.availableSpots ?? 1) <= 0 {
-                // Fully booked: waitlist plus "Similar classes", as in the official app.
-                HStack(spacing: 10) {
-                    Button { Task { await m.joinWaitlist(c.id) } } label: {
-                        Text("Join waitlist").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
-                    }
-                    .buttonStyle(.glassProminent).tint(Theme.waitlistOrange).controlSize(.large)
-                    similarButton(c)
                 }
             } else {
                 LimeButton(title: "Book") { m.present(.bookingRules(c.id)) }
