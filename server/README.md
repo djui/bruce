@@ -47,6 +47,24 @@ Bruce does not book waitlisters itself: a "Free spot" notification only tells th
 - Each user's watches are separate and use that user's own login. Web users have no push device, so they see the
   result in My classes.
 
+### Late spots: ask before booking what costs a strike to cancel
+
+Bruce's strike policy: cancelling is free until `unbookable_latest_time` (12 hours before the class), costs 1 strike
+up to 3 hours before and 2 strikes after that; a no-show costs 2. A spot booked late can't be given back for free, so
+the server only books freely while cancelling is free (`lateSpotAction` in `src/worker.js`):
+
+| Spot is free | What the server does |
+|---|---|
+| 12 h or more before (before the free-cancel deadline) | Books it |
+| 3-12 h before | As the user chose: `lateSpots` `"ask"` (default) or `"book"` (the apps' Auto-book setting "Spot opens 3-12 h before") |
+| Under 3 h before | Always asks |
+
+"Ask" is a push with a **Book** button (category `LATE_SPOT`, payload `{"classId"}`) and the same email, sent once per
+freed spot (`offered` on the watch until the class is full again); the watch keeps going. The same applies to a weekly
+class that only opens or is only found after its free cancellation ("Open for booking: …", logged as "Offered (opened
+late)"). Booking pushes (category `AUTOBOOK_BOOKED`, a **Cancel booking** button in the iPhone app) say what cancelling
+costs now: "Free cancel until 06:00." or "Cancel before 15:00: 1 strike. After that, or a no-show: 2."
+
 ## Challenges with friends
 
 Bruce does not show friends' past visits, so challenges need the server: each participant's row holds their login,
@@ -149,8 +167,8 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 
 | Request | Body | Effect |
 |---|---|---|
-| `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes, `nudgeDays` (1-7, default 4) sets their quiet days |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays}` |
+| `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true,"lateSpots":"ask"}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes, `nudgeDays` (1-7, default 4) sets their quiet days; `lateSpots` (optional, `ask` or `book`, default `ask`) is what happens to a spot 3-12 h before the class (see "Late spots") |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots}` |
 | `DELETE /me` | | Deletes the user's row and history; in a challenge it keeps the login and clears rules, watches and goals |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |

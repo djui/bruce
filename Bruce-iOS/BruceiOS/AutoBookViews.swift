@@ -11,6 +11,7 @@ struct AutoBookView: View {
     @State private var booksForMe = AutoBookServer.booksForMe
     @State private var habitNudges = AutoBookServer.habitNudges
     @State private var habitNudgeDays = AutoBookServer.habitNudgeDays
+    @State private var lateSpots = AutoBookServer.lateSpots
     @State private var showServerFields = false
 
     var body: some View {
@@ -32,6 +33,19 @@ struct AutoBookView: View {
                 }))
                 if booksForMe, let s = server { serverSummary(s) }
                 if booksForMe {
+                    Picker(selection: Binding(get: { lateSpots }, set: { v in
+                        lateSpots = v
+                        AutoBookServer.lateSpots = v
+                        run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                    })) {
+                        Text("Ask me first").tag(AutoBookServer.LateSpots.ask)
+                        Text("Book it").tag(AutoBookServer.LateSpots.book)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Spot opens 3–12 h before")
+                            Text(AutoBookCopy.lateSpots).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                        }
+                    }
                     Toggle(isOn: Binding(get: { habitNudges }, set: { on in
                         habitNudges = on
                         AutoBookServer.habitNudges = on
@@ -94,6 +108,8 @@ struct AutoBookView: View {
     func loadServer() async {
         guard AutoBookServer.isConfigured, AutoBookServer.booksForMe, let s = m.session else { server = nil; return }
         server = try? await AutoBookServer.status(session: s)
+        // The server's choice may come from another device.
+        if let v = server?.lateSpots.flatMap(AutoBookServer.LateSpots.init) { AutoBookServer.lateSpots = v; lateSpots = v }
     }
 
     func run(_ op: @escaping () async throws -> Void) {
@@ -116,6 +132,7 @@ enum AutoBookCopy {
     static func habitNudges(days: Int) -> String {
         "Did a class 3 weeks in a row, then skipped it and booked nothing for \(days) days? You get a morning notification with classes picked from your history."
     }
+    static let lateSpots = "Cancelling then costs a strike. Ask me first sends a notification with a Book button instead. Under 3 h before, when cancelling costs 2 strikes, you're always asked; 12 h or more before, it's always booked."
     static let server = "Books even when your phone is locked or offline: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login to book with; switching it off removes your login and classes from the server."
 }
 

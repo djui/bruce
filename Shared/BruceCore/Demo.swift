@@ -232,6 +232,7 @@ extension AppModel {
         case "strikes": sheets = [.account, .strikes]
         case "payment": sheets = [.account, .payment]
         case "settings": present(.settings)
+        case "autobook": present(.autoBook)
         case "checkin": present(.checkIn)
         case "categories": push(.categories)
         case "category": push(.category(2)); demoCategoryTab = 1

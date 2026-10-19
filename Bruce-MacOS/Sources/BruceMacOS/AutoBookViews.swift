@@ -8,6 +8,7 @@ struct AutoBookView: View {
     @State private var server: AutoBookServer.Status?
     @State private var working = false
     @State private var booksForMe = AutoBookServer.booksForMe
+    @State private var lateSpots = AutoBookServer.lateSpots
     @State private var showServerFields = false
 
     var body: some View {
@@ -41,6 +42,23 @@ struct AutoBookView: View {
                             }))
                         }
                         if booksForMe, let s = server { serverSummary(s) }
+                        if booksForMe {
+                            HStack {
+                                Text("Spot opens 3–12 h before").font(.system(size: 17, weight: .medium))
+                                Spacer()
+                                Picker("", selection: Binding(get: { lateSpots }, set: { v in
+                                    lateSpots = v
+                                    AutoBookServer.lateSpots = v
+                                    run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                                })) {
+                                    Text("Ask me first").tag(AutoBookServer.LateSpots.ask)
+                                    Text("Book it").tag(AutoBookServer.LateSpots.book)
+                                }
+                                .labelsHidden().fixedSize()
+                            }
+                            Text(AutoBookCopy.lateSpots).font(.system(size: 14, weight: .light)).foregroundStyle(Theme.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                         if let n = m.autoBookServerNote { Text(n).foregroundStyle(.red).font(.system(size: 14)) }
                         DisclosureGroup("Server address", isExpanded: $showServerFields) {
                             VStack(alignment: .leading, spacing: 10) {
@@ -95,6 +113,8 @@ struct AutoBookView: View {
     func loadServer() async {
         guard AutoBookServer.isConfigured, AutoBookServer.booksForMe, let s = m.session else { server = nil; return }
         server = try? await AutoBookServer.status(session: s)
+        // The server's choice may come from another device.
+        if let v = server?.lateSpots.flatMap(AutoBookServer.LateSpots.init) { AutoBookServer.lateSpots = v; lateSpots = v }
     }
 
     func run(_ op: @escaping () async throws -> Void) {
@@ -114,6 +134,7 @@ struct ServerError: LocalizedError {
 
 enum AutoBookCopy {
     static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. While this app is running (and the Mac is awake) it books the class the moment it opens. Cancelling an auto-booked class does not rebook it."
+    static let lateSpots = "Cancelling then costs a strike. Ask me first sends a notification with a Book button to your iPhone (and an email) instead. Under 3 h before, when cancelling costs 2 strikes, you're always asked; 12 h or more before, it's always booked."
     static let server = "Books even when no device is awake: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes your login and classes from the server."
 }
 

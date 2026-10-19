@@ -32,7 +32,7 @@ xcodebuild -project BruceiOS.xcodeproj -scheme BruceiOS \
 This is the real app; demo mode exists only for screenshots and tests and is never reachable from the UI.
 Launch argument `-BRUCE_DEMO 1` (also in the scheme, disabled) or env `BRUCE_DEMO=1`. No API calls, no remote images, no map tiles; book, cancel and check-in only
 change local state. `BRUCE_SCREEN=<name>` opens a screen directly (same names as macOS: `explore`, `classes`,
-`detail`, `studio`, `checkin`, `myclasses`, `friends`, `notifications`, `menu`, `account`, `settings`,
+`detail`, `studio`, `checkin`, `myclasses`, `friends`, `notifications`, `menu`, `account`, `settings`, `autobook`,
 `rules`, `booked`, `filter`, `search`, `welcome`, `parakey`, …). The insight features add `foryou` (all picks),
 `places`, `editplace`, `goals`, `goalscard` (My classes with the goals card), `newgoal`, `challenges` (Friends ›
 Challenges), `challenge`, `challengemember` (a participant's detail), `newchallenge`, `wrapped` and `wrappedshare`
