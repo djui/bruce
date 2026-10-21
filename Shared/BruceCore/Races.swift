@@ -70,6 +70,28 @@ struct PriceStep: Codable, Hashable {
     func applies(on day: String) -> Bool { (from.map { $0 <= day } ?? true) && (until.map { day <= $0 } ?? true) }
 }
 
+/// One way to enter a race ("Doubles", "15 km", "Team of 4+"), with its own distance, team size and fees when the
+/// race prices them apart. The member picks one in "Your race"; its code is saved with the race in My races.
+struct RaceFormat: Codable, Hashable, Identifiable {
+    var code: String
+    var title: String
+    var distanceKm: Double? = nil
+    /// People per entry: 1 solo, 2 doubles, 4 a relay; nil when the race doesn't say.
+    var teamSize: Int? = nil
+    /// Fees for this format, as `Race.priceSteps`; nil when the race's own steps apply.
+    var priceSteps: [PriceStep]? = nil
+    /// "Open or Pro", "Also as a corporate team".
+    var note: String? = nil
+    var id: String { code }
+
+    var steps: [PriceStep] { (priceSteps ?? []).sorted { ($0.from ?? $0.until ?? "") < ($1.from ?? $1.until ?? "") } }
+    /// "Doubles · 2 people" / "15 km".
+    var detail: String? {
+        [distanceKm.map { RaceMoney.number($0, decimals: 1) + " km" }, teamSize.flatMap { $0 > 1 ? "\($0) people" : nil }, note].compactMap { $0 }
+            .joined(separator: " · ").nilIfEmpty
+    }
+}
+
 /// A catalog race (or a race added by hand, see `MyRace.resolved`). Dates are local race days, "2027-05-15".
 struct Race: Codable, Identifiable, Hashable {
     var id: String
@@ -98,6 +120,14 @@ struct Race: Codable, Identifiable, Hashable {
     var resultsUrl: String? = nil
     /// The day the facts were read off the race's own page; empty for a race added by hand.
     var checkedOn: String
+    /// Ways to enter, when the race prices or sizes them apart (HYROX singles, doubles, relay).
+    var formats: [RaceFormat]? = nil
+    /// The organiser's rule for changes, refunds and transfers, as its page words it.
+    var changeRule: String? = nil
+    /// How the start works: "Start wave by email a few days before. Be there 90 minutes early."
+    var startInfo: String? = nil
+    /// How long before the start wave the organiser wants you there (HYROX: 90).
+    var arriveMinutesBefore: Int? = nil
 
     static let customPrefix = "custom-"
     /// Added by hand (My races), not from the catalog.
@@ -187,6 +217,21 @@ struct Race: Codable, Identifiable, Hashable {
         let today = RaceDay.today(now)
         return steps.last { $0.applies(on: today) }
     }
+
+    // MARK: Formats
+
+    var hasFormats: Bool { !(formats ?? []).isEmpty }
+    /// A format by its code; nil for an unknown code (a format the catalog dropped).
+    func format(_ code: String?) -> RaceFormat? { code.flatMap { c in formats?.first { $0.code == c } } }
+    /// The fees of a format: its own steps, else the race's.
+    func steps(for format: RaceFormat?) -> [PriceStep] { format?.priceSteps == nil ? steps : (format?.steps ?? []) }
+    /// Today's fee for a format (the race's when the format has none of its own).
+    func currentStep(for format: RaceFormat?, now: Date = Date()) -> PriceStep? {
+        let today = RaceDay.today(now)
+        return steps(for: format).last { $0.applies(on: today) }
+    }
+    /// "Be there by 12:50" needs the start wave; HYROX wants 90 minutes, others an hour by default.
+    var arriveMinutes: Int { arriveMinutesBefore ?? 60 }
     /// The next known step with a later start day.
     func nextStep(now: Date = Date()) -> PriceStep? {
         let today = RaceDay.today(now)
@@ -253,9 +298,10 @@ struct Race: Codable, Identifiable, Hashable {
 extension Race {
     enum CodingKeys: String, CodingKey {
         case id, name, type, sport, date, endDate, city, country, venue, distancesKm, format, signupUrl, platform, priceNote, priceSteps,
-             status, opensOn, klassiker, resultsUrl, checkedOn
+             status, opensOn, klassiker, resultsUrl, checkedOn, formats, changeRule, startInfo, arriveMinutesBefore
     }
     /// Required: id, name, type, date, signupUrl, status. Everything else may be missing (distances then empty).
+    /// Formats this version can't read are dropped one by one, not the race.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         self.init(id: try c.decode(String.self, forKey: .id), name: try c.decode(String.self, forKey: .name),
@@ -269,7 +315,12 @@ extension Race {
                   priceSteps: try c.decodeIfPresent([PriceStep].self, forKey: .priceSteps), status: try c.decode(RaceStatus.self, forKey: .status),
                   opensOn: try c.decodeIfPresent(String.self, forKey: .opensOn), klassiker: try c.decodeIfPresent(Bool.self, forKey: .klassiker),
                   resultsUrl: try c.decodeIfPresent(String.self, forKey: .resultsUrl),
-                  checkedOn: try c.decodeIfPresent(String.self, forKey: .checkedOn) ?? "")
+                  checkedOn: try c.decodeIfPresent(String.self, forKey: .checkedOn) ?? "",
+                  formats: (try? c.decodeIfPresent([Lossy<RaceFormat>].self, forKey: .formats))?.compactMap(\.value).filter { !$0.code.isEmpty && !$0.title.isEmpty },
+                  changeRule: try? c.decodeIfPresent(String.self, forKey: .changeRule),
+                  startInfo: try? c.decodeIfPresent(String.self, forKey: .startInfo),
+                  arriveMinutesBefore: (try? c.decodeIfPresent(Int.self, forKey: .arriveMinutesBefore)).flatMap { $0 > 0 ? $0 : nil })
+        if formats?.isEmpty == true { formats = nil }
     }
 
     /// Every date in the entry is a real day (and the event doesn't end before it starts), so the apps can show it.
@@ -277,6 +328,36 @@ extension Race {
         func ok(_ d: String?) -> Bool { d.map { RaceDay.date($0) != nil } ?? true }
         return RaceDay.date(date) != nil && ok(endDate) && (endDate ?? date) >= date && ok(opensOn)
             && (checkedOn.isEmpty || ok(checkedOn)) && (priceSteps ?? []).allSatisfy { ok($0.from) && ok($0.until) }
+            && (formats ?? []).allSatisfy { $0.steps.allSatisfy { ok($0.from) && ok($0.until) } }
+    }
+}
+
+/// Start waves and arrival times as "HH:mm" on the race day (local time), typed by the member.
+enum RaceClock {
+    /// "14:20" (also "14.20", "1420", "9:05") as minutes after midnight; nil when it isn't a time of day.
+    static func minutes(_ s: String?) -> Int? {
+        guard let s = s?.trimmingCharacters(in: .whitespaces), !s.isEmpty else { return nil }
+        let digits = s.filter(\.isNumber)
+        guard digits.count == s.filter { $0 != ":" && $0 != "." && $0 != " " }.count, (3...4).contains(digits.count) else { return nil }
+        guard let h = Int(digits.dropLast(2)), let m = Int(digits.suffix(2)), (0...23).contains(h), (0...59).contains(m) else { return nil }
+        return h * 60 + m
+    }
+    /// "09:05".
+    static func text(_ minutes: Int) -> String {
+        let m = ((minutes % 1440) + 1440) % 1440
+        return String(format: "%02d:%02d", m / 60, m % 60)
+    }
+    /// The typed time, tidied ("1420" → "14:20"); nil when it isn't one.
+    static func normalized(_ s: String?) -> String? { minutes(s).map(text) }
+    /// "12:50": the start wave less the minutes the organiser wants you there before it.
+    static func arriveBy(wave: String?, minutesBefore: Int) -> String? {
+        guard let w = minutes(wave) else { return nil }
+        return text(max(0, w - minutesBefore))
+    }
+    /// The moment on the race day, for calendar events and workouts; nil without a readable time.
+    static func date(_ day: String, _ time: String?) -> Date? {
+        guard let m = minutes(time), let d = RaceDay.date(day) else { return nil }
+        return BruceDate.calendar.date(bySettingHour: m / 60, minute: m % 60, second: 0, of: d)
     }
 }
 
@@ -381,6 +462,22 @@ enum Races {
 
     static func fold(_ s: String) -> String { s.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: nil) }
 
+    /// Home's "Upcoming races": the next catalog races by date that aren't in My races, open or opening (sold-out
+    /// and lottery races stay in Explore), at most `limit`. Races in the member's country first when they have one.
+    static func upcomingOnHome(_ races: [Race], mine: [MyRace], country: String? = nil, now: Date = Date(), limit: Int = 8) -> [Race] {
+        let have = Set(mine.compactMap(\.raceId))
+        let list = sorted(races).filter { !$0.isPast(now: now) && !have.contains($0.id) && ($0.status == .open || $0.status == .opensSoon) }
+        guard let country, list.contains(where: { $0.country == country }) else { return Array(list.prefix(limit)) }
+        return Array((list.filter { $0.country == country } + list.filter { $0.country != country }).prefix(limit))
+    }
+    /// The carousel pill: the next price step ("750 → 775 SEK on 1 Nov"), else the list pill ("From 1,295 SEK", "Opens 1 Nov").
+    static func homePill(_ r: Race, now: Date = Date()) -> String {
+        if r.status == .open, let c = r.currentStep(now: now), let n = r.nextStep(now: now), let f = n.from, c.currency == n.currency {
+            return "\(RaceMoney.grouped(c.amount)) → \(RaceMoney.grouped(n.amount)) \(n.currency.uppercased()) on \(RaceDay.format(f, "d MMM"))"
+        }
+        return r.pillText(now: now)
+    }
+
     /// A link typed for a race added by hand: "toughviking.se" -> https://toughviking.se; nil without a host.
     static func webURL(_ s: String) -> URL? {
         let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -410,8 +507,16 @@ struct MyRace: Codable, Identifiable, Hashable {
     var sport: RaceSport?
     /// The member's day of a multi-day event (their HYROX heat), else nil.
     var day: String?
-    /// Their start, "Doubles Open" or "10 km".
+    /// Their start, "Doubles Open" or "10 km"; with a catalog format, the rest of it ("Open").
     var note: String?
+    /// The catalog format they enter (`Race.formats` code), else nil.
+    var format: String?
+    /// Their start wave or start time on the race day, "14:20", added by hand when the organiser sends it.
+    var wave: String?
+    /// Their bib number, as the organiser gives it.
+    var bib: String?
+    /// "Remind me to add my start wave": a notification three days before race day while `wave` is empty.
+    var remindWave = false
     var remindSignup = false
     var remindPrice = false
     /// "Race week" (08:00 on the Monday of race week) and "the day before" (18:00) reminders (RaceReminders).
@@ -436,7 +541,8 @@ struct MyRace: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, raceId, name, date, endDate, city, url, type, sport, day, note, remindSignup, remindPrice, remindWeek, remindEve, plan, going, goingAt, addedAt
+        case id, raceId, name, date, endDate, city, url, type, sport, day, note, format, wave, bib, remindWave, remindSignup, remindPrice, remindWeek, remindEve,
+             plan, going, goingAt, addedAt
     }
     /// Missing fields get their defaults, so files written by older and newer versions both load.
     init(from decoder: Decoder) throws {
@@ -452,6 +558,10 @@ struct MyRace: Codable, Identifiable, Hashable {
         sport = try? c.decodeIfPresent(RaceSport.self, forKey: .sport)
         day = try c.decodeIfPresent(String.self, forKey: .day)
         note = try c.decodeIfPresent(String.self, forKey: .note)
+        format = try? c.decodeIfPresent(String.self, forKey: .format)
+        wave = try? c.decodeIfPresent(String.self, forKey: .wave)
+        bib = try? c.decodeIfPresent(String.self, forKey: .bib)
+        remindWave = (try? c.decodeIfPresent(Bool.self, forKey: .remindWave)) ?? false
         remindSignup = try c.decodeIfPresent(Bool.self, forKey: .remindSignup) ?? false
         remindPrice = try c.decodeIfPresent(Bool.self, forKey: .remindPrice) ?? false
         remindWeek = (try? c.decodeIfPresent(Bool.self, forKey: .remindWeek)) ?? false
@@ -483,10 +593,22 @@ struct MyRaceEntry: Identifiable, Hashable {
     var day: String { mine.day ?? race.date }
     func daysToGo(now: Date = Date()) -> Int? { RaceDay.days(until: day, now: now) }
     func isPast(now: Date = Date()) -> Bool { race.isPast(day: mine.day, now: now) }
-    /// "Sat 12 Dec · Doubles Open".
-    var whenLine: String {
-        ([RaceDay.format(day, "EEE d MMM")] + [mine.note].compactMap { $0?.isEmpty == false ? $0 : nil }).joined(separator: " · ")
+    /// The catalog format the member picked, when the catalog still has it.
+    var format: RaceFormat? { race.format(mine.format) }
+    /// "Doubles · Open" (format and note), "10 km" (note alone), nil without either.
+    var startText: String? {
+        [format?.title, mine.note].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " · ").nilIfEmpty
     }
+    /// "Sat 12 Dec · Doubles · Open".
+    var whenLine: String {
+        ([RaceDay.format(day, "EEE d MMM")] + [startText].compactMap { $0 }).joined(separator: " · ")
+    }
+    /// The member's start wave, tidied; nil until they add one.
+    var wave: String? { RaceClock.normalized(mine.wave) }
+    /// "12:50": when the organiser wants them there (the wave less `Race.arriveMinutes`).
+    var arriveBy: String? { RaceClock.arriveBy(wave: mine.wave, minutesBefore: race.arriveMinutes) }
+    /// Race day is today (the member's day of the event).
+    func isRaceDay(now: Date = Date()) -> Bool { daysToGo(now: now) == 0 }
     /// What happens next for this race: "Sign-up opens 1 Nov · reminder on", "775 SEK from 1 Nov", or the status.
     func hint(now: Date = Date()) -> String? {
         let r = race
@@ -628,6 +750,13 @@ enum RaceReminders {
     static func eveTime(_ day: String) -> Date? {
         RaceDay.adding(-1, to: day).flatMap(RaceDay.date).flatMap { BruceDate.calendar.date(bySettingHour: 18, minute: 0, second: 0, of: $0) }
     }
+    /// 18:00 three days before race day: start waves come by email or SMS a few days before (HYROX: about three).
+    static func waveTime(_ day: String) -> Date? {
+        RaceDay.adding(-3, to: day).flatMap(RaceDay.date).flatMap { BruceDate.calendar.date(bySettingHour: 18, minute: 0, second: 0, of: $0) }
+    }
+    static func waveBody(_ r: Race, day: String) -> String {
+        "\(RaceDay.format(day, "EEEE")) is race day. When your start wave or start time arrives, add it in My races: the race-day card then says when to be there."
+    }
     /// "Saturday is race day. Your class mix this week: 1 Hyrox and 1 Mobility."
     static func weekBody(_ r: Race, day: String, plan: RacePlan?) -> String {
         var s = "\(RaceDay.format(day, "EEEE")) is race day."
@@ -665,6 +794,10 @@ enum RaceReminders {
             let eve = m.remindEve || (m.remindWeek && weekTime(day) == nil)
             if local, eve, let fire = eveTime(day), fire > now {
                 out.append(Planned(id: "\(idPrefix)eve-\(m.key)", raceId: m.key, fire: fire, title: "Tomorrow: \(r.name)", body: eveBody(r)))
+            }
+            // Always local: only this device knows whether the wave was added.
+            if m.remindWave, RaceClock.minutes(m.wave) == nil, let fire = waveTime(day), fire > now {
+                out.append(Planned(id: "\(idPrefix)wave-\(m.key)", raceId: m.key, fire: fire, title: "Add your start wave: \(r.name)", body: waveBody(r, day: day)))
             }
             guard m.raceId != nil, !r.isCustom, !r.isPast(now: now) else { continue }
             let site = r.host ?? "the race's page"
@@ -738,6 +871,12 @@ extension AppModel {
         }
     }
 
+    /// The country of the member's Bruce city ("SE"), for Home's Upcoming races; Stockholm when the API hasn't said.
+    var homeCountry: String? {
+        if let c = city?.country?.code?.uppercased(), c.count == 2 { return c }
+        return cityId == 1 ? "SE" : nil
+    }
+
     var myRaceEntries: [MyRaceEntry] { MyRaces.entries(myRaces, catalog: races) }
     var upcomingMyRaces: [MyRaceEntry] { MyRaces.upcoming(myRaceEntries) }
     var pastMyRaces: [MyRaceEntry] { MyRaces.past(myRaceEntries) }
@@ -780,17 +919,35 @@ extension AppModel {
         if let i = myRaces.firstIndex(where: { $0.id == r.id }) { myRaces[i] = r } else { myRaces.append(r) }
         persistMyRaces()
     }
+    /// Picks a format on a race page; adds the race to My races when it isn't there yet.
+    func setRaceFormat(_ r: Race, code: String?) {
+        var mine = myRace(forKey: r.id) ?? MyRace(race: r)
+        let wasMine = isMyRace(r.id)
+        mine.format = code
+        saveMyRace(mine)
+        if !wasMine { flash(Copy.raceAdded, icon: "flag.checkered") }
+    }
+    /// The member's start wave and bib, typed on the race page (empty strings clear them).
+    func setRaceStart(_ r: Race, wave: String? = nil, bib: String? = nil, note: String? = nil) {
+        guard var mine = myRace(forKey: r.id) else { return }
+        if let wave { mine.wave = RaceClock.normalized(wave) ?? wave.trimmingCharacters(in: .whitespaces).nilIfEmpty }
+        if let bib { mine.bib = bib.trimmingCharacters(in: .whitespaces).nilIfEmpty }
+        if let note { mine.note = note.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+        guard mine != myRace(forKey: r.id) else { return }
+        saveMyRace(mine)
+    }
 
     /// Turns a reminder on or off; switching one on adds the race to My races and asks for notification permission.
-    func setRaceReminder(_ r: Race, signup: Bool? = nil, price: Bool? = nil, week: Bool? = nil, eve: Bool? = nil) {
+    func setRaceReminder(_ r: Race, signup: Bool? = nil, price: Bool? = nil, week: Bool? = nil, eve: Bool? = nil, wave: Bool? = nil) {
         var mine = myRace(forKey: r.id) ?? MyRace(race: r)
         let wasMine = isMyRace(r.id)
         if let signup { mine.remindSignup = signup }
         if let price { mine.remindPrice = price }
         if let week { mine.remindWeek = week }
         if let eve { mine.remindEve = eve }
+        if let wave { mine.remindWave = wave }
         saveMyRace(mine)
-        if signup == true || price == true || week == true || eve == true {
+        if signup == true || price == true || week == true || eve == true || wave == true {
             if !wasMine { flash(Copy.raceAdded, icon: "flag.checkered") }
             if !AppModel.demo { Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) } }
         }

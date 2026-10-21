@@ -15,7 +15,7 @@ import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 import { cancelChip } from './rules.js';
 import { reached as milestonesReached, fresh as freshMilestone, newToYou } from './milestones.js';
 import { visitsFrom } from './visits.js';
-import { raceChipsHTML, raceChipsClick, racesListHTML, filteredRaces, nextRaceHTML, myRacesHTML, myEntries, openRaceEditor, planClick, refreshPlanGoals } from './racesui.js';
+import { raceChipsHTML, raceChipsClick, racesListHTML, filteredRaces, nextRaceHTML, upcomingRacesHTML, myRacesHTML, myEntries, openRaceEditor, planClick, refreshPlanGoals } from './racesui.js';
 import { upcoming as upcomingRaces } from './races.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
@@ -84,6 +84,7 @@ export const Home = {
     }
     html += nextRaceHTML((id) => link('home', 'race', encodeURIComponent(id)));
     html += milestoneHTML() + forYouHTML((id) => link('home', 'class', id), sel) + newToYouHTML(sel);
+    html += upcomingRacesHTML((id) => link('home', 'race', encodeURIComponent(id)));
     const spot = sec('SPOTLIGHT');
     if (spot && spot.items.length) {
       html += '<h2 class="sec-title">' + esc((spot.title || 'Spotlight').toUpperCase()) + '</h2><div class="hscroll spotlight">' + spot.items.map((it) => photoCard({

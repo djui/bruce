@@ -26,6 +26,7 @@ struct HomeView: View {
                         loggedOut
                     } else {
                         NextRaceSection()
+                        UpcomingRacesSection()
                         if !spotlight.isEmpty { spotlightSection }
                         if !categoryItems.isEmpty { categoriesSection }
                         ForEach(studioSections, id: \.self) { s in studioRow(s) }

@@ -182,10 +182,18 @@ struct RaceDetailView: View {
     let raceId: String
     @State private var calendarOpen = false
     @State private var noteDraft = ""
+    @State private var waveDraft = ""
+    @State private var bibDraft = ""
+    /// The format looked at before the race is in My races (then it is saved with the race).
+    @State private var formatPick: String?
     @FocusState private var noteFocused: Bool
+    @FocusState private var waveFocused: Bool
+    @FocusState private var bibFocused: Bool
 
     var race: Race? { m.race(raceId) }
     var mine: MyRace? { m.myRace(forKey: raceId) }
+    /// The format shown: the member's, else the one tapped, else the first.
+    func shownFormat(_ r: Race) -> RaceFormat? { r.format(mine?.format ?? formatPick) ?? r.formats?.first }
 
     var body: some View {
         Group {
@@ -212,8 +220,8 @@ struct RaceDetailView: View {
             }
         }
         .task { await m.loadRaces(); await m.loadRaceGoing(); await m.loadChallenges() }
-        .onAppear { noteDraft = mine?.note ?? "" }
-        .onDisappear { saveNote() }
+        .onAppear { noteDraft = mine?.note ?? ""; waveDraft = mine?.wave ?? ""; bibDraft = mine?.bib ?? "" }
+        .onDisappear { saveNote(); saveStart() }
     }
 
     func content(_ r: Race) -> some View {
@@ -275,6 +283,7 @@ struct RaceDetailView: View {
             if let f = r.factsLine { line("point.topleft.down.to.point.bottomright.curvepath", f) }
             line("clock", r.countdownText(day: mine?.day))
             if !past, let s = r.signupLine() { line("ticket", s) }
+            if !past, let s = r.startInfo { line("figure.walk.arrival", s) }
             if !past, r.status != .open, !r.opensLater(), let s = r.statusText() { line(RaceStyle.statusSymbol(r.status), s) }
             if r.klassiker == true { line("rosette", "A leg of En Svensk Klassiker") }
         }
@@ -287,16 +296,29 @@ struct RaceDetailView: View {
     }
 
     func feeCard(_ r: Race) -> some View {
-        let steps = r.steps, cur = r.currentStep()
+        let fmt = shownFormat(r)
+        let steps = r.steps(for: fmt), cur = r.currentStep(for: fmt)
         let headline = cur.map { $0.priceText + (steps.count > 1 ? " now" : "") } ?? (r.status == .soldOut ? "Sold out" : "On the race page")
         return VStack(alignment: .leading, spacing: 12) {
+            // Mockup 2: the ways to enter first; the fee and the rules follow the one picked.
+            if r.hasFormats {
+                RaceFormatChips(formats: r.formats ?? [], selected: fmt?.code) { code in
+                    if mine != nil { m.setRaceFormat(r, code: code) } else { formatPick = code }
+                }
+                if let d = fmt?.detail { Text(d).bruceFont(14).foregroundStyle(Theme.secondary) }
+            }
             HStack(alignment: .firstTextBaseline) {
-                Text("Entry fee").bruceFont(15).foregroundStyle(Theme.secondary)
+                Text(fmt.map { "Entry fee · \($0.title)" } ?? "Entry fee").bruceFont(15).foregroundStyle(Theme.secondary)
                 Spacer()
                 Text(headline).bruceFont(17, weight: .bold).multilineTextAlignment(.trailing)
             }
             if steps.count > 1 { PriceLadder(steps: steps, current: cur) }
             if let note = r.priceNote { Text(note).bruceFont(14).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true) }
+            if let rule = r.changeRule {
+                Label { Text(rule).bruceFont(14).fixedSize(horizontal: false, vertical: true) } icon: {
+                    Image(systemName: "arrow.triangle.2.circlepath").foregroundStyle(Theme.limeInk)
+                }
+            }
             if r.status == .open, !r.isPast(), let next = nextPriceLine(r) {
                 Divider()
                 Toggle(isOn: Binding(get: { mine?.remindPrice ?? false }, set: { m.setRaceReminder(r, price: $0) })) {
@@ -382,13 +404,38 @@ struct RaceDetailView: View {
                     .pickerStyle(.menu)
                 }
             }
-            TextField("Your start, e.g. Doubles Open or 10 km", text: $noteDraft)
-                .focused($noteFocused).submitLabel(.done)
-                .onSubmit { saveNote() }
-                .onChange(of: noteFocused) { _, f in if !f { saveNote() } }
-                .bruceFont(16)
-                .padding(.horizontal, 14).frame(height: 44)
-                .background(Theme.chipGrey, in: RoundedRectangle(cornerRadius: 14))
+            if r.hasFormats {
+                HStack {
+                    Text("Format").bruceFont(16)
+                    Spacer()
+                    Picker("Format", selection: Binding(get: { mine.format ?? "" }, set: { m.setRaceFormat(r, code: $0.isEmpty ? nil : $0) })) {
+                        Text("Not picked").tag("")
+                        ForEach(r.formats ?? []) { f in Text(f.title).tag(f.code) }
+                    }
+                    .pickerStyle(.menu)
+                }
+            }
+            field(r.hasFormats ? Copy.raceDivisionPlaceholder : Copy.raceNotePlaceholder, text: $noteDraft, focus: $noteFocused) { saveNote() }
+            // Mockup 3: the start wave and bib come from the organiser later and are added by hand.
+            HStack(spacing: 10) {
+                field(Copy.raceWavePlaceholder, text: $waveDraft, focus: $waveFocused, numbers: true) { saveStart() }
+                field(Copy.raceBibPlaceholder, text: $bibDraft, focus: $bibFocused, numbers: true) { saveStart() }
+            }
+            if let e = m.myRaceEntries.first(where: { $0.mine.key == raceId }), let by = e.arriveBy {
+                Label(Copy.raceArriveBy(by, minutes: r.arriveMinutes), systemImage: "figure.walk.arrival").bruceFont(14).foregroundStyle(Theme.secondary)
+            } else if !r.isPast(day: mine.day) {
+                Text(Copy.raceStartHint).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            if !r.isPast(day: mine.day), RaceClock.minutes(mine.wave) == nil {
+                Toggle(isOn: Binding(get: { mine.remindWave }, set: { m.setRaceReminder(r, wave: $0) })) {
+                    Label {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(Copy.raceRemindWave).bruceFont(15)
+                            Text(Copy.raceRemindWaveHint).bruceFont(13).foregroundStyle(Theme.secondary)
+                        }
+                    } icon: { Image(systemName: "envelope.badge") }
+                }
+            }
             if !r.isPast(day: mine.day) {
                 Toggle(isOn: Binding(get: { mine.remindWeek }, set: { m.setRaceReminder(r, week: $0) })) {
                     Label(Copy.planRemindWeek, systemImage: "bell").bruceFont(15)
@@ -455,12 +502,52 @@ struct RaceDetailView: View {
         .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
     }
 
+    /// A one-line text field in the "Your race" card.
+    func field(_ placeholder: String, text: Binding<String>, focus: FocusState<Bool>.Binding, numbers: Bool = false, save: @escaping () -> Void) -> some View {
+        TextField(placeholder, text: text)
+            .focused(focus).submitLabel(.done)
+            .keyboardType(numbers ? .numbersAndPunctuation : .default)
+            .onSubmit(save)
+            .onChange(of: focus.wrappedValue) { _, f in if !f { save() } }
+            .bruceFont(16)
+            .padding(.horizontal, 14).frame(height: 44)
+            .background(Theme.chipGrey, in: RoundedRectangle(cornerRadius: 14))
+    }
+
     func saveNote() {
-        guard var x = mine else { return }
-        let n = noteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (x.note ?? "") != n else { return }
-        x.note = n.isEmpty ? nil : n
-        m.saveMyRace(x)
+        guard let r = race, mine != nil else { return }
+        m.setRaceStart(r, note: noteDraft)
+    }
+    func saveStart() {
+        guard let r = race, mine != nil else { return }
+        m.setRaceStart(r, wave: waveDraft, bib: bibDraft)
+        if let w = mine?.wave { waveDraft = w }
+    }
+}
+
+/// The ways to enter a race, as chips; the selected one in lime.
+struct RaceFormatChips: View {
+    let formats: [RaceFormat]
+    let selected: String?
+    let pick: (String) -> Void
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(formats) { f in
+                    let on = f.code == selected
+                    Button { pick(f.code) } label: {
+                        Text(f.title).bruceFont(14, weight: .semibold)
+                            .foregroundStyle(on ? .black : Theme.ink)
+                            .padding(.horizontal, 14).frame(height: 34)
+                            .background(on ? Theme.lime : Theme.chipGrey, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(on ? .isSelected : [])
+                }
+            }
+        }
+        .scrollClipDisabled()
+        .accessibilityLabel("Format")
     }
 }
 
@@ -578,7 +665,7 @@ struct NextRaceBanner: View {
         let r = entry.race
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text(([r.sport?.title ?? r.type.title] + [entry.mine.note].compactMap { $0?.isEmpty == false ? $0 : nil }).joined(separator: " · "))
+                Text(([r.sport?.title ?? r.type.title] + [entry.startText].compactMap { $0 }).joined(separator: " · "))
                     .bruceFont(13, weight: .semibold).lineLimit(1)
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(.white.opacity(0.22), in: Capsule())
@@ -701,6 +788,69 @@ struct NextRaceCard: View {
             .padding(.horizontal, Theme.gutter).padding(.top, 26)
             .task(id: plan != nil) { if plan != nil { await m.loadPlanWeekClasses() } }
         }
+    }
+}
+
+/// Home, above Spotlight (mockup 1): the next catalog races as a carousel, with the next price step and friends going.
+struct UpcomingRacesRow: View {
+    @Environment(AppModel.self) var m
+    var body: some View {
+        let list = Races.upcomingOnHome(m.races, mine: m.myRaces, country: m.homeCountry)
+        if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack {
+                    Text(Copy.raceUpcomingTitle.uppercased()).bruceHeading(19)
+                    Spacer()
+                    Button { m.showRaceCatalog() } label: { Text("Show all").bruceFont(15, weight: .semibold) }.buttonStyle(.glass)
+                }
+                .padding(.horizontal, Theme.gutter)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 12) {
+                        ForEach(list) { r in
+                            NavigationLink(value: Route.race(r.id)) { RaceMiniCard(race: r, going: m.friendsGoing(r.id)) }.buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.horizontal, Theme.gutter)
+                }
+                .scrollClipDisabled()
+            }
+            .padding(.top, 26)
+            .task { await m.loadRaces(); await m.loadRaceGoing() }
+        }
+    }
+}
+
+/// A race in the Home carousel: date, name, place, the next price step ("750 → 775 SEK on 1 Nov") and friends going.
+struct RaceMiniCard: View {
+    let race: Race
+    var going: [BruceAPI.UserLite] = []
+    var body: some View {
+        let pill = Races.homePill(race)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top) {
+                BibDate(race: race, scale: 0.82)
+                Spacer()
+                Image(systemName: race.symbol).bruceFont(22, weight: .light).opacity(0.7)
+            }
+            Spacer(minLength: 0)
+            Text(race.name).bruceFont(17, weight: .heavy, width: .expanded).lineLimit(2).minimumScaleFactor(0.8)
+            Text([RaceDay.format(race.date, "EEE d MMM"), race.city.isEmpty ? nil : race.city].compactMap { $0 }.joined(separator: " · "))
+                .bruceFont(13, weight: .medium).opacity(0.9).lineLimit(1)
+            if !pill.isEmpty {
+                Text(pill).bruceFont(12, weight: .semibold).lineLimit(1).minimumScaleFactor(0.8)
+                    .padding(.horizontal, 9).padding(.vertical, 4)
+                    .background(.white.opacity(0.22), in: Capsule())
+            }
+            if !going.isEmpty { GoingFaces(users: going, size: 20, onDark: true) }
+        }
+        .foregroundStyle(.white)
+        .padding(14)
+        .frame(width: 210, height: 196, alignment: .topLeading)
+        .background(RaceStyle.gradient(race.type))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel([race.name, race.dateText(), race.city, pill].filter { !$0.isEmpty }.joined(separator: ", "))
     }
 }
 

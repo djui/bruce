@@ -105,6 +105,7 @@ enum CalendarFeed {
     }
 }
 
-private extension String {
+extension String {
+    /// nil for "" (also Races.swift).
     var nilIfEmpty: String? { isEmpty ? nil : self }
 }

@@ -144,14 +144,21 @@ My classes tabs, with class and studio pages and account sheets.
   and swim, triathlon) in a hand-curated catalog, [`docs/app/races.json`](docs/app/races.json) (see
   [Race catalog](#race-catalog)). **Explore › Races** lists them by month with type chips, a country filter, search and
   a pill with today's entry fee or the sign-up status ("2,685 SEK until 5 Nov", "Sold out", "Opens 25 Nov"). A
-  **race page** has the date, distances, days to go, where sign-up happens and the day the facts were checked, the
-  known price steps, and a link to the race's own page: Brüce never signs you up, takes payment or reads a
-  registration platform, and every race page says it is not affiliated with the organiser. **My races** (My classes ›
-  Races, and on the Mac a fourth tab) follows races from the list or races you add by hand (name, date, city, link),
-  with your day of a multi-day event and your start ("Doubles Open"); Home shows the **next race** with its countdown
-  above Spotlight. **Add to Calendar** makes an all-day event (EventKit on iPhone and Mac, an .ics file on the web).
-  The iPhone and Mac can remind you at 09:00 when **sign-up opens** and the day before the **next price step**, each
-  switched on per race (local notifications). My races stay on the device.
+  **race page** has the date, distances, days to go, where sign-up happens and the day the facts were checked, how
+  the start works ("Start wave by email a few days before"), the **formats** where a race prices or sizes them apart
+  (HYROX Singles, Doubles, Relay; Tough Viking Open, Duo, Trio, Team) with the fee of the one picked and its known
+  price steps, the organiser's **change rule** (HYROX's Flex add-on, "binding and personal, no refund"), and a link to
+  the race's own page: Brüce never signs you up, takes payment or reads a registration platform, and every race page
+  says it is not affiliated with the organiser. **My races** (My classes › Races, and on the Mac a fourth tab) follows
+  races from the list or races you add by hand (name, date, city, link), with your day of a multi-day event, your
+  format and division ("Doubles · Open"), and, when the organiser sends them, your **start wave** and **bib**; with a
+  wave the page says when to be there ("Be there by 12:50", 90 minutes before for HYROX, an hour otherwise), and
+  **Remind me to add my start wave** is a notification three days before race day while none is added. Home shows the
+  **next race** with its countdown and, above Spotlight, **Upcoming races**: the next open races in your country with
+  the next price step ("750 → 775 SEK on 1 Nov") and friends going. **Add to Calendar** makes an all-day event
+  (EventKit on iPhone and Mac, an .ics file on the web). The iPhone and Mac can remind you at 09:00 when **sign-up
+  opens** and the day before the **next price step**, each switched on per race (local notifications). My races stay
+  on the device.
 - **Train for it** (iPhone, Mac and web; see [Train for it](#train-for-it)): the race page's own action turns a race
   in My races into a weekly **class mix** of Bruce classes up to race day: Base, Build, Peak, race week and a
   recovery week, as a phase strip and a weeks × categories grid you can change week by week, with 2 to 6 classes a
@@ -253,8 +260,9 @@ selected, Explore shows the city's studios on a map next to the list.
 - **Check in**: suggests the studio whose check-in window is open, or the last visited one, then does one
   check-in request and shows the ticket. Scan the door QR code with the camera (BarcodeDetector, or jsQR where
   that is missing) or type the code. Studios that open with Parakey still need the Parakey app.
-- **Races**: Explore › Races, race pages with the price steps and the official link, My classes › Races (kept in
-  localStorage), the next race on Home, and Add to Calendar as an .ics file. **Train for it** with the plan sheet,
+- **Races**: Explore › Races, race pages with the formats, price steps, change rule and the official link, My classes ›
+  Races (kept in localStorage, with your format, start wave and bib), the next race and Upcoming races on Home, and
+  Add to Calendar as an .ics file. **Train for it** with the plan sheet,
   This week and Book (no Book every week: the web has no weekly auto-book), monthly goals from the plan, and race-week
   reminders sent by the server while it is on. **Friends going** (the toggle and faces), **crews** (Start a crew, the
   crew page with the week, invites, Leave) and results and the recovery week after the race.
@@ -293,6 +301,9 @@ of it built into the apps and never fetches it. Each race:
 | `priceNote`, `priceSteps` | The fees as the page words them, and the known steps `{from, until, amount, currency, lowest, per}` (days inclusive; `lowest`: "From 799 SEK"; `per`: "per team") |
 | `status`, `opensOn` | `open`, `opensSoon` (with `opensOn`), `soldOut`, `lottery` or `checkSite` (when the page was unclear) |
 | `klassiker`, `resultsUrl` | A leg of En Svensk Klassiker; the results page on the race's own site (optional, https), only when the race's own site links to it. The apps show **See results** after the race |
+| `formats` | Ways to enter, when the race prices or sizes them apart: `{code, title, distanceKm, teamSize, priceSteps, note}` (`code` lower case with dashes, stable: My races saves it; `priceSteps` as above, left out when the race's own steps apply; `note`: "Open or Pro"). The race page shows them as chips with the fee of the one picked |
+| `changeRule`, `startInfo` | The organiser's rule for changes, refunds and transfers, and how the start works (wave by email, start groups, bib pick-up), as the page words them |
+| `arriveMinutesBefore` | How long before their start wave the organiser wants runners there (HYROX: 90); the apps use 60 without it |
 | `checkedOn` | The day the facts were read off the race's own page, shown on every race page |
 
 Results links were added on 21 Oct 2026 where the race's own site (the domain of `signupUrl`) links to a results page
