@@ -92,6 +92,83 @@ struct RaceFormat: Codable, Hashable, Identifiable {
     }
 }
 
+/// A partner or affiliate code the organiser gave Brüce, added to the sign-up link as a query parameter
+/// (`?ref=bruce`). None is set in the catalog yet; Brüce never tracks the tap.
+struct RaceAffiliate: Codable, Hashable {
+    var param: String
+    var code: String
+}
+
+/// A Bruce studio with a race organiser's training status ("HYROX Training Club"), from the catalog's `trainingClubs`.
+/// Names and a badge only, no logos.
+struct TrainingClub: Codable, Hashable, Identifiable {
+    var studioId: Int
+    var name: String
+    var badge: String
+    /// The race type it trains for; nil for any.
+    var raceType: RaceType? = nil
+    var id: Int { studioId }
+}
+
+/// One split of a result: "SkiErg" 4:05, "10 km" 52:10.
+struct RaceSplit: Codable, Hashable, Identifiable {
+    var title: String
+    var seconds: Int
+    var id: String { title }
+}
+
+/// The member's own result, typed after the race (or imported once an organiser feed has results). Goes into
+/// Wrapped and, on the iPhone, Apple Health.
+struct RaceResult: Codable, Hashable {
+    var seconds: Int
+    var place: Int? = nil
+    /// The field the place is in ("212 of 1,040").
+    var field: Int? = nil
+    var splits: [RaceSplit] = []
+    var dnf = false
+
+    var timeText: String { RaceResult.timeText(seconds) }
+    /// "Place 212 of 1,040", "Place 212"; nil without a place.
+    var placeText: String? { place.map { "Place \(RaceMoney.grouped($0))" + (field.map { " of \(RaceMoney.grouped($0))" } ?? "") } }
+    /// "1:08:52 · Place 212 of 1,040", or "Did not finish".
+    var summary: String { dnf ? "Did not finish" : [timeText, placeText].compactMap { $0 }.joined(separator: " · ") }
+
+    /// "1:08:52", "38:10".
+    static func timeText(_ s: Int) -> String {
+        let t = max(0, s)
+        return t >= 3600 ? String(format: "%d:%02d:%02d", t / 3600, t / 60 % 60, t % 60) : String(format: "%d:%02d", t / 60, t % 60)
+    }
+    /// "1:08:52", "68:52", "38:10", "1h 08m", "1.08.52" as seconds; nil when it isn't a time.
+    static func seconds(_ text: String) -> Int? {
+        let t = text.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !t.isEmpty else { return nil }
+        if t.contains("h") || t.contains("m") {
+            var total = 0, n = 0, any = false
+            for ch in t {
+                if let d = ch.wholeNumberValue { n = n * 10 + d }
+                else if ch == "h" { total += n * 3600; n = 0; any = true }
+                else if ch == "m" { total += n * 60; n = 0; any = true }
+                else if ch == "s" { total += n; n = 0; any = true }
+                else if ch != " " { return nil }
+            }
+            return any ? total + n : nil
+        }
+        let parts = t.split(whereSeparator: { $0 == ":" || $0 == "." }).map { Int($0) }
+        guard (2...3).contains(parts.count), parts.allSatisfy({ $0 != nil }) else { return nil }
+        let p = parts.compactMap { $0 }
+        guard p.dropFirst().allSatisfy({ (0...59).contains($0) }) else { return nil }
+        return p.count == 3 ? p[0] * 3600 + p[1] * 60 + p[2] : p[0] * 60 + p[1]
+    }
+    /// The split rows an organiser's result sheet has: HYROX's eight stations and the runs; nothing for the rest
+    /// (the member adds their own, "10 km", "Half").
+    static func splitTemplate(_ type: RaceType) -> [String] {
+        switch type {
+        case .hyrox: ["8 × 1 km runs", "SkiErg", "Sled push", "Sled pull", "Burpee broad jumps", "Row", "Farmers carry", "Sandbag lunges", "Wall balls"]
+        default: []
+        }
+    }
+}
+
 /// A catalog race (or a race added by hand, see `MyRace.resolved`). Dates are local race days, "2027-05-15".
 struct Race: Codable, Identifiable, Hashable {
     var id: String
@@ -128,8 +205,17 @@ struct Race: Codable, Identifiable, Hashable {
     var startInfo: String? = nil
     /// How long before the start wave the organiser wants you there (HYROX: 90).
     var arriveMinutesBefore: Int? = nil
+    /// A partner code on the sign-up link; none set yet.
+    var affiliate: RaceAffiliate? = nil
 
     static let customPrefix = "custom-"
+    /// The sign-up link as the Register button opens it: the race's page, with the affiliate code when there is one.
+    var registerURL: URL? {
+        guard let u = url else { return nil }
+        guard let a = affiliate, !a.param.isEmpty, !a.code.isEmpty, var c = URLComponents(url: u, resolvingAgainstBaseURL: false) else { return u }
+        c.queryItems = (c.queryItems ?? []).filter { $0.name != a.param } + [URLQueryItem(name: a.param, value: a.code)]
+        return c.url ?? u
+    }
     /// Added by hand (My races), not from the catalog.
     var isCustom: Bool { id.hasPrefix(Race.customPrefix) }
     var lastDay: String { endDate ?? date }
@@ -298,7 +384,7 @@ struct Race: Codable, Identifiable, Hashable {
 extension Race {
     enum CodingKeys: String, CodingKey {
         case id, name, type, sport, date, endDate, city, country, venue, distancesKm, format, signupUrl, platform, priceNote, priceSteps,
-             status, opensOn, klassiker, resultsUrl, checkedOn, formats, changeRule, startInfo, arriveMinutesBefore
+             status, opensOn, klassiker, resultsUrl, checkedOn, formats, changeRule, startInfo, arriveMinutesBefore, affiliate
     }
     /// Required: id, name, type, date, signupUrl, status. Everything else may be missing (distances then empty).
     /// Formats this version can't read are dropped one by one, not the race.
@@ -319,7 +405,8 @@ extension Race {
                   formats: (try? c.decodeIfPresent([Lossy<RaceFormat>].self, forKey: .formats))?.compactMap(\.value).filter { !$0.code.isEmpty && !$0.title.isEmpty },
                   changeRule: try? c.decodeIfPresent(String.self, forKey: .changeRule),
                   startInfo: try? c.decodeIfPresent(String.self, forKey: .startInfo),
-                  arriveMinutesBefore: (try? c.decodeIfPresent(Int.self, forKey: .arriveMinutesBefore)).flatMap { $0 > 0 ? $0 : nil })
+                  arriveMinutesBefore: (try? c.decodeIfPresent(Int.self, forKey: .arriveMinutesBefore)).flatMap { $0 > 0 ? $0 : nil },
+                  affiliate: try? c.decodeIfPresent(RaceAffiliate.self, forKey: .affiliate))
         if formats?.isEmpty == true { formats = nil }
     }
 
@@ -517,6 +604,8 @@ struct MyRace: Codable, Identifiable, Hashable {
     var bib: String?
     /// "Remind me to add my start wave": a notification three days before race day while `wave` is empty.
     var remindWave = false
+    /// Their result, typed after the race (RaceResult); nil until then.
+    var result: RaceResult?
     var remindSignup = false
     var remindPrice = false
     /// "Race week" (08:00 on the Monday of race week) and "the day before" (18:00) reminders (RaceReminders).
@@ -541,7 +630,7 @@ struct MyRace: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, raceId, name, date, endDate, city, url, type, sport, day, note, format, wave, bib, remindWave, remindSignup, remindPrice, remindWeek, remindEve,
+        case id, raceId, name, date, endDate, city, url, type, sport, day, note, format, wave, bib, remindWave, result, remindSignup, remindPrice, remindWeek, remindEve,
              plan, going, goingAt, addedAt
     }
     /// Missing fields get their defaults, so files written by older and newer versions both load.
@@ -562,6 +651,7 @@ struct MyRace: Codable, Identifiable, Hashable {
         wave = try? c.decodeIfPresent(String.self, forKey: .wave)
         bib = try? c.decodeIfPresent(String.self, forKey: .bib)
         remindWave = (try? c.decodeIfPresent(Bool.self, forKey: .remindWave)) ?? false
+        result = try? c.decodeIfPresent(RaceResult.self, forKey: .result)
         remindSignup = try c.decodeIfPresent(Bool.self, forKey: .remindSignup) ?? false
         remindPrice = try c.decodeIfPresent(Bool.self, forKey: .remindPrice) ?? false
         remindWeek = (try? c.decodeIfPresent(Bool.self, forKey: .remindWeek)) ?? false
@@ -709,12 +799,36 @@ enum RaceCatalog {
     /// A cached copy younger than this is used without asking again.
     static let refreshAfter: TimeInterval = 6 * 3600
 
-    private struct File: Decodable { let races: [Lossy<Race>] }
+    private struct File: Decodable { let races: [Lossy<Race>]; let trainingClubs: [Lossy<TrainingClub>]? }
 
     /// The races in a catalog file, by date; entries with an unknown type, status or a bad date are left out.
     static func decode(_ data: Data) throws -> [Race] {
         let f = try JSONDecoder().decode(File.self, from: data)
         return Races.sorted(f.races.compactMap(\.value).filter { $0.hasReadableDates && $0.url != nil })
+    }
+    /// The catalog's training clubs (studios with an organiser's training status); none in a file without them.
+    static func decodeClubs(_ data: Data) -> [TrainingClub] {
+        ((try? JSONDecoder().decode(File.self, from: data))?.trainingClubs ?? []).compactMap(\.value).filter { !$0.badge.isEmpty && !$0.name.isEmpty }
+    }
+    /// The catalog with an organiser feed laid over it (`GET /races` on our server, server/README.md "Race feed"): a
+    /// feed race replaces the catalog's when its facts are as new or newer (`checkedOn`); one the catalog doesn't
+    /// have is added. The catalog is never shortened by a feed.
+    static func merge(_ catalog: [Race], feed: [Race]) -> [Race] {
+        var out = catalog
+        for r in feed {
+            if let i = out.firstIndex(where: { $0.id == r.id }) { if r.checkedOn >= out[i].checkedOn { out[i] = r } }
+            else { out.append(r) }
+        }
+        return Races.sorted(out)
+    }
+
+    /// One GET of our server's `GET /races` (the organiser feed); empty when the server is off or has none.
+    static func fetchFeed() async -> [Race] {
+        guard AutoBookServer.isConfigured, let base = URL(string: AutoBookServer.url) else { return [] }
+        var req = URLRequest(url: base.appendingPathComponent("races"), cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 15)
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        guard let (data, resp) = try? await URLSession.shared.data(for: req), (resp as? HTTPURLResponse)?.statusCode == 200 else { return [] }
+        return (try? decode(data)) ?? []
     }
 
     static var cacheURL: URL {
@@ -897,6 +1011,7 @@ extension AppModel {
         if AppModel.demo { if races.isEmpty { races = Race.demo }; return }
         if races.isEmpty, let cached = await Task.detached(priority: .userInitiated, operation: { RaceCatalog.loadCached() }).value {
             races = cached.races; racesFetchedAt = cached.at
+            trainingClubs = (try? Data(contentsOf: RaceCatalog.cacheURL)).map(RaceCatalog.decodeClubs) ?? []
         }
         // Train for it (RacePlanner.swift): rules paused for a race that is over come back, the taper pauses its own,
         // and plan goals follow the month.
@@ -909,13 +1024,31 @@ extension AppModel {
         defer { racesLoading = false }
         do {
             let got = try await RaceCatalog.fetch()
-            races = got.races; racesFetchedAt = Date(); racesError = nil
+            // An organiser feed on our server lays over the file (none while the server is off).
+            races = RaceCatalog.merge(got.races, feed: await RaceCatalog.fetchFeed())
+            trainingClubs = RaceCatalog.decodeClubs(got.data)
+            racesFetchedAt = Date(); racesError = nil
             let data = got.data
             Task.detached(priority: .utility) { RaceCatalog.saveCache(data) }
             syncRaceReminders()
         } catch {
             if races.isEmpty { racesError = Copy.racesLoadFailed }
         }
+    }
+
+    /// The training club badge of a studio ("HYROX Training Club"), from the catalog; nil for most studios.
+    func trainingClub(_ studioId: Int) -> TrainingClub? { trainingClubs.first { $0.studioId == studioId } }
+    /// The training clubs for a race's type (any type counts), by name.
+    func trainingClubs(for r: Race) -> [TrainingClub] {
+        trainingClubs.filter { $0.raceType == nil || $0.raceType == r.type }.sorted { $0.name < $1.name }
+    }
+
+    /// The member's result for a race, typed after it; nil clears it.
+    func setRaceResult(_ key: String, _ result: RaceResult?) {
+        guard var mine = myRace(forKey: key) else { return }
+        mine.result = result
+        saveMyRace(mine)
+        if result != nil { flash(Copy.raceResultSaved, icon: "flag.checkered") }
     }
 
     /// The country of the member's Bruce city ("SE"), for Home's Upcoming races; Stockholm when the API hasn't said.

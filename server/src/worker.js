@@ -974,6 +974,58 @@ async function racesRoute(request, env, raceId) {
                 push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
 }
 
+// MARK: Race feed (organiser imports, phase 3)
+
+const FEED_TYPES = ["running", "hyrox", "obstacle", "endurance", "triathlon"];
+const FEED_STATUSES = ["open", "opensSoon", "soldOut", "lottery", "checkSite"];
+const MAX_FEED = 200;
+
+/** One race of a feed as the apps need it (README.md "Race catalog": id, name, type, date, signupUrl, status, checkedOn);
+ *  null when they couldn't read it. Other fields are kept as sent: the apps skip what they don't know. */
+export function cleanFeedRace(r) {
+  const isDay = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && new Date(s + "T12:00:00Z").toISOString().slice(0, 10) === s;
+  if (!r || typeof r !== "object" || Array.isArray(r)) return null;
+  if (typeof r.id !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(r.id) || r.id.startsWith("custom-") || r.id.length > 100) return null;
+  if (typeof r.name !== "string" || !r.name.trim() || !FEED_TYPES.includes(r.type) || !FEED_STATUSES.includes(r.status)) return null;
+  if (!isDay(r.date) || !isDay(r.checkedOn) || (r.endDate != null && (!isDay(r.endDate) || r.endDate < r.date))) return null;
+  if (typeof r.signupUrl !== "string" || !/^https:\/\/[^\s]+$/.test(r.signupUrl) || r.signupUrl.length > 300) return null;
+  if (JSON.stringify(r).length > 8000) return null;
+  return r;
+}
+
+/**
+ * `GET /races`: every imported race (the catalog's schema) with its source, for the apps to lay over races.json.
+ * `POST /races/import` with `Authorization: Bearer <RACE_FEED_TOKEN>` and `{"source","races":[...]}`: replaces that
+ * source's races; a race another source posted first stays that source's (reported under `skipped`). Nothing here
+ * sells, registers or reads a registration platform: it is the catalog, kept current by whoever posts.
+ */
+export async function feedRoute(request, env) {
+  const DB = await db(env);
+  if (request.method === "GET") {
+    const { results } = await DB.prepare("SELECT race, source, imported_at FROM race_feed ORDER BY race_id").all();
+    return json({ races: results.map((x) => JSON.parse(x.race)), sources: [...new Set(results.map((x) => x.source))].sort(),
+                  importedAt: results.length ? Math.max(...results.map((x) => x.imported_at)) : null });
+  }
+  if (!env.RACE_FEED_TOKEN) return json({ error: "no feed token configured" }, 503);
+  if ((request.headers.get("authorization") ?? "") !== `Bearer ${env.RACE_FEED_TOKEN}`) return json({ error: "unauthorized" }, 401);
+  const body = await request.json().catch(() => null);
+  const source = typeof body?.source === "string" && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(body.source) && body.source.length <= 40 ? body.source : null;
+  if (!source || !Array.isArray(body.races)) return json({ error: "source (lower case with dashes) and races (an array) are required" }, 400);
+  if (body.races.length > MAX_FEED) return json({ error: `at most ${MAX_FEED} races` }, 409);
+  const races = [], skipped = [];
+  for (const r of body.races) {
+    const c = cleanFeedRace(r);
+    if (c && !races.some((x) => x.id === c.id)) races.push(c); else skipped.push(String(r?.id ?? "?"));
+  }
+  const { results: taken } = await DB.prepare("SELECT race_id FROM race_feed WHERE source != ?").bind(source).all();
+  const theirs = new Set(taken.map((x) => x.race_id));
+  const mine = races.filter((r) => !theirs.has(r.id));
+  const now = Date.now();
+  await DB.batch([DB.prepare("DELETE FROM race_feed WHERE source = ?").bind(source),
+    ...mine.map((r) => DB.prepare("INSERT INTO race_feed (race_id, source, race, imported_at) VALUES (?, ?, ?, ?)").bind(r.id, source, JSON.stringify(r), now))]);
+  return json({ ok: true, source, imported: mine.length, skipped: skipped.concat(races.filter((r) => theirs.has(r.id)).map((r) => r.id)) });
+}
+
 // MARK: History (daily cron): challenges, goal reminders, Wrapped percentiles
 
 /**
@@ -1427,6 +1479,7 @@ export default {
     if (opening && (request.method === "PUT" || request.method === "DELETE")) return openingRoute(request, env, +opening[1]);
     if (route === "PUT /me/races") return racesRoute(request, env, null);
     if (route === "GET /races/going") return goingRoute(request, env);
+    if (route === "GET /races" || route === "POST /races/import") return feedRoute(request, env);
     const race = path.match(/^\/me\/races\/([a-z0-9-]{1,100})$/);
     if (race && request.method === "DELETE") return racesRoute(request, env, race[1]);
     if (!["PUT /me", "GET /me", "DELETE /me", "POST /me/test-push", "PUT /me/email"].includes(route)) return json({ error: "not found" }, 404);

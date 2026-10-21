@@ -165,6 +165,58 @@ export const clockNormalized = (s) => { const m = clockMinutes(s); return m == n
 /** "12:50": the start wave less the minutes the organiser wants you there before it. */
 export function arriveBy(wave, minutesBefore) { const w = clockMinutes(wave); return w == null ? null : clockText(Math.max(0, w - minutesBefore)); }
 
+// ---------------------------------------------------------------- the register link, results, feeds, training clubs
+
+/** The sign-up link as the Register button opens it: the race's page, with the affiliate code (`affiliate: {param, code}`)
+ *  when the catalog has one. None is set yet; nothing is tracked. */
+export function registerURL(r) {
+  const a = r.affiliate;
+  if (!a || !a.param || !a.code || !host(r.signupUrl)) return r.signupUrl;
+  try { const u = new URL(r.signupUrl); u.searchParams.set(a.param, a.code); return u.href; } catch (e) { return r.signupUrl; }
+}
+/** "1:08:52", "38:10". */
+export function timeText(s) {
+  const t = Math.max(0, s | 0), two = (n) => String(n).padStart(2, '0');
+  return t >= 3600 ? Math.floor(t / 3600) + ':' + two(Math.floor(t / 60) % 60) + ':' + two(t % 60) : Math.floor(t / 60) + ':' + two(t % 60);
+}
+/** "1:08:52", "68:52", "38:10", "1h 08m", "1.08.52" as seconds; null when it isn't a time. */
+export function parseSeconds(text) {
+  const t = String(text || '').trim().toLowerCase();
+  if (!t) return null;
+  if (/[hms]/.test(t)) {
+    if (!/^(\d+\s*h\s*)?(\d+\s*m\s*)?(\d+\s*s?\s*)?$/.test(t)) return null;
+    const h = /(\d+)\s*h/.exec(t), m = /(\d+)\s*m/.exec(t), s = /(\d+)\s*s?\s*$/.exec(t.replace(/\d+\s*[hm]/g, '').trim() ? t : '');
+    const rest = t.replace(/\d+\s*h/, '').replace(/\d+\s*m/, '').replace(/s/, '').trim();
+    return (h ? +h[1] * 3600 : 0) + (m ? +m[1] * 60 : 0) + (rest ? +rest : 0);
+  }
+  const p = t.split(/[:.]/);
+  if (p.length < 2 || p.length > 3 || p.some((x) => !/^\d+$/.test(x)) || p.slice(1).some((x) => +x > 59)) return null;
+  return p.length === 3 ? +p[0] * 3600 + +p[1] * 60 + +p[2] : +p[0] * 60 + +p[1];
+}
+/** "Place 212 of 1,040"; null without a place. */
+export const placeText = (res) => (res && res.place ? 'Place ' + grouped(res.place) + (res.field ? ' of ' + grouped(res.field) : '') : null);
+/** "1:08:52 · Place 212 of 1,040", or "Did not finish". */
+export const resultSummary = (res) => (res.dnf ? 'Did not finish' : [timeText(res.seconds), placeText(res)].filter(Boolean).join(' · '));
+/** The split rows an organiser's result sheet has: HYROX's stations and the runs; nothing for the rest. */
+export const splitTemplate = (type) => (type === 'hyrox' ? ['8 × 1 km runs', 'SkiErg', 'Sled push', 'Sled pull', 'Burpee broad jumps', 'Row', 'Farmers carry', 'Sandbag lunges', 'Wall balls'] : []);
+/** The catalog with an organiser feed laid over it (GET /races on our server): a feed race replaces the catalog's when
+ *  its facts are as new or newer (checkedOn); one the catalog doesn't have is added. Never shorter than the catalog. */
+export function mergeFeed(catalog, feed) {
+  const out = catalog.slice();
+  for (const r of feed || []) {
+    const i = out.findIndex((x) => x.id === r.id);
+    if (i < 0) out.push(r); else if ((r.checkedOn || '') >= (out[i].checkedOn || '')) out[i] = r;
+  }
+  return sorted(out);
+}
+/** The catalog's training clubs: studios with an organiser's training status ({studioId, name, badge, raceType}). */
+export function decodeClubs(json) {
+  return (json && Array.isArray(json.trainingClubs) ? json.trainingClubs : []).filter((c) => c && Number.isInteger(c.studioId) && typeof c.name === 'string' && c.name
+    && typeof c.badge === 'string' && c.badge && (c.raceType == null || TYPES.some((t) => t.key === c.raceType)));
+}
+/** The clubs for a race's type (a club without a type counts for all), by name. */
+export const clubsFor = (clubs, r) => (clubs || []).filter((c) => !c.raceType || c.raceType === r.type).sort((a, b) => a.name.localeCompare(b.name));
+
 // ---------------------------------------------------------------- labels
 
 export function host(url) {
@@ -276,7 +328,18 @@ export function validate(json) {
   const ids = new Set();
   const https = (u) => { try { return new URL(u).protocol === 'https:'; } catch (e) { return false; } };
   const known = ['id', 'name', 'type', 'sport', 'date', 'endDate', 'city', 'country', 'venue', 'distancesKm', 'format', 'signupUrl', 'platform',
-    'priceNote', 'priceSteps', 'status', 'opensOn', 'klassiker', 'resultsUrl', 'checkedOn', 'formats', 'changeRule', 'startInfo', 'arriveMinutesBefore'];
+    'priceNote', 'priceSteps', 'status', 'opensOn', 'klassiker', 'resultsUrl', 'checkedOn', 'formats', 'changeRule', 'startInfo', 'arriveMinutesBefore', 'affiliate'];
+  if (json.trainingClubs != null) {
+    if (!Array.isArray(json.trainingClubs)) errors.push('trainingClubs must be an array');
+    else json.trainingClubs.forEach((c, i) => {
+      const at = 'trainingClubs[' + i + '] ';
+      if (!c || typeof c !== 'object') { errors.push(at + 'is not an object'); return; }
+      Object.keys(c).filter((k) => !['studioId', 'name', 'badge', 'raceType'].includes(k)).forEach((k) => errors.push(at + 'unknown field ' + k));
+      if (!Number.isInteger(c.studioId) || c.studioId <= 0) errors.push(at + 'studioId must be a Bruce studio id');
+      ['name', 'badge'].forEach((k) => { if (typeof c[k] !== 'string' || !c[k].trim()) errors.push(at + k + ' missing'); });
+      if (c.raceType != null && !TYPES.some((t) => t.key === c.raceType)) errors.push(at + 'raceType must be a race type');
+    });
+  }
   const checkSteps = (r, list, at0) => {
     list.forEach((s, i) => {
       const at = at0 + '[' + i + '] ';
@@ -325,6 +388,8 @@ export function validate(json) {
     }
     ['changeRule', 'startInfo'].forEach((k) => { if (r[k] != null && (typeof r[k] !== 'string' || !r[k].trim())) err(r, k + ' must be a non-empty string'); });
     if (r.arriveMinutesBefore != null && (!Number.isInteger(r.arriveMinutesBefore) || r.arriveMinutesBefore <= 0 || r.arriveMinutesBefore > 360)) err(r, 'arriveMinutesBefore must be whole minutes, up to 360');
+    if (r.affiliate != null && (typeof r.affiliate !== 'object' || !/^[A-Za-z0-9_-]{1,40}$/.test(r.affiliate.param || '') || !/^[A-Za-z0-9_-]{1,60}$/.test(r.affiliate.code || '')
+      || Object.keys(r.affiliate).some((k) => !['param', 'code'].includes(k)))) err(r, 'affiliate must be {param, code} (letters, digits, - and _)');
     if (r.formats != null) {
       if (!Array.isArray(r.formats) || !r.formats.length) err(r, 'formats must be a non-empty array when present');
       else {

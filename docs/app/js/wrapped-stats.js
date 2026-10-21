@@ -106,9 +106,21 @@ export function cardsFor(stats, percentiles) {
   if (stats.total >= 3) c.push('persona');
   if (stats.favStudio) c.push('place');
   if (stats.streak.weeks >= 2 || stats.friend) c.push('streak');
+  if (stats.races && stats.races.length) c.push('race');
   if (stats.total > 0 && percentiles && percentiles.visits != null) c.push('top');
   c.push('share');
   return c;
+}
+
+/** Wrapped's race chapter (races.js): the member's races of the year that are over, oldest first, with the result when
+ *  one was typed: [{key, name, day, kind, timeText, placeText}]. `R` is the races module, `entries` from R.entries. */
+export function racesOfYear(R, entries, today) {
+  const year = today.slice(0, 4);
+  return entries.filter((e) => e.day.startsWith(year) && R.isPast(e.race, today, e.mine.day)).sort((a, b) => (a.day < b.day ? -1 : 1)).map((e) => {
+    const res = e.mine.result;
+    return { key: R.keyOf(e.mine), name: e.race.name, day: e.day, kind: [R.heroTag(e.race), R.startText(e)].filter(Boolean).join(' · '),
+      timeText: res && !res.dnf ? R.timeText(res.seconds) : null, placeText: res ? (res.dnf ? 'Did not finish' : R.placeText(res)) : null };
+  });
 }
 
 /** The metrics GET /wrapped/percentiles compares (CONTRACT.md), year to date. */

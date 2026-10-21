@@ -54,6 +54,8 @@ test('an empty year shows only the intro and the share card', () => {
   assert.equal(s.archetype.key, 'newcomer');
   assert.deepEqual(cardsFor(s, { visits: 50 }), ['intro', 'share']);
   assert.deepEqual(cardsFor(s, null), ['intro', 'share']);
+  // A race of the year adds its chapter even without visits (races.js, racesOfYear).
+  assert.deepEqual(cardsFor(Object.assign({}, s, { races: [{ key: 'midnattsloppet-stockholm-2026' }] }), null), ['intro', 'race', 'share']);
 });
 
 test('classes together: matched by class id, dropped when deleted or not mine', () => {

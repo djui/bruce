@@ -160,10 +160,14 @@ struct RaceDetailView: View {
                         line("clock", r.countdownText(day: mine?.day))
                         if !past, let s = r.signupLine() { line("ticket", s) }
                         if !past, let s = r.startInfo { line("figure.walk.arrival", s) }
+                        // Training clubs (Races.swift TrainingClub): studios with the organiser's status.
+                        ForEach(r.isCustom ? [] : m.trainingClubs(for: r)) { c in
+                            Button { m.push(.studio(c.studioId)) } label: { line("building.2", "\(Copy.raceTrainingClubs): \(c.name) · \(c.badge)") }.buttonStyle(.plain)
+                        }
                         if !past, let s = r.statusText(), r.status != .open, !r.opensLater() { line(RaceStyle.statusSymbol(r.status), s) }
                         if r.klassiker == true { line("rosette", "A leg of En Svensk Klassiker") }
                     }
-                    if let u = r.url {
+                    if let u = r.registerURL {
                         Button { NSWorkspace.shared.open(u) } label: {
                             Label((r.status == .open || r.status == .opensSoon) && !r.isCustom && !past ? "Sign up on \(r.host ?? "the race page")" : "Open \(r.host ?? "the link")",
                                   systemImage: "arrow.up.right.square")
@@ -596,6 +600,78 @@ struct RaceMiniTile: View {
         .frame(width: 210, height: 180, alignment: .topLeading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(RaceStyle.gradient(race.type)))
         .contentShape(RoundedRectangle(cornerRadius: 18))
+    }
+}
+
+// MARK: - Your result
+
+/// The member's result after the race (Races.swift RaceResult): finish time, place and splits, typed by hand.
+struct RaceResultEditor: View {
+    @Environment(AppModel.self) var m
+    let key: String
+    @State private var time = ""
+    @State private var place = ""
+    @State private var field = ""
+    @State private var dnf = false
+    @State private var splits: [(title: String, time: String)] = []
+    @State private var loaded = false
+
+    var entry: MyRaceEntry? { m.myRaceEntries.first { $0.mine.key == key } }
+    var seconds: Int? { RaceResult.seconds(time) }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("\(Copy.raceResultTitle) · \(entry?.race.name ?? "")").font(.system(size: 18, weight: .bold))
+            TextField(Copy.raceResultTime, text: $time).textFieldStyle(.roundedBorder).disabled(dnf)
+            HStack {
+                TextField(Copy.raceResultPlace, text: $place).textFieldStyle(.roundedBorder)
+                Text(Copy.raceResultField).foregroundStyle(Theme.secondary)
+                TextField("1,040", text: $field).textFieldStyle(.roundedBorder)
+            }
+            Toggle(Copy.raceResultDNF, isOn: $dnf).toggleStyle(.switch).tint(Theme.lime)
+            Text(Copy.raceResultSplits).font(.system(size: 14, weight: .semibold)).padding(.top, 6)
+            ForEach(splits.indices, id: \.self) { i in
+                HStack {
+                    TextField("Split", text: Binding(get: { splits[i].title }, set: { splits[i].title = $0 })).textFieldStyle(.roundedBorder)
+                    TextField("4:05", text: Binding(get: { splits[i].time }, set: { splits[i].time = $0 })).textFieldStyle(.roundedBorder).frame(width: 90)
+                    Button { splits.remove(at: i) } label: { Image(systemName: "minus.circle") }.buttonStyle(.plain)
+                }
+            }
+            HStack {
+                Button("Add a split") { splits.append(("", "")) }
+                if let e = entry, splits.isEmpty, !RaceResult.splitTemplate(e.race.type).isEmpty {
+                    Button("Add the \(e.race.type.title) stations") { splits = RaceResult.splitTemplate(e.race.type).map { ($0, "") } }
+                }
+            }
+            .font(.system(size: 13))
+            Text(time.isEmpty || seconds != nil || dnf ? Copy.raceResultHint : "That doesn't look like a time. Try 1:08:52 or 38:10.")
+                .font(.system(size: 12, weight: .light)).foregroundStyle(Theme.secondary)
+            HStack {
+                if entry?.mine.result != nil { Button("Remove result") { m.setRaceResult(key, nil); m.dismissSheets() }.foregroundStyle(.red) }
+                Spacer()
+                Button("Cancel") { m.dismissSheets() }
+                Button("Save") { save() }.keyboardShortcut(.defaultAction).disabled(!(dnf || seconds != nil))
+            }
+        }
+        .padding(20).frame(width: 420)
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            if let r = entry?.mine.result {
+                time = r.timeText; place = r.place.map(String.init) ?? ""; field = r.field.map(String.init) ?? ""; dnf = r.dnf
+                splits = r.splits.map { ($0.title, RaceResult.timeText($0.seconds)) }
+            }
+        }
+    }
+
+    func save() {
+        let rows = splits.compactMap { s -> RaceSplit? in
+            let t = s.title.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty, let sec = RaceResult.seconds(s.time) else { return nil }
+            return RaceSplit(title: t, seconds: sec)
+        }
+        m.setRaceResult(key, RaceResult(seconds: dnf ? 0 : (seconds ?? 0), place: Int(place.filter(\.isNumber)), field: Int(field.filter(\.isNumber)), splits: rows, dnf: dnf))
+        m.dismissSheets()
     }
 }
 

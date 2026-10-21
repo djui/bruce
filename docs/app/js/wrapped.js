@@ -7,7 +7,8 @@ import { Bruce, Server } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import { esc, icon, todayKey } from './util.js';
-import { wrappedStats, together, cardsFor, topPercent, percentileMetrics, dayRange, shareStats } from './wrapped-stats.js';
+import { wrappedStats, together, cardsFor, topPercent, percentileMetrics, dayRange, shareStats, racesOfYear } from './wrapped-stats.js';
+import * as R from './races.js';
 
 const DURATION = 6000;          // ms per card
 const HOLD = 260;               // a press longer than this pauses instead of stepping
@@ -28,6 +29,9 @@ async function load() {
   ]);
   const visits = St.visitList(false);
   const stats = wrappedStats(visits, { year, today, catTitle: St.catTitle, together: together(visits, friendBookings) });
+  // The race chapter (races.js): this year's races in My races that are over, with the result when one was typed.
+  await St.loadRaces().catch(() => {});
+  stats.races = racesOfYear(R, R.entries(St.myRaces(), S.races || []), today);
   let pct = null, cohort = null;
   if (St.serverOn() && stats.total > 0) {
     const r = await Server.percentiles(year, percentileMetrics(stats)).catch(() => null);
@@ -161,8 +165,20 @@ function shareCard(d) {
     '<div class="wr-actions"><button class="btn lime" data-share>' + icon('share') + ' Share</button><button class="btn wr-ghost" data-save>Save image</button></div>';
 }
 
-const CARDS = { intro: introCard, visits: visitsCard, persona: personaCard, place: placeCard, streak: streakCard, top: topCard, share: shareCard };
-const GRADIENT = { intro: 'g-intro', visits: 'g-visits', persona: 'g-persona', place: 'g-place', streak: 'g-streak', top: 'g-top', share: 'g-share' };
+/** The race chapter: each race of the year with its day and the result the member typed. */
+function raceCard(d) {
+  const races = d.stats.races || [];
+  const one = races.length === 1;
+  return pop(0.05, one ? 'Race day' : 'Your races', 'wkicker') +
+    pop(0.2, one ? esc(races[0].name.toUpperCase()) : races.length + ' RACES', 'wbig', 'font-size:clamp(32px,10vw,44px);margin-top:16px') +
+    (one ? pop(0.4, races[0].timeText ? '<b class="wbig" style="font-size:72px">' + esc(races[0].timeText) + '</b>' : '<span class="wcopy">' + esc(R.shortDay(races[0].day)) + ' · ' + esc(races[0].kind) + '</span>') : '') +
+    pop(0.6, races.slice(0, 5).map((r) => '<div><b class="wbig">' + esc(r.timeText || R.shortDay(r.day)) + '</b><span>' + esc(one ? (r.placeText || r.kind) : r.name + (r.placeText ? ' · ' + r.placeText : '')) + '</span></div>').join('') +
+      (races.length > 5 ? '<div><b class="wbig">+' + (races.length - 5) + '</b><span>more</span></div>' : ''), 'wr-tiles') +
+    pop(0.9, races.some((r) => r.timeText) ? 'Typed by you, from the organiser\'s results.' : 'Add your results on the race pages to see your times here.', 'wcopy', 'margin-top:16px;opacity:.85');
+}
+
+const CARDS = { intro: introCard, visits: visitsCard, persona: personaCard, place: placeCard, streak: streakCard, race: raceCard, top: topCard, share: shareCard };
+const GRADIENT = { intro: 'g-intro', visits: 'g-visits', persona: 'g-persona', place: 'g-place', streak: 'g-streak', race: 'g-race', top: 'g-top', share: 'g-share' };
 
 // ---------------------------------------------------------------- the story player
 

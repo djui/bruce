@@ -192,6 +192,24 @@ off by default (the apps' copy and logic: `Shared/BruceCore/RaceSocial.swift`, `
   caller. Nobody who is not the caller's Bruce friend is ever listed, so the answer says nothing about who uses Brüce
   beyond the caller's own friends. The apps ask at most every 10 minutes.
 
+## Race feed
+
+The catalog is a file ([`docs/app/races.json`](../docs/app/races.json), README.md "Race catalog") kept by hand. Phase 3
+of the race events adds the scaffolding for an organiser to keep its own races current instead
+(`migrations/0006_race_feed.sql`). No organiser posts yet.
+
+- `POST /races/import` with `Authorization: Bearer <RACE_FEED_TOKEN>` (set with `npx wrangler secret put
+  RACE_FEED_TOKEN`; without it the route answers 503) and a body `{"source": "hyrox", "races": [...]}`: `source` is who
+  posts (lower case with dashes), `races` entries in the catalog's schema, at most 200. The feed format is the catalog's:
+  [`feeds/example-feed.json`](feeds/example-feed.json) is a complete example. A race needs `id`, `name`, `type`, `date`,
+  `signupUrl` (https), `status` and `checkedOn`; what else it carries is kept as sent (the apps skip fields they don't
+  know). The post replaces that source's earlier races; a race another source posted first stays that source's and is
+  listed under `skipped`, as are entries the apps couldn't read. Nothing is sold, registered or read from a
+  registration platform: the feed is facts for the race page.
+- `GET /races` (no login) answers `{races: [...], sources: ["hyrox"], importedAt}`. The apps read it after the
+  catalog file while the server is on and lay it over the file: a feed race replaces the file's when its `checkedOn` is
+  as new or newer, one the file doesn't have is added, and the file is never shortened by a feed.
+
 ## Race crews
 
 A crew is a challenge (see above) that ends on race day: `challenges.race_id` (the catalog race) and
@@ -287,6 +305,8 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | `PUT /me/races` | `{"device":"<id>","races":[{"id","name","date","url","remindWeek","remindEve","remindPrice","priceAt","priceBody","going","goingAt","plan":{"perWeek","weeks","startedOn","raceWeek":[{"key","title","count"}]}}]}` | Replaces the races this `device` sent with race-day or price-step reminders or going (`id` lower case with dashes, `date` the member's race day; races with none are left out; `priceAt` a `YYYY-MM-DD`, `priceBody` at most 240 characters; `remindPrice` and `going` only for catalog ids; 409 over 20, or 40 on all devices) → `{races, ids, going, push, email}`: `ids` the races the server reminds about, `push` true when the server can push to a device. Stores the login; creates the user's row if needed |
 | `DELETE /me/races/<id>` | | Removes one race → `{races}` |
 | `GET /races/going?ids=` | | `{going:{raceId:[{userId,name}]}, sharing, mine}`: the caller's Bruce friends who marked an upcoming race going (`ids` optional, comma-separated); empty with `sharing: false` while the caller shares no race (see "Friends going") |
+| `GET /races` | | `{races:[catalog entries], sources, importedAt}`: the organiser feed, laid over `races.json` by the apps (see "Race feed"). No login |
+| `POST /races/import` | `{"source","races":[...]}` with `Authorization: Bearer <RACE_FEED_TOKEN>` | Replaces a source's feed races → `{ok, source, imported, skipped}`; 401 without the token, 503 with none configured, 409 over 200 |
 | `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}`, or a crew `{"title","raceId","weekly","end","invite"}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366) or a race crew (see "Race crews"; 409 when already in a crew for the race), invites friends by push → 201 `{challenge}` |
 | `GET /challenges` | | `{challenges:[…], usesBruce:[userId]}`: the caller's challenges and invites, and which friends use the server |
 | `GET /challenges/<id>` | | Participants: `{challenge, leaderboard:[{userId,name,status,rank,score,visits,classes,dropins,minutes,studios,topStudio,topClass,categories,together,lastVisit,done,daily,recent}], months:[{month,label,entries}], crew, updatedAt}` (`crew` for crews only); others: a preview `{challenge, joinable}` |

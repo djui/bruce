@@ -54,6 +54,7 @@ dialog.wr::backdrop { background: #000; }
 .g-persona.g-night { background: radial-gradient(circle at 50% 30%, rgba(177, 140, 255, 0.55) 0, transparent 30%), linear-gradient(170deg, #0b0640, #3b0cff 60%, #b10dc9); color: #fff; }
 .g-place { background: linear-gradient(160deg, #00c2a8, #0066ff 70%, #2a0d8f); }
 .g-streak { background: radial-gradient(circle at 50% 30%, #ffd400 0, transparent 35%), linear-gradient(170deg, #ff3d00, #ff0066 70%, #6a00ff); }
+.g-race { background: radial-gradient(circle at 80% 20%, rgba(218, 252, 85, 0.45) 0, transparent 40%), linear-gradient(160deg, #0c2a1e, #0d5c43 60%, #1b8f6a); }
 .g-top { background: conic-gradient(from 210deg at 50% 40%, #dafc55, #3ae0ff, #b18cff, #dafc55); color: #000; }
 .g-share { background: radial-gradient(circle at 50% 30%, #1d2b0a, #000 70%); padding-top: calc(26px + env(safe-area-inset-top, 0px)); padding-bottom: calc(28px + env(safe-area-inset-bottom, 0px)); display: flex; flex-direction: column; }
 .wr-story.on.g-intro, .wr-story.on.g-persona, .wr-story.on.g-streak, .wr-story.on.g-top { background-size: 160% 160%; animation: wr-drift 7s ease-in-out infinite alternate; }

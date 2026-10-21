@@ -59,11 +59,13 @@ struct WrappedStats: Hashable {
     var friend: (userId: Int, name: String, initials: String, count: Int)?
     /// "Top N%" figures from our server; nil when the server is off, not reachable or the cohort is too small.
     var percentiles: WrappedPercentiles?
+    /// The races in My races this year that are over (Races.swift), with the result when one was typed.
+    var races: [WrappedRace] = []
 
     static func == (a: WrappedStats, b: WrappedStats) -> Bool { a.hashKey == b.hashKey }
     func hash(into h: inout Hasher) { h.combine(hashKey) }
     private var hashKey: String {
-        "\(year)|\(visits)|\(classes)|\(minutes)|\(months)|\(persona.kind)|\(topStudio?.id ?? 0)|\(topClass?.title ?? "")|\(streak.weeks)|\(friend?.userId ?? 0)|\(friend?.count ?? 0)|\(percentiles?.visits ?? -1)"
+        "\(year)|\(visits)|\(classes)|\(minutes)|\(months)|\(persona.kind)|\(topStudio?.id ?? 0)|\(topClass?.title ?? "")|\(streak.weeks)|\(friend?.userId ?? 0)|\(friend?.count ?? 0)|\(percentiles?.visits ?? -1)|\(races.map(\.key))"
     }
 
     var topHourLabel: String? { topHour.map { String(format: "%02d:00", $0.hour) } }
@@ -78,13 +80,14 @@ struct WrappedStats: Hashable {
     }
 
     /// The story cards to show, in order; a card without data is skipped. The share card is always last.
-    enum Card: String, Hashable, CaseIterable { case intro, visits, persona, place, streak, top, share }
+    enum Card: String, Hashable, CaseIterable { case intro, visits, persona, place, streak, race, top, share }
     var cards: [Card] {
         var c: [Card] = [.intro]
         if visits > 0 { c.append(.visits) }
         if visits >= 3 { c.append(.persona) }
         if topStudio != nil { c.append(.place) }
         if streak.weeks >= 2 || friend != nil { c.append(.streak) }
+        if !races.isEmpty { c.append(.race) }
         if visits > 0, percentiles?.visits != nil { c.append(.top) }
         c.append(.share)
         return c
@@ -99,8 +102,35 @@ struct WrappedStats: Hashable {
         if streak.weeks >= 2 { out.append(("\(streak.weeks) wk", "longest streak")) }
         if let f = friend { out.append(("\(f.count)", "\(f.count == 1 ? "class" : "classes") with \(f.name)")) }
         if out.count < 6, studios > 1 { out.append(("\(studios)", "studios tried")) }
+        if out.count < 6, let r = races.first(where: { $0.timeText != nil }) { out.append((r.timeText ?? "", r.name)) }
+        else if out.count < 6, !races.isEmpty { out.append(("\(races.count)", races.count == 1 ? "race" : "races")) }
         if out.count < 6, let b = bestMonth { out.append(("\(months[b])", "in \(Wrapped.monthNames[b]), best month")) }
         return Array(out.prefix(6))
+    }
+}
+
+/// A race of the year for Wrapped's race chapter: the name, the day, the result when the member typed one.
+struct WrappedRace: Hashable {
+    let key: String
+    let name: String
+    let day: String
+    let kind: String
+    /// "1:08:52"; nil without a result (or a DNF).
+    let timeText: String?
+    /// "Place 212 of 1,040".
+    let placeText: String?
+    var dayText: String { RaceDay.format(day, "d MMM") }
+}
+
+extension Wrapped {
+    /// The member's races of `now`'s year that are over, oldest first (Races.swift).
+    static func races(_ entries: [MyRaceEntry], now: Date = Date()) -> [WrappedRace] {
+        let year = RaceDay.today(now).prefix(4)
+        return entries.filter { $0.day.hasPrefix(year) && $0.isPast(now: now) }.sorted { $0.day < $1.day }.map { e in
+            let r = e.mine.result
+            return WrappedRace(key: e.mine.key, name: e.race.name, day: e.day, kind: [e.race.sport?.title ?? e.race.type.title, e.startText].compactMap { $0 }.joined(separator: " · "),
+                               timeText: r.flatMap { $0.dnf ? nil : $0.timeText }, placeText: r?.dnf == true ? "Did not finish" : r?.placeText)
+        }
     }
 }
 
@@ -306,6 +336,7 @@ extension AppModel {
         var s = Wrapped.stats(visits: visits, now: now, firstName: user?.firstName ?? (AppModel.demo ? "Uwe" : nil),
                               studioName: { studioNames[$0] }, categoryTitle: { categoryTitles[$0] },
                               friendBookings: friendBookings, friendName: { names[$0] })
+        s.races = Wrapped.races(myRaceEntries, now: now)
         if AppModel.demo {
             s.percentiles = WrappedPercentiles(visits: 92, minutes: 88, studios: 70, streak: 79, cohort: 23)
         } else if s.visits > 0, tokenUsable, let session, AutoBookServer.isConfigured, AutoBookServer.booksForMe {

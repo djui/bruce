@@ -22,6 +22,7 @@ const GOING_SHARE = 'Friends who share their races show up here once you share o
 const GOING_CONSENT = "Our server stores your Bruce user id, this race and that your Bruce friends may see it. Only friends who share a race themselves see it, nobody else. It's deleted when you switch this off, remove the race, after race day, or with your data on the server.";
 const RECOVERY_HINT = 'An easy week after the race, from the Train for it mix. Brüce books nothing for you.';
 const RACE_DAY_HINT = "Start times, the bib and what to bring are the organiser's; check their page or your email.";
+const CLUBS_LABEL = 'Training clubs';
 
 /** Explore › Races chips (for this visit). */
 export const rf = { types: [], countries: [], past: false };
@@ -191,7 +192,9 @@ export function myRacesHTML(hrefOf, selectedId) {
   const row = (e) => {
     const h = R.hint(e, today);
     const past = R.isPast(e.race, today, e.mine.day), results = past && resultsUrl(e.race);
-    const right = past ? (results ? '' : 'Done') : R.daysToGo(e.race, today, e.mine.day) <= 0 ? 'Today' : R.daysToGo(e.race, today, e.mine.day) + ' d';
+    // After the race: the member's time; else a race with results has its See results button instead.
+    const right = past ? (e.mine.result ? (e.mine.result.dnf ? 'DNF' : R.timeText(e.mine.result.seconds)) : results ? '' : 'Done')
+      : R.daysToGo(e.race, today, e.mine.day) <= 0 ? 'Today' : R.daysToGo(e.race, today, e.mine.day) + ' d';
     const going = past ? [] : St.friendsGoing(e.race.id);
     return '<div class="race-row-wrap"><a class="trow race-row' + (selectedId === e.race.id ? ' selected' : '') + '" href="' + hrefOf(e.race.id) + '">' + bib(e.race, e.mine.day) +
       '<span class="grow"><b>' + esc(e.race.name) + '</b><p class="muted">' + esc(h || [e.race.venue || e.race.city, R.distanceText(e.race)].filter(Boolean).join(' · ')) + '</p>' +
@@ -216,10 +219,20 @@ export function myRacesHTML(hrefOf, selectedId) {
   return html + '<p class="muted small note">' + esc(DEVICE_NOTE) + '</p>';
 }
 
-/** After the race: results on the race's own site and the recovery week's mix with Find buttons. */
-function afterHTML(r, rec, title) {
+/** The member's result (races.js RaceResult): time, place and the splits as rows. */
+function resultHTML(res) {
+  return '<div class="race-result"><div class="row-between"><b class="race-result-time">' + esc(res.dnf ? 'Did not finish' : R.timeText(res.seconds)) + '</b>' +
+    (R.placeText(res) ? '<span class="muted small">' + esc(R.placeText(res)) + '</span>' : '') + '</div>' +
+    (res.splits && res.splits.length ? '<div class="race-splits">' + res.splits.map((s) => '<span><span>' + esc(s.title) + '</span><b>' + esc(R.timeText(s.seconds)) + '</b></span>').join('') + '</div>' : '') + '</div>';
+}
+
+/** After the race: the member's result, results on the race's own site and the recovery week's mix with Find buttons. */
+function afterHTML(r, rec, title, entry) {
   const results = resultsUrl(r);
+  const res = entry && entry.mine.result;
   return '<div class="card race-after"><p class="race-after-title">' + icon('flag') + '<b>' + esc(title || (results ? "The race is over. Results are on the race's own site." : 'The race is over.')) + '</b></p>' +
+    (res ? resultHTML(res) : '') +
+    (entry ? '<button class="btn glass sm" data-rresult="' + esc(R.keyOf(entry.mine)) + '">' + icon('clock') + (res ? ' Edit result' : ' Add your result') + '</button>' : '') +
     (results ? '<a class="btn lime" href="' + esc(results) + '" target="_blank" rel="noopener noreferrer">See results on ' + esc(R.host(results)) + icon('external') + '</a>' : '') +
     (rec ? '<p><b>Recovery week: ' + esc(rec.text) + '</b><br><span class="muted small">' + esc(RECOVERY_HINT) + '</span></p><div class="row2">' +
       rec.mix.map((x) => '<button class="btn glass sm" data-plan-find="' + esc(x.key) + '">Find ' + esc(x.title) + '</button>').join('') + '</div>' : '') + '</div>';
@@ -261,14 +274,16 @@ export function renderRace(el, id, ctx) {
     const h = R.host(r.signupUrl);
     const openLabel = !custom && !past && (r.status === 'open' || r.status === 'opensSoon') ? 'Sign up on ' + h : 'Open ' + h;
     const entry = mine && myEntries().find((x) => R.keyOf(x.mine) === id);
+    const clubs = custom ? [] : R.clubsFor(S.trainingClubs, r);
 
     el.innerHTML = '<header class="hero race-hero t-' + esc(r.type) + '">' + icon(R.glyph(r), 'race-hero-glyph') +
       '<div class="hero-bar">' + back + '<span class="spacer"></span>' + (h ? glassBtn('share', 'data-ract="share"', 'Share the race page') : '') + '</div>' +
       '<div class="hero-text"><span class="hero-tag">' + esc(R.heroTag(r)) + '</span><h1>' + esc(r.name) + '</h1>' + (R.placeLine(r) ? '<p>' + esc(R.placeLine(r)) + '</p>' : '') + '</div></header>' +
       '<div class="pane-pad"><h2 class="date-line">' + esc(R.longDateText(r, day)) + '</h2>' +
       '<div class="facts race-facts">' + facts.map(([ic, t]) => '<span>' + icon(ic) + esc(t) + '</span>').join('') + '</div>' +
-      (past ? afterHTML(r, entry && !planOf(entry) ? recovery(entry, today) : null) : goingHTML(St.friendsGoing(r.id), 30)) +
-      (h ? '<a class="btn glass race-link" href="' + esc(r.signupUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(openLabel) + icon('external') + '</a>' : '') +
+      (past ? afterHTML(r, entry && !planOf(entry) ? recovery(entry, today) : null, null, entry) : goingHTML(St.friendsGoing(r.id), 30)) +
+      (clubs.length ? '<div class="facts race-facts race-clubs"><span>' + icon('building') + '<span>' + esc(CLUBS_LABEL) + ': ' + clubs.map((c) => '<a href="#/explore/studio/' + c.studioId + '">' + esc(c.name) + '</a> · ' + esc(c.badge)).join(', ') + '</span></span></div>' : '') +
+      (h ? '<a class="btn glass race-link" href="' + esc(R.registerURL(r)) + '" target="_blank" rel="noopener noreferrer">' + esc(openLabel) + icon('external') + '</a>' : '') +
       (!past && !custom && r.checkedOn ? feeCard(r, today) : '') +
       (!past && R.opensLater(r, today) ? '<div class="card notice-card">' + icon('calendar') + '<p><b>' + esc(R.statusText(r, today)) + '</b><br><span class="muted small">Places can go fast. The Brüce iPhone app can remind you that morning.</span></p></div>' : '') +
       (mine && mine.plan ? raceCardHTML(id) : '') +
@@ -333,6 +348,8 @@ export function renderRace(el, id, ctx) {
   el.onclick = (e) => {
     if (planClick(e)) return;
     if (crewClick(e, draw)) return;
+    const rb = e.target.closest('[data-rresult]');
+    if (rb) { openResultEditor(rb.dataset.rresult, draw); return; }
     const fb = e.target.closest('[data-rfmt]');
     if (fb) {
       const r = raceById(id);
@@ -384,6 +401,52 @@ export function renderRace(el, id, ctx) {
   loadChallengesIfAllowed();
   Promise.all([St.loadRaces(), St.loadGoing(), S.challengesLoading, mineFor(id) && mineFor(id).plan ? St.loadHistory().catch(() => []) : null])
     .then(() => { if (el.isConnected && !el.contains(document.activeElement)) draw(); });
+}
+
+// ---------------------------------------------------------------- your result
+
+/** The member's result after the race (races.js): finish time, place and splits, typed by hand from the organiser's
+ *  results. HYROX offers its stations as rows; other races start with none. */
+export function openResultEditor(key, after) {
+  const e = myEntries().find((x) => R.keyOf(x.mine) === key);
+  if (!e) return;
+  const res = e.mine.result || null;
+  let splits = res ? res.splits.map((s) => ({ title: s.title, time: R.timeText(s.seconds) })) : [];
+  const tpl = R.splitTemplate(e.race.type);
+  const rows = () => splits.map((s, i) => '<div class="frow race-split-row"><input type="text" name="st' + i + '" maxlength="40" placeholder="Split" value="' + esc(s.title) + '">' +
+    '<input type="text" name="sv' + i + '" inputmode="numeric" maxlength="10" placeholder="4:05" value="' + esc(s.time) + '"><button type="button" class="link" data-del-split="' + i + '" aria-label="Remove split">×</button></div>').join('');
+  const s = sheet('Your result · ' + e.race.name, '<form class="form" id="result-form">' +
+    '<label><span>Finish time</span><input type="text" name="time" inputmode="numeric" maxlength="12" placeholder="1:08:52" value="' + esc(res && !res.dnf ? R.timeText(res.seconds) : '') + '"></label>' +
+    '<div class="row2"><label><span>Place</span><input type="text" name="place" inputmode="numeric" maxlength="7" value="' + esc(res && res.place ? res.place : '') + '"></label>' +
+    '<label><span>of</span><input type="text" name="field" inputmode="numeric" maxlength="7" placeholder="1,040" value="' + esc(res && res.field ? res.field : '') + '"></label></div>' +
+    '<label class="toggle"><span>Did not finish</span><input type="checkbox" name="dnf"' + (res && res.dnf ? ' checked' : '') + '><i></i></label>' +
+    '<h3 class="section-head">Splits</h3><div id="race-splits">' + rows() + '</div>' +
+    '<div class="row2"><button type="button" class="btn glass sm" data-add-split>Add a split</button>' + (tpl.length ? '<button type="button" class="btn glass sm" data-tpl-split>Add the stations</button>' : '') + '</div>' +
+    '<p class="error small" id="result-error" role="alert"></p>' +
+    '<button class="btn lime" type="submit">Save</button>' + (res ? '<button class="btn glass red-text" type="button" data-del>Remove result</button>' : '') +
+    '<p class="muted small">Typed by you, from the organiser\'s results. It goes into your Wrapped.</p></form>', { cls: 'tall' });
+  const form = s.querySelector('#result-form');
+  const read = () => { splits = splits.map((x, i) => ({ title: form['st' + i].value, time: form['sv' + i].value })); };
+  const redraw = () => { s.querySelector('#race-splits').innerHTML = rows(); };
+  form.addEventListener('click', (ev) => {
+    const d = ev.target.closest('[data-del-split]');
+    if (d) { read(); splits.splice(+d.dataset.delSplit, 1); redraw(); return; }
+    if (ev.target.closest('[data-add-split]')) { read(); splits.push({ title: '', time: '' }); redraw(); return; }
+    if (ev.target.closest('[data-tpl-split]')) { read(); splits = splits.concat(tpl.filter((t) => !splits.some((x) => x.title === t)).map((t) => ({ title: t, time: '' }))); redraw(); return; }
+    if (ev.target.closest('[data-del]')) { updateMine(key, { result: null }); s.close(); if (after) after(); }
+  });
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    read();
+    const dnf = form.dnf.checked, sec = R.parseSeconds(form.time.value);
+    if (!dnf && sec == null) { form.querySelector('#result-error').textContent = "That doesn't look like a time. Try 1:08:52 or 38:10."; return; }
+    const num = (v) => { const n = parseInt(String(v).replace(/\D/g, ''), 10); return n > 0 ? n : null; };
+    const list = splits.map((x) => ({ title: x.title.trim(), seconds: R.parseSeconds(x.time) })).filter((x) => x.title && x.seconds != null);
+    updateMine(key, { result: { seconds: dnf ? 0 : sec, place: num(form.place.value), field: num(form.field.value), splits: list, dnf } });
+    toast('Result saved');
+    s.close();
+    if (after) after();
+  });
 }
 
 // ---------------------------------------------------------------- add or edit a race by hand

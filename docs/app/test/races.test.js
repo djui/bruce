@@ -284,6 +284,49 @@ test('race day: the ticket today or from 18:00 the evening before, the map link,
   assert.equal(R.priceReminder(race('tough-viking-stadion-2027'), '2027-06-01'), null, 'over');
 });
 
+test('results, the register link, the feed overlay and training clubs', () => {
+  assert.equal(R.timeText(4132), '1:08:52'); assert.equal(R.timeText(2290), '38:10'); assert.equal(R.timeText(0), '0:00');
+  assert.equal(R.parseSeconds('1:08:52'), 4132); assert.equal(R.parseSeconds('68:52'), 4132); assert.equal(R.parseSeconds('1.08.52'), 4132);
+  assert.equal(R.parseSeconds('1h 08m'), 4080); assert.equal(R.parseSeconds('45m'), 2700);
+  for (const bad of ['fast', '1:60', '', '12']) assert.equal(R.parseSeconds(bad), null, bad);
+  const res = { seconds: 4132, place: 212, field: 1040, splits: [{ title: 'SkiErg', seconds: 245 }] };
+  assert.equal(R.resultSummary(res), '1:08:52 · Place 212 of 1,040');
+  assert.equal(R.resultSummary({ seconds: 0, dnf: true }), 'Did not finish');
+  assert.equal(R.resultSummary({ seconds: 2290 }), '38:10');
+  assert.equal(R.splitTemplate('hyrox').length, 9); assert.deepEqual(R.splitTemplate('running'), []);
+  const tv = race('tough-viking-stadion-2027');
+  assert.equal(R.registerURL(tv), tv.signupUrl);
+  assert.equal(R.registerURL(Object.assign({}, tv, { affiliate: { param: 'ref', code: 'bruce' } })), 'https://www.toughviking.se/?ref=bruce');
+  assert.ok(R.registerURL(Object.assign({}, race('lidingoloppet-2027'), { affiliate: { param: 'utm_source', code: 'bruce' } })).endsWith('registration-fees?utm_source=bruce'));
+  const ok = { id: 'a-2027', name: 'A', type: 'running', date: '2027-05-01', city: 'X', country: 'SE', distancesKm: [5], signupUrl: 'https://a.example', status: 'open', checkedOn: '2026-10-21' };
+  const v = (r, top) => R.validate(Object.assign({ version: 1, checkedOn: '2026-10-21', races: [Object.assign({}, ok, r)] }, top || {}));
+  assert.deepEqual(v({ affiliate: { param: 'ref', code: 'bruce' } }), []);
+  assert.match(v({ affiliate: { param: 'ref' } })[0], /affiliate/);
+  assert.match(v({ affiliate: { param: 'r f', code: 'x' } })[0], /affiliate/);
+  assert.deepEqual(v({}, { trainingClubs: [{ studioId: 9810, name: 'Box', badge: 'HYROX Training Club', raceType: 'hyrox' }] }), []);
+  assert.match(v({}, { trainingClubs: [{ studioId: 'x', name: 'Box', badge: 'B' }] })[0], /studioId/);
+  assert.match(v({}, { trainingClubs: [{ studioId: 1, name: 'Box', badge: 'B', raceType: 'paddle' }] })[0], /raceType/);
+  // The feed overlay: newer facts win, new races are added, the catalog is never shortened.
+  const fresh = Object.assign({}, race('stockholm-marathon-2027'), { checkedOn: '2026-11-01', status: 'open' });
+  const stale = Object.assign({}, race('vasaloppet-2027'), { checkedOn: '2026-01-01', name: 'Old' });
+  const merged = R.mergeFeed(CATALOG, [fresh, stale, Object.assign({}, ok, { id: 'example-run-2027', name: 'Example Run' })]);
+  assert.equal(merged.length, CATALOG.length + 1);
+  assert.equal(merged.find((r) => r.id === 'stockholm-marathon-2027').status, 'open');
+  assert.equal(merged.find((r) => r.id === 'vasaloppet-2027').name, 'Vasaloppet');
+  assert.ok(merged.some((r) => r.id === 'example-run-2027'));
+  assert.deepEqual(merged.map((r) => r.date), merged.map((r) => r.date).slice().sort());
+  // Training clubs: none in the published file yet; by race type.
+  assert.deepEqual(R.decodeClubs(FILE), []);
+  const clubs = R.decodeClubs({ trainingClubs: [{ studioId: 9810, name: 'Box', badge: 'HYROX Training Club', raceType: 'hyrox' }, { studioId: 1, name: 'Any', badge: 'Club' }, { studioId: 2, name: '', badge: 'X' }] });
+  assert.deepEqual(clubs.map((c) => c.studioId), [9810, 1]);
+  assert.deepEqual(R.clubsFor(clubs, race('hyrox-stockholm-2026')).map((c) => c.name), ['Any', 'Box']);
+  assert.deepEqual(R.clubsFor(clubs, tv).map((c) => c.name), ['Any']);
+  // The example feed is a valid import (the server's own checks are in server/test).
+  const feed = read('../../../server/feeds/example-feed.json');
+  assert.deepEqual(R.validate({ version: 1, checkedOn: '2026-10-21', races: feed.races }), []);
+  assert.equal(R.decode(feed).length, 1);
+});
+
 test('Home: Upcoming races (not in My races, open or opening, own country first) and the next price step pill', () => {
   const mine = [R.fromRace(race('hyrox-stockholm-2026'))];
   assert.deepEqual(R.upcomingOnHome(CATALOG, mine, TODAY, 'SE', 5).map((r) => r.id),

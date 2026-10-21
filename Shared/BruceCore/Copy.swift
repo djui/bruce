@@ -157,6 +157,17 @@ enum Copy {
     static let planAutoTaperHint = "From the week before race week, Book every week pauses for Hyrox, Strength, High-intensity and CrossFit until race day is over. Nothing already booked is cancelled."
     static func planTaperPaused(_ n: Int) -> String { n == 1 ? "Taper: Book every week paused for 1 class until after the race" : "Taper: Book every week paused for \(n) classes until after the race" }
     static let raceDayHint = "Start times, the bib and what to bring are the organiser's; check their page or your email."
+    static let raceResultTitle = "Your result"
+    static let raceResultAdd = "Add your result"
+    static let raceResultSaved = "Result saved"
+    static let raceResultHint = "Typed by you, from the organiser's results. It goes into your Wrapped and, on the iPhone, Apple Health."
+    static let raceResultTime = "Finish time, e.g. 1:08:52"
+    static let raceResultPlace = "Place"
+    static let raceResultField = "of"
+    static let raceResultSplits = "Splits"
+    static let raceResultDNF = "Did not finish"
+    static let raceTrainingClubs = "Training clubs"
+    static let raceTrainingClubHint = "A Bruce studio with the organiser's training status, as the catalog lists it. Names only."
     static let raceRemindPriceServer = "With the server on, as a push and an email; else a notification on this device."
     static func planStartsHint(_ day: String) -> String { "Your \(RaceDay.format(day, "d MMMM")) start counts back from race day. Until then, Explore and For you work as usual." }
 

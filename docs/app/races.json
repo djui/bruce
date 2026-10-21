@@ -2,6 +2,7 @@
   "version": 1,
   "checkedOn": "2026-10-21",
   "notice": "Hand-curated Nordic race events for Brüce, an unofficial Bruce Studios client. Facts as shown on each race's own page on checkedOn; they change, so the race page always links there. Not affiliated with any race, organiser or platform. Race names are trademarks of their owners. Schema and upkeep: README.md, section Races.",
+  "trainingClubs": [],
   "races": [
     {
       "id": "goteborgsvarvet-2026",

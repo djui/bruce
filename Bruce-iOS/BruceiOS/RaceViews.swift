@@ -237,7 +237,7 @@ struct RaceDetailView: View {
                         if past { RaceAfterCard(race: r, entry: entry) }
                         // Mockup 2: the friends going right above the sign-up link.
                         if !past, !going.isEmpty { GoingFaces(users: going, size: 30) }
-                        if let u = r.url { signupButton(r, u, past: past) }
+                        if let u = r.registerURL { signupButton(r, u, past: past) }
                         if !past, !r.isCustom && !r.checkedOn.isEmpty { feeCard(r) }
                         if !past, r.opensLater() { signupCard(r) }
                         if let e = entry, let plan = m.racePlan(for: e) { planCard(e, plan) }
@@ -284,6 +284,11 @@ struct RaceDetailView: View {
             line("clock", r.countdownText(day: mine?.day))
             if !past, let s = r.signupLine() { line("ticket", s) }
             if !past, let s = r.startInfo { line("figure.walk.arrival", s) }
+            // Training clubs (Races.swift TrainingClub): studios with the organiser's status, tappable.
+            let clubs = r.isCustom ? [] : m.trainingClubs(for: r)
+            if !clubs.isEmpty {
+                Label { clubsText(clubs) } icon: { Image(systemName: "building.2").foregroundStyle(Theme.limeInk) }
+            }
             if !past, r.status != .open, !r.opensLater(), let s = r.statusText() { line(RaceStyle.statusSymbol(r.status), s) }
             if r.klassiker == true { line("rosette", "A leg of En Svensk Klassiker") }
         }
@@ -292,6 +297,18 @@ struct RaceDetailView: View {
     func line(_ symbol: String, _ text: String) -> some View {
         Label { Text(text).bruceFont(16).fixedSize(horizontal: false, vertical: true) } icon: {
             Image(systemName: symbol).foregroundStyle(Theme.limeInk)
+        }
+    }
+    /// "Training clubs: Example Box Hornstull (HYROX Training Club)", each studio a link.
+    func clubsText(_ clubs: [TrainingClub]) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(Copy.raceTrainingClubs).bruceFont(16)
+            ForEach(clubs) { c in
+                NavigationLink(value: Route.studio(c.studioId)) {
+                    Text("\(c.name) · \(c.badge)").bruceFont(15, weight: .semibold).foregroundStyle(Theme.limeInk).multilineTextAlignment(.leading)
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -779,9 +796,108 @@ struct MyRaceRow: View {
         .accessibilityElement(children: .combine)
     }
     var countdown: String {
-        // A past race with results has its See results button there instead.
-        guard let d = entry.daysToGo(), !entry.isPast() else { return entry.isPast() && entry.race.results == nil ? "Done" : "" }
+        // After the race: the member's time; else a past race with results has its See results button there instead.
+        if entry.isPast() {
+            if let res = entry.mine.result { return res.dnf ? "DNF" : res.timeText }
+            return entry.race.results == nil ? "Done" : ""
+        }
+        guard let d = entry.daysToGo() else { return "" }
         return d <= 0 ? "Today" : "\(d) d"
+    }
+}
+
+// MARK: - Your result
+
+/// The member's result after the race: finish time, place and splits (Races.swift RaceResult). Typed by hand from the
+/// organiser's results; HYROX offers its stations as rows, other races start with none.
+struct RaceResultEditor: View {
+    @Environment(AppModel.self) var m
+    let key: String
+    @State private var time = ""
+    @State private var place = ""
+    @State private var field = ""
+    @State private var dnf = false
+    @State private var splits: [(title: String, time: String)] = []
+    @State private var loaded = false
+
+    var entry: MyRaceEntry? { m.myRaceEntries.first { $0.mine.key == key } }
+    var seconds: Int? { RaceResult.seconds(time) }
+    var valid: Bool { dnf || seconds != nil }
+
+    var body: some View {
+        Form {
+            Section {
+                TextField(Copy.raceResultTime, text: $time).keyboardType(.numbersAndPunctuation).disabled(dnf)
+                HStack {
+                    TextField(Copy.raceResultPlace, text: $place).keyboardType(.numberPad)
+                    Text(Copy.raceResultField).foregroundStyle(Theme.secondary)
+                    TextField("1,040", text: $field).keyboardType(.numberPad)
+                }
+                Toggle(Copy.raceResultDNF, isOn: $dnf)
+            } header: { Text(entry?.race.name ?? "") } footer: {
+                Text(time.isEmpty || seconds != nil || dnf ? Copy.raceResultHint : "That doesn't look like a time. Try 1:08:52 or 38:10.")
+            }
+            Section(Copy.raceResultSplits) {
+                ForEach(splits.indices, id: \.self) { i in
+                    HStack {
+                        TextField("Split", text: Binding(get: { splits[i].title }, set: { splits[i].title = $0 }))
+                        TextField("4:05", text: Binding(get: { splits[i].time }, set: { splits[i].time = $0 }))
+                            .keyboardType(.numbersAndPunctuation).multilineTextAlignment(.trailing).frame(width: 90)
+                    }
+                }
+                .onDelete { splits.remove(atOffsets: $0) }
+                Button { splits.append(("", "")) } label: { Label("Add a split", systemImage: "plus") }
+                if let e = entry, splits.isEmpty, !RaceResult.splitTemplate(e.race.type).isEmpty {
+                    Button { splits = RaceResult.splitTemplate(e.race.type).map { ($0, "") } } label: { Label("Add the \(e.race.type.title) stations", systemImage: "list.number") }
+                }
+            }
+            if entry?.mine.result != nil {
+                Section { Button("Remove result", role: .destructive) { m.setRaceResult(key, nil); m.dismissSheets() } }
+            }
+        }
+        .bruceFont(16)
+        .sheetChrome(Copy.raceResultTitle)
+        .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Save") { save() }.disabled(!valid) } }
+        .onAppear {
+            guard !loaded else { return }
+            loaded = true
+            if let r = entry?.mine.result {
+                time = r.timeText; place = r.place.map(String.init) ?? ""; field = r.field.map(String.init) ?? ""; dnf = r.dnf
+                splits = r.splits.map { ($0.title, RaceResult.timeText($0.seconds)) }
+            }
+        }
+    }
+
+    func save() {
+        let rows = splits.compactMap { s -> RaceSplit? in
+            let t = s.title.trimmingCharacters(in: .whitespaces)
+            guard !t.isEmpty, let sec = RaceResult.seconds(s.time) else { return nil }
+            return RaceSplit(title: t, seconds: sec)
+        }
+        m.setRaceResult(key, RaceResult(seconds: dnf ? 0 : (seconds ?? 0), place: Int(place.filter(\.isNumber)), field: Int(field.filter(\.isNumber)), splits: rows, dnf: dnf))
+        m.dismissSheets()
+    }
+}
+
+/// The member's result on the race page and in My races: time, place and the splits as rows.
+struct RaceResultBlock: View {
+    let result: RaceResult
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(result.dnf ? Copy.raceResultDNF : result.timeText).bruceFont(28, weight: .black, width: .expanded).monospacedDigit()
+                Spacer()
+                if let p = result.placeText { Text(p).bruceFont(15, weight: .semibold).foregroundStyle(Theme.secondary) }
+            }
+            if !result.splits.isEmpty {
+                VStack(spacing: 4) {
+                    ForEach(result.splits) { s in
+                        HStack { Text(s.title).bruceFont(14); Spacer(); Text(RaceResult.timeText(s.seconds)).bruceFont(14, weight: .semibold).monospacedDigit() }
+                    }
+                }
+                .padding(.top, 2)
+            }
+        }
     }
 }
 

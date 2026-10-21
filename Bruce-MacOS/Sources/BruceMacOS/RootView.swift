@@ -194,6 +194,7 @@ struct SheetHost: View {
         case .autoBook: AutoBookView()
         case .editRace(let id): RaceEditor(raceId: id)
         case .racePlan(let key): RacePlanSheet(key: key)
+        case .raceResult(let key): RaceResultEditor(key: key)
         case .newCrew(let key): NewCrewSheet(raceKey: key)
         // Places, goals and challenges are iPhone-only for now.
         case .places, .editPlace, .goals, .editGoal, .newChallenge, .widgets: PlaceholderPage(title: "Available in the iPhone app")

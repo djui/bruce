@@ -258,10 +258,52 @@ private struct WrappedCardView: View {
         case .persona: PersonaCard(stats: stats, width: width)
         case .place: PlaceCard(stats: stats, width: width)
         case .streak: StreakCard(stats: stats)
+        case .race: RaceChapterCard(stats: stats, width: width)
         case .top: TopCard(stats: stats)
         case .share:
             WrappedShareCard(stats: stats, animated: true).padding(.horizontal, -2).padding(.top, -6)
         }
+    }
+}
+
+/// The race chapter (Races.swift): each race of the year with its day and the result the member typed.
+private struct RaceChapterCard: View {
+    let stats: WrappedStats
+    let width: CGFloat
+    var body: some View {
+        let races = stats.races
+        let one = races.count == 1
+        Kicker(text: one ? "Race day" : "Your races").pop(0.05)
+        if one, let r = races.first {
+            let name = r.name.uppercased()
+            Text(name).font(W.display(W.fit(name, max: 40, width: width))).lineSpacing(-3).padding(.top, 16).pop(0.2)
+            if let t = r.timeText {
+                Text(t).font(W.display(72)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.5).padding(.top, 10).pop(0.4)
+            } else {
+                Text("\(r.dayText) · \(r.kind)").font(.system(size: 17, weight: .bold)).opacity(0.85).padding(.top, 10).pop(0.4)
+            }
+            if let p = r.placeText { Text(p).font(.system(size: 17, weight: .bold)).opacity(0.85).padding(.top, 6).pop(0.5) }
+        } else {
+            Text("\(races.count) RACES").font(W.display(44)).padding(.top, 16).pop(0.2)
+            VStack(spacing: 8) {
+                ForEach(races.prefix(5), id: \.key) { r in
+                    HStack(alignment: .firstTextBaseline) {
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(r.name).font(.system(size: 15, weight: .bold)).lineLimit(1)
+                            Text(r.placeText ?? r.kind).font(.system(size: 12, weight: .semibold)).opacity(0.8).lineLimit(1)
+                        }
+                        Spacer()
+                        Text(r.timeText ?? r.dayText).font(W.display(22)).monospacedDigit()
+                    }
+                    .padding(12)
+                    .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(.white.opacity(0.16)))
+                }
+                if races.count > 5 { Text("+\(races.count - 5) more").font(.system(size: 13, weight: .bold)).opacity(0.8) }
+            }
+            .padding(.top, 18).pop(0.6)
+        }
+        Text(races.contains { $0.timeText != nil } ? "Typed by you, from the organiser's results." : "Add your results on the race pages to see your times here.")
+            .font(.system(size: 14, weight: .medium)).opacity(0.85).padding(.top, 16).pop(0.9)
     }
 }
 
@@ -743,6 +785,11 @@ private struct WrappedBackground: View {
             }
         case .place:
             LinearGradient.css(160, [(Color(hex: 0x00C2A8), 0), (Color(hex: 0x0066FF), 0.7), (Color(hex: 0x2A0D8F), 1)])
+        case .race:
+            ZStack {
+                LinearGradient.css(160, [(Color(hex: 0x0C2A1E), 0), (Color(hex: 0x0D5C43), 0.6), (Color(hex: 0x1B8F6A), 1)])
+                glow(W.neon.opacity(0.45), at: UnitPoint(x: 0.8, y: 0.2), radius: far * 0.3)
+            }
         case .streak:
             ZStack {
                 LinearGradient.css(170, [(Color(hex: 0xFF3D00), 0), (Color(hex: 0xFF0066), 0.7), (Color(hex: 0x6A00FF), 1)])

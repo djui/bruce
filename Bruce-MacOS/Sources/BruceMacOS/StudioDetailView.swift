@@ -25,7 +25,16 @@ struct StudioDetailView: View {
             .padding(.horizontal, Theme.gutter).frame(height: 56)
             UnderlineTabs(titles: hasClasses ? ["Information", "Classes", "Reviews"] : ["Information", "Reviews"], selection: $tab)
             ScrollView {
-                if tab == 0 { information }
+                if tab == 0 {
+                    // Training club (Races.swift TrainingClub): the organiser's status, names only.
+                    if let club = m.trainingClub(studioId) {
+                        Label { Text("\(club.badge) · \(Copy.raceTrainingClubHint)").font(.system(size: 13)) } icon: { Image(systemName: "rosette") }
+                            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+                            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.lime.opacity(0.18)))
+                            .padding(.horizontal, Theme.gutter).padding(.top, 12)
+                    }
+                    information
+                }
                 else if hasClasses && tab == 1 { classesTab }
                 else { StudioReviews(rating: studio?.rating, reviews: m.reviews[studioId]) }
             }

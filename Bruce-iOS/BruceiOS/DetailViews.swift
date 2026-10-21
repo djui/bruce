@@ -773,6 +773,18 @@ struct StudioDetailView: View {
     var information: some View {
         VStack(alignment: .leading, spacing: 16) {
             notice
+            // Training club (Races.swift TrainingClub): the organiser's status, names only.
+            if let club = m.trainingClub(studioId) {
+                Label {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(club.badge).bruceFont(15, weight: .bold)
+                        Text(Copy.raceTrainingClubHint).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
+                } icon: { Image(systemName: "rosette").foregroundStyle(Theme.limeInk) }
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .glassEffect(.regular.tint(Theme.lime.opacity(0.12)), in: .rect(cornerRadius: 20))
+            }
             if m.isFirstVisit(studioId) { FirstVisitCard(studio: studio) }
             if let studio, studio.usesParakey { ParakeyRow(studio: studio, forClass: false) }
             if let b = m.todaysCheckIn(studioId: studioId) {

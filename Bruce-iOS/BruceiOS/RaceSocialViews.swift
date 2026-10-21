@@ -222,6 +222,15 @@ struct RaceAfterCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(Copy.raceOver(race), systemImage: "flag.checkered").bruceFont(16, weight: .semibold)
+            // Your result (RaceViews.swift RaceResultEditor): typed by hand, into Wrapped and Apple Health.
+            if let e = entry {
+                if let res = e.mine.result { RaceResultBlock(result: res) }
+                Button { m.present(.raceResult(e.mine.key)) } label: {
+                    Label(e.mine.result == nil ? Copy.raceResultAdd : "Edit result", systemImage: "stopwatch").bruceFont(15, weight: .semibold)
+                        .padding(.horizontal, 12).frame(height: 34)
+                }
+                .buttonStyle(.glass)
+            }
             if let u = race.results {
                 Button { openURL(u) } label: {
                     Label("\(Copy.raceResults) on \(Self.host(u))", systemImage: "list.number").bruceFont(16, weight: .semibold)
