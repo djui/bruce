@@ -102,6 +102,7 @@ struct ClassDetailView: View {
             await m.loadClassDetail(classId)
             if let sid = m.findClass(classId)?.studioId { await m.loadStudioLimits(sid) }
             await m.loadClassAttendees(classId)
+            if m.isLoggedIn, m.visitHistory == nil { await m.fetchVisitHistory() }   // "First visit here?"
         }
     }
 
@@ -132,6 +133,7 @@ struct ClassDetailView: View {
                         if let r = BookingRules(c) {
                             if let b = booking { bookedBox(r, checkedIn: b.checkedInAt.flatMap(BruceDate.parse)) } else { rulesLines(c, r) }
                         }
+                        if m.isFirstVisit(c.studioId), booking?.isCheckedIn != true { FirstVisitCard(studio: studio, c: c) }
                         if m.isLoggedIn, c.start.map({ $0 > Date() }) ?? false { AutoBookToggle(c: c) }
                         if m.offersWaitlistAutoBook(c) { WaitlistAutoBookToggle(c: c) }
                         if let studio, studio.usesParakey { ParakeyRow(studio: studio, forClass: true) }
@@ -682,6 +684,7 @@ struct StudioDetailView: View {
             await m.loadStudioLimits(studioId)
             await m.loadSchedule(studioId)
             await m.loadReviews(studioId)
+            if m.isLoggedIn, m.visitHistory == nil { await m.fetchVisitHistory() }   // "First visit here?"
             if studio?.hasClasses == true { await m.loadStudioClasses(studioId) }
         }
     }
@@ -767,6 +770,7 @@ struct StudioDetailView: View {
     var information: some View {
         VStack(alignment: .leading, spacing: 16) {
             notice
+            if m.isFirstVisit(studioId) { FirstVisitCard(studio: studio) }
             if let studio, studio.usesParakey { ParakeyRow(studio: studio, forClass: false) }
             if let b = m.todaysCheckIn(studioId: studioId) {
                 LimeButton(title: "Show ticket", systemImage: "ticket") { m.present(.ticket(b.id)) }
@@ -859,11 +863,7 @@ struct StudioReviews: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline, spacing: 8) {
-                    Image(systemName: "star.fill").foregroundStyle(Theme.ink)
-                    Text(rating?.average.map { String(format: "%.1f", Double($0) / 100) } ?? "–").font(.system(size: 30, weight: .black).width(.expanded))
-                    Text("\(rating?.total ?? 0) reviews").font(.system(size: 14)).foregroundStyle(Theme.secondary)
-                }
+                RecentRatingRow(rating: rating, reviews: reviews)
                 ForEach(0..<5, id: \.self) { i in
                     let p = percent(5 - i)
                     HStack(spacing: 12) {

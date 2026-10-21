@@ -11,6 +11,7 @@ import { challengeIdFromHash, challengeShareUrl, challengeRoute } from '../js/li
 import { cancelStrikes, nextCancelStep, cancelCost, cancelChip, POLICY } from '../js/rules.js';
 import { icsFor, icsTime, icsFileName, feedUrl } from '../js/calendar.js';
 import { templateOf, matches, candidateDays, pick } from '../js/bookagain.js';
+import { firstVisitInfo, recentRating, ratingTrend, visitedStudios } from '../js/firstvisit.js';
 
 const Z = 'Europe/Stockholm';
 const NOW = '2026-10-14T10:00:00Z';   // Wednesday 14 October 2026, 12:00 in Stockholm
@@ -448,4 +449,37 @@ test('the Classes list sorts by start, distance, travel time or spots left, unkn
   assert.deepEqual(ids(sortClasses([a, b, c, d], { sort: 'distance' }, by)), [2, 1, 4, 3]);
   assert.deepEqual(ids(sortClasses([a, b, c, d], { sort: 'travel' }, by)), [2, 1, 3, 4]);
   assert.deepEqual(ids(sortClasses([a, b, c, d], { sort: 'spots' }, by)), [4, 1, 3, 2]);   // unknown before full
+});
+
+// ---------------------------------------------------------------- first visit and recent rating (firstvisit.js)
+
+test('first-visit card content comes from live fields only', () => {
+  const studio = { id: 7, status: 'LIVE', qr_code_id: 'abc', integration_door_type: 'parakey', studio_facilities: [{ facility: { title: 'Shower' } }, { facility: { title: 'Lockers' } }, {}] };
+  const c = { title: 'Bouldering Intro', start_time: '2026-10-22T15:30:00Z', early_check_in_minutes: 30, late_check_in_minutes: 5 };
+  const r = { checkInFrom: Date.parse('2026-10-22T15:00:00Z'), lateCheckIn: Date.parse('2026-10-22T15:25:00Z') };
+  const tt = (ms) => new Date(ms).toISOString().slice(11, 16);
+  const info = firstVisitInfo(studio, c, r, tt);
+  assert.equal(info.checkIn, 'Check in 15:00–15:25');
+  assert.equal(info.checkInNote, 'Opens 30 min before, closes 5 min before');
+  assert.match(info.door, /Parakey/);
+  assert.deepEqual(info.facilities, ['Shower', 'Lockers']);
+  assert.match(firstVisitInfo({ status: 'live', qr_code_id: 'x' }, null, null, tt).door, /QR code/);
+  assert.equal(firstVisitInfo({ status: 'live' }, null, null, tt).door, null);
+  assert.match(firstVisitInfo({}, null, null, tt).checkIn, /before the class starts/);
+  assert.deepEqual([...visitedStudios([{ studio_id: 1, checked_in_at: 'x' }, { class: { studio_id: 2 }, checked_in_at: 'y' }, { studio_id: 3 }], [{ studio_id: 4, checked_in_at: 'z' }])], [1, 2, 4]);
+  assert.equal(visitedStudios(null, []), null);
+});
+
+test('recent rating is the last 90 days of rated reviews, with an honest trend note', () => {
+  const now = Date.parse('2026-10-21T10:00:00Z');
+  const day = (n) => new Date(now - n * 86400000).toISOString();
+  const reviews = [{ rating: 5, created_at: day(1) }, { rating: 3, created_at: day(10) }, { rating: 4, created_at: day(89) }, { rating: 1, created_at: day(91) }, { rating: 0, created_at: day(2) }, { comment: 'x', created_at: day(3) }];
+  const rec = recentRating(reviews, 90, now);
+  assert.deepEqual(rec, { average: 4, count: 3, days: 90 });
+  assert.equal(recentRating([{ rating: 5, created_at: day(100) }], 90, now), null);
+  assert.equal(ratingTrend(470, rec), null);                                   // fewer than 5 ratings
+  assert.equal(ratingTrend(470, { average: 4.1, count: 23 }), 'Rated lower lately.');
+  assert.equal(ratingTrend(410, { average: 4.6, count: 5 }), 'Rated higher lately.');
+  assert.equal(ratingTrend(450, { average: 4.3, count: 9 }), null);
+  assert.equal(ratingTrend(null, { average: 4.3, count: 9 }), null);
 });

@@ -136,6 +136,7 @@ struct ClassDetailView: View {
                     }
                     if let r = BookingRules(c) {
                         if let b = booking { bookedBox(r, checkedIn: b.checkedInAt.flatMap(BruceDate.parse)) } else { rulesLines(c, r) }
+                        if m.isFirstVisit(c.studioId), booking?.isCheckedIn != true { FirstVisitCard(studio: studio, c: c).padding(.top, 16) }
                     }
                     if m.isLoggedIn, c.start.map({ $0 > Date() }) ?? false { AutoBookToggle(c: c) }
                     if m.offersWaitlistAutoBook(c) { WaitlistAutoBookToggle(c: c) }
