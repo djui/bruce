@@ -29,7 +29,7 @@ struct BruceiOSApp: App {
                     if p == .active { location.start() } else if p == .background { location.stop() }
                     // Waitlist spots can turn into bookings while the app is in the background.
                     if p == .active && old == .background {
-                        Task { await model.refreshOnForeground(); await HealthSync.shared.sync(model: model) }
+                        Task { await model.refreshOnForeground(); await HealthSync.shared.sync(model: model); await ClassLiveActivity.sync(model) }
                     }
                     if p == .background { model.updateWidgetSnapshot() }
                 }

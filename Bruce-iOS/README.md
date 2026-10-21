@@ -192,7 +192,13 @@ render from `Shared/BruceWidgetKit/WidgetSnapshot.swift`, a JSON file the app wr
 The extension has no network code and no access to the Keychain session. The button and the Control open
 `bruece://checkin` (the app's URL scheme, `Config/Info.plist`), which presents the quick check-in sheet; widgets link to
 `bruece://class/<id>` and `bruece://visits`. Both targets carry the App Group entitlement (`Config/*.entitlements`).
-Demo screen `widgets` shows the faces at their sizes.
+Demo screen `widgets` shows the faces at their sizes, and the three Live Activity phases.
+
+The **Live Activity** for today's class (`Shared/BruceWidgetKit/ClassActivity.swift`, `LiveActivity.swift`) is requested
+and updated by the app while it runs (launch, foreground, after bookings load, after a check-in): leave-by from
+`CommuteETA` (MapKit) from the current location or home, the check-in window with a button to `bruece://checkin`, the
+ticket (`bruece://ticket/<bookingId>`) after check-in. No push-to-start; `NSSupportsLiveActivities` is set in the
+project.
 
 ## TestFlight
 
