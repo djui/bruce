@@ -386,7 +386,25 @@ function monthPeriod(offset) {
   const today = offset ? 0 : new Date().getDate();
   return { start: key(1), end: key(days), label: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }), day: today, days, daysLeft: offset ? days : days - today };
 }
+/** A fixed period (a crew runs from its start to race day). */
+function rangePeriod(start, end) {
+  const s = new Date(start + 'T12:00:00Z'), e = new Date(end + 'T12:00:00Z'), now = new Date();
+  const days = Math.round((e - s) / 86400000) + 1;
+  const day = Math.max(0, Math.min(days, Math.round((now - s) / 86400000) + 1));
+  const f = (d, y) => d.toLocaleDateString('en-GB', Object.assign({ day: 'numeric', month: 'short', timeZone: 'UTC' }, y ? { year: 'numeric' } : {}));
+  return { start, end, label: f(s) + ' – ' + f(e, true), day, days, daysLeft: days - day };
+}
+function mondayKey(offset) {
+  const d = new Date();
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + (offset || 0));
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
 const demoChallenges = [
+  // A race crew (crews.js): four friends, 4 sessions a week until HYROX Stockholm. week: [this week, last week].
+  { id: 'demoCrew', title: 'HYROX Sthlm Doubles', metric: 'visits', target: null, category: null, categoryTitle: null, repeatMonthly: false, ownerId: 21,
+    raceId: 'hyrox-stockholm-2026', weekly: 4, start: mondayKey(-14), end: '2026-12-12', period: rangePeriod(mondayKey(-14), '2026-12-12'),
+    status: { 21: 'accepted', 1: 'accepted', 22: 'accepted', 23: 'accepted' }, base: { 21: 10, 1: 9, 22: 12, 23: 5 },
+    week: { 22: [4, 4], 21: [3, 4], 1: [2, 4], 23: [1, 2] } },
   { id: 'demoMostCls1', title: 'Most classes', metric: 'classes', target: null, category: null, categoryTitle: null, repeatMonthly: true, ownerId: 21,
     status: { 1: 'accepted', 21: 'accepted', 22: 'accepted', 23: 'accepted' }, base: { 21: 13, 1: 11, 22: 9, 23: 6 } },
   { id: 'demoHits12x2', title: 'Everyone hits 12', metric: 'target', target: 12, category: null, categoryTitle: null, repeatMonthly: false, ownerId: 22,
@@ -396,7 +414,7 @@ const demoUsesBruce = [21, 22];
 function summaryOf(c) {
   const period = c.period || monthPeriod(0);
   return {
-    id: c.id, title: c.title, metric: c.metric, target: c.target, category: c.category, categoryTitle: c.categoryTitle,
+    id: c.id, title: c.title, metric: c.metric, target: c.target, category: c.category, categoryTitle: c.categoryTitle, raceId: c.raceId || null, weekly: c.weekly || null,
     start: c.start || period.start, end: c.end || period.end, repeatMonthly: c.repeatMonthly, ownerId: c.ownerId, ownerName: nameOf(c.ownerId),
     myStatus: c.status[1], participants: Object.keys(c.status).map((id) => ({ userId: +id, name: nameOf(+id), status: c.status[id] })),
     period, shareUrl: 'https://djui.github.io/bruce/app/#challenge/' + c.id, createdAt: at(-14, 9, 0),
@@ -443,14 +461,37 @@ function detailOf(c) {
       return { userId: r.userId, name: r.name, score: c.metric === 'minutes' ? v * 52 : v, visits: v + 1, classes: v, dropins: 1, minutes: v * 52 };
     }).sort((a, b) => b.score - a.score) });
   }
-  return { challenge: s, leaderboard: board, months, updatedAt: at(0, 4, 30) };
+  const out = { challenge: s, leaderboard: board, months, updatedAt: at(0, 4, 30) };
+  if (c.raceId) {
+    // The crew's weeks (server: insights.js crewWeeks).
+    const members = acc.map((r) => ({ userId: r.userId, name: r.name, thisWeek: ((c.week || {})[r.userId] || [0])[0], lastWeek: ((c.week || {})[r.userId] || [0, null])[1] }))
+      .sort((a, b) => b.thisWeek - a.thisWeek || a.name.localeCompare(b.name));
+    const first = c.start > mondayKey(-1);
+    out.crew = { raceId: c.raceId, weekly: c.weekly, size: members.length, week: { start: mondayKey(0), end: mondayKey(6) },
+      lastWeek: first ? null : { start: mondayKey(-7), end: mondayKey(-1), hit: members.filter((m) => m.lastWeek >= c.weekly).length },
+      weeksLeft: Math.max(0, Math.ceil(s.period.daysLeft / 7)), members: first ? members.map((m) => Object.assign(m, { lastWeek: null })) : members };
+    out.months = [];
+  }
+  return out;
 }
 
+/** The demo's races shared as going (HYROX Stockholm in DEMO_MY_RACES), updated by PUT /me/races. */
+let demoGoingMine = ['hyrox-stockholm-2026'];
 export function handleServer(method, path, body) {
   let m;
   const ok2 = (b) => ({ status: 200, body: b });
   const fail = (status, error) => ({ status, body: { error } });
   if (path === '/challenges' && method === 'GET') return ok2({ challenges: demoChallenges.map(summaryOf), usesBruce: demoUsesBruce });
+  if (path === '/challenges' && method === 'POST' && body.raceId) {
+    if (demoChallenges.some((x) => x.raceId === body.raceId && x.status[1] === 'accepted')) return fail(409, 'you are already in a crew for this race');
+    const status = { 1: 'accepted' };
+    (body.invite || []).filter((id) => users[id]).slice(0, 20).forEach((id) => { status[id] = 'invited'; });
+    const start = new Date().toISOString().slice(0, 10);
+    const c = { id: 'demo' + Math.random().toString(36).slice(2, 10), title: body.title || 'Race crew', metric: 'visits', target: null, category: null, categoryTitle: null,
+      repeatMonthly: false, ownerId: 1, status, base: { 1: 0 }, raceId: body.raceId, weekly: body.weekly, start, end: body.end, period: rangePeriod(start, body.end), week: { 1: [2, null] } };
+    demoChallenges.unshift(c);
+    return { status: 201, body: { challenge: summaryOf(c) } };
+  }
   if (path === '/challenges' && method === 'POST') {
     const status = { 1: 'accepted' };
     (body.invite || []).filter((id) => users[id]).slice(0, 20).forEach((id) => { status[id] = 'invited'; });
@@ -490,7 +531,17 @@ export function handleServer(method, path, body) {
   }
   if (path.startsWith('/wrapped/percentiles')) return ok2({ year: new Date().getFullYear(), cohort: 23, percentiles: { visits: 92, minutes: 88, studios: 70, streak: 79 } });
   if (path === '/me/goals' && method === 'PUT') return ok2({ ok: true, goals: (body.goals || []).length });
-  if (path === '/me/races' && method === 'PUT') return ok2({ ok: true, races: (body.races || []).length, push: false, email: null });
+  if (path === '/me/races' && method === 'PUT') {
+    demoGoingMine = (body.races || []).filter((r) => r.going).map((r) => r.id);
+    return ok2({ ok: true, races: (body.races || []).length, going: demoGoingMine, push: false, email: null });
+  }
+  if (path === '/races/going' && method === 'GET') {
+    // Fictional friends who share their races; you see them while you share one too.
+    if (!demoGoingMine.length) return ok2({ going: {}, sharing: false, mine: [] });
+    const f = (ids) => ids.map((id) => ({ userId: id, name: users[id].first_name + ' ' + users[id].last_name }));
+    return ok2({ going: { 'hyrox-stockholm-2026': f([21, 22]), 'vasaloppet-2027': f([21, 22, 23]), 'tough-viking-stadion-2027': f([22, 23]), 'goteborgsvarvet-2027': f([23]) },
+      sharing: true, mine: demoGoingMine });
+  }
   if (path === '/me' && method === 'GET') return ok2({ waitlist: [] });
   return fail(404, 'Not available in the demo: ' + path);
 }
@@ -500,27 +551,31 @@ export function handleServer(method, path, body) {
 /** A slice of the real race catalog (../races.json, as checked on 21 Oct 2026). test/races.test.js checks every entry
  *  against the file. The demo never fetches the catalog. */
 export const DEMO_RACES = [
-  {"id": "hyrox-stockholm-2026", "name": "HYROX Stockholm", "type": "hyrox", "date": "2026-12-10", "endDate": "2026-12-13", "city": "Solna", "country": "SE", "venue": "Strawberry Arena", "distancesKm": [], "signupUrl": "https://hyrox.com/find-my-race/", "platform": "vivenu", "priceNote": "Single 1,530 SEK, doubles 1,470 SEK per person", "priceSteps": [{"amount": 1470, "currency": "SEK", "lowest": true}], "status": "open", "checkedOn": "2026-10-21"},
-  {"id": "vasaloppet-2027", "name": "Vasaloppet", "type": "endurance", "sport": "ski", "date": "2027-03-07", "city": "Mora", "country": "SE", "venue": "Sälen to Mora", "distancesKm": [90], "signupUrl": "https://www.vasaloppet.se/en/ski/vasaloppet/", "priceNote": "2,685 SEK until 5 Nov, then 2,985 SEK as a late entry", "priceSteps": [{"until": "2026-11-05", "amount": 2685, "currency": "SEK"}, {"from": "2026-11-06", "amount": 2985, "currency": "SEK"}], "status": "open", "klassiker": true, "checkedOn": "2026-10-21"},
-  {"id": "hyrox-copenhagen-2027", "name": "HYROX Copenhagen", "type": "hyrox", "date": "2027-03-25", "endDate": "2027-03-28", "city": "Copenhagen", "country": "DK", "venue": "Bella Center", "distancesKm": [], "signupUrl": "https://hyrox.com/find-my-race/", "platform": "vivenu", "priceNote": "Single 1,045 DKK", "priceSteps": [{"amount": 1045, "currency": "DKK", "lowest": true}], "status": "open", "checkedOn": "2026-10-21"},
+  {"id": "goteborgsvarvet-2026", "name": "Göteborgsvarvet", "type": "running", "date": "2026-05-23", "city": "Gothenburg", "country": "SE", "distancesKm": [21.1], "signupUrl": "https://www.goteborgsvarvet.se/nyheter/24-varv-runt-jorden-och-64-nationer-arets-goteborgsvarvet-i-siffror", "status": "checkSite", "resultsUrl": "https://www.goteborgsvarvet.se/startlista-resultat", "checkedOn": "2026-10-21"},
+  {"id": "midnattsloppet-stockholm-2026", "name": "Midnattsloppet Stockholm", "type": "running", "date": "2026-08-15", "city": "Stockholm", "country": "SE", "distancesKm": [5, 10, 21], "format": "evening run", "signupUrl": "https://midnattsloppet.com/en/all-you-need-to-know-stockholm/", "status": "checkSite", "resultsUrl": "https://midnattsloppet.com/en/startlist-results/", "checkedOn": "2026-10-21"},
+  {"id": "hyrox-stockholm-2026", "name": "HYROX Stockholm", "type": "hyrox", "date": "2026-12-10", "endDate": "2026-12-13", "city": "Solna", "country": "SE", "venue": "Strawberry Arena", "distancesKm": [], "signupUrl": "https://hyrox.com/find-my-race/", "platform": "vivenu", "priceNote": "Single 1,530 SEK, doubles 1,470 SEK per person", "priceSteps": [{"amount": 1470, "currency": "SEK", "lowest": true}], "status": "open", "resultsUrl": "https://results.hyrox.com/", "checkedOn": "2026-10-21"},
+  {"id": "vasaloppet-2027", "name": "Vasaloppet", "type": "endurance", "sport": "ski", "date": "2027-03-07", "city": "Mora", "country": "SE", "venue": "Sälen to Mora", "distancesKm": [90], "signupUrl": "https://www.vasaloppet.se/en/ski/vasaloppet/", "priceNote": "2,685 SEK until 5 Nov, then 2,985 SEK as a late entry", "priceSteps": [{"until": "2026-11-05", "amount": 2685, "currency": "SEK"}, {"from": "2026-11-06", "amount": 2985, "currency": "SEK"}], "status": "open", "klassiker": true, "resultsUrl": "https://results.vasaloppet.se/?lang=EN_CAP", "checkedOn": "2026-10-21"},
+  {"id": "hyrox-copenhagen-2027", "name": "HYROX Copenhagen", "type": "hyrox", "date": "2027-03-25", "endDate": "2027-03-28", "city": "Copenhagen", "country": "DK", "venue": "Bella Center", "distancesKm": [], "signupUrl": "https://hyrox.com/find-my-race/", "platform": "vivenu", "priceNote": "Single 1,045 DKK", "priceSteps": [{"amount": 1045, "currency": "DKK", "lowest": true}], "status": "open", "resultsUrl": "https://results.hyrox.com/", "checkedOn": "2026-10-21"},
   {"id": "tough-viking-goteborg-2027", "name": "Tough Viking Göteborg", "type": "obstacle", "date": "2027-04-24", "city": "Gothenburg", "country": "SE", "venue": "Slottsskogen", "distancesKm": [8], "signupUrl": "https://www.toughviking.se/", "platform": "RaceID", "priceNote": "750 SEK now", "priceSteps": [{"amount": 750, "currency": "SEK"}], "status": "open", "checkedOn": "2026-10-21"},
   {"id": "tough-viking-stadion-2027", "name": "Tough Viking Stockholms Stadion", "type": "obstacle", "date": "2027-05-15", "city": "Stockholm", "country": "SE", "venue": "Stockholms Stadion", "distancesKm": [8], "format": "solo, duo, trio or team", "signupUrl": "https://www.toughviking.se/", "platform": "RaceID", "priceNote": "750 SEK until 31 Oct, then 775 SEK", "priceSteps": [{"until": "2026-10-31", "amount": 750, "currency": "SEK"}, {"from": "2026-11-01", "amount": 775, "currency": "SEK"}], "status": "open", "checkedOn": "2026-10-21"},
-  {"id": "goteborgsvarvet-2027", "name": "Göteborgsvarvet", "type": "running", "date": "2027-05-22", "city": "Gothenburg", "country": "SE", "distancesKm": [21.1], "signupUrl": "https://www.goteborgsvarvet.se/en/news/goteborgsvarvet-2027-is-sold-out", "platform": "njuko", "priceNote": "Sold out. There is a waitlist with entry transfers.", "status": "soldOut", "checkedOn": "2026-10-21"},
+  {"id": "goteborgsvarvet-2027", "name": "Göteborgsvarvet", "type": "running", "date": "2027-05-22", "city": "Gothenburg", "country": "SE", "distancesKm": [21.1], "signupUrl": "https://www.goteborgsvarvet.se/en/news/goteborgsvarvet-2027-is-sold-out", "platform": "njuko", "priceNote": "Sold out. There is a waitlist with entry transfers.", "status": "soldOut", "resultsUrl": "https://www.goteborgsvarvet.se/startlista-resultat", "checkedOn": "2026-10-21"},
   {"id": "stockholm-marathon-2027", "name": "Stockholm Marathon", "type": "running", "date": "2027-05-29", "city": "Stockholm", "country": "SE", "distancesKm": [42.195], "signupUrl": "https://stockholmmarathon.se/eng/eng-lopare/", "platform": "Haku", "priceNote": "1,295–1,995 SEK in four steps", "status": "checkSite", "checkedOn": "2026-10-21"},
-  {"id": "vatternrundan-2027", "name": "Vätternrundan", "type": "endurance", "sport": "bike", "date": "2027-06-18", "endDate": "2027-06-19", "city": "Motala", "country": "SE", "distancesKm": [315], "signupUrl": "https://vatternrundan.se/en/races/vatternrundan-315km", "priceNote": "2,100 SEK. Entries open at 19:00 on 25 Nov.", "priceSteps": [{"amount": 2100, "currency": "SEK"}], "status": "opensSoon", "opensOn": "2026-11-25", "klassiker": true, "checkedOn": "2026-10-21"},
-  {"id": "vansbrosimningen-2027", "name": "Vansbrosimningen", "type": "endurance", "sport": "swim", "date": "2027-07-10", "city": "Vansbro", "country": "SE", "distancesKm": [3], "signupUrl": "https://www.vansbrosimningen.se/", "priceNote": "1,345–1,545 SEK", "priceSteps": [{"amount": 1345, "currency": "SEK", "lowest": true}], "status": "open", "klassiker": true, "checkedOn": "2026-10-21"},
+  {"id": "vatternrundan-2027", "name": "Vätternrundan", "type": "endurance", "sport": "bike", "date": "2027-06-18", "endDate": "2027-06-19", "city": "Motala", "country": "SE", "distancesKm": [315], "signupUrl": "https://vatternrundan.se/en/races/vatternrundan-315km", "priceNote": "2,100 SEK. Entries open at 19:00 on 25 Nov.", "priceSteps": [{"amount": 2100, "currency": "SEK"}], "status": "opensSoon", "opensOn": "2026-11-25", "klassiker": true, "resultsUrl": "https://result.vatternrundan.se/", "checkedOn": "2026-10-21"},
+  {"id": "vansbrosimningen-2027", "name": "Vansbrosimningen", "type": "endurance", "sport": "swim", "date": "2027-07-10", "city": "Vansbro", "country": "SE", "distancesKm": [3], "signupUrl": "https://www.vansbrosimningen.se/", "priceNote": "1,345–1,545 SEK", "priceSteps": [{"amount": 1345, "currency": "SEK", "lowest": true}], "status": "open", "klassiker": true, "resultsUrl": "https://vansbrosimningen.se/resultat/", "checkedOn": "2026-10-21"},
   {"id": "ironman-703-jonkoping-2027", "name": "IRONMAN 70.3 Jönköping", "type": "triathlon", "date": "2027-07-11", "city": "Jönköping", "country": "SE", "distancesKm": [], "signupUrl": "https://www.ironman.com/races/im703-jonkoping", "priceNote": "Sold out", "status": "soldOut", "checkedOn": "2026-10-21"},
-  {"id": "midnattsloppet-stockholm-2027", "name": "Midnattsloppet Stockholm", "type": "running", "date": "2027-08-14", "city": "Stockholm", "country": "SE", "distancesKm": [5, 10], "format": "evening run", "signupUrl": "https://midnattsloppet.com/en/start-fee/", "priceNote": "2027 prices come with the sign-up. The first price step was 499 SEK in 2026.", "status": "opensSoon", "opensOn": "2026-11-01", "checkedOn": "2026-10-21"},
+  {"id": "midnattsloppet-stockholm-2027", "name": "Midnattsloppet Stockholm", "type": "running", "date": "2027-08-14", "city": "Stockholm", "country": "SE", "distancesKm": [5, 10], "format": "evening run", "signupUrl": "https://midnattsloppet.com/en/start-fee/", "priceNote": "2027 prices come with the sign-up. The first price step was 499 SEK in 2026.", "status": "opensSoon", "opensOn": "2026-11-01", "resultsUrl": "https://midnattsloppet.com/en/startlist-results/", "checkedOn": "2026-10-21"},
   {"id": "stockholm-half-marathon-2027", "name": "Stockholm Half Marathon", "type": "running", "date": "2027-08-21", "city": "Stockholm", "country": "SE", "distancesKm": [21.1], "signupUrl": "https://www.stockholmhalfmarathon.se/", "platform": "Haku", "priceNote": "1,045 SEK until 14 Feb", "priceSteps": [{"until": "2027-02-14", "amount": 1045, "currency": "SEK"}], "status": "open", "checkedOn": "2026-10-21"},
-  {"id": "oslo-maraton-2027", "name": "Oslo Maraton", "type": "running", "date": "2027-09-18", "city": "Oslo", "country": "NO", "distancesKm": [42.195, 21.1, 10], "signupUrl": "https://www.oslomaraton.no/", "platform": "Haku", "priceNote": "1,350 NOK for the marathon", "status": "open", "checkedOn": "2026-10-21"},
-  {"id": "cph-half-2027", "name": "CPH Half", "type": "running", "date": "2027-09-19", "city": "Copenhagen", "country": "DK", "distancesKm": [21.1], "signupUrl": "https://cphhalf.dk/en/lottery/", "priceNote": "795 DKK. The lottery is done; about 188,000 entered the draw.", "priceSteps": [{"amount": 795, "currency": "DKK"}], "status": "lottery", "checkedOn": "2026-10-21"},
-  {"id": "lidingoloppet-2027", "name": "Lidingöloppet", "type": "running", "date": "2027-09-25", "city": "Lidingö", "country": "SE", "distancesKm": [30], "format": "cross-country", "signupUrl": "https://lidingoloppet.se/en/tcs-lidingoloppet/faq/registration-fees", "priceNote": "2027 prices are not out yet. Entries cost 796–1,395 SEK in 2026.", "status": "checkSite", "klassiker": true, "checkedOn": "2026-10-21"}
+  {"id": "oslo-maraton-2027", "name": "Oslo Maraton", "type": "running", "date": "2027-09-18", "city": "Oslo", "country": "NO", "distancesKm": [42.195, 21.1, 10], "signupUrl": "https://www.oslomaraton.no/", "platform": "Haku", "priceNote": "1,350 NOK for the marathon", "status": "open", "resultsUrl": "https://oslomaraton.no/resultater-og-historie/", "checkedOn": "2026-10-21"},
+  {"id": "cph-half-2027", "name": "CPH Half", "type": "running", "date": "2027-09-19", "city": "Copenhagen", "country": "DK", "distancesKm": [21.1], "signupUrl": "https://cphhalf.dk/en/lottery/", "priceNote": "795 DKK. The lottery is done; about 188,000 entered the draw.", "priceSteps": [{"amount": 795, "currency": "DKK"}], "status": "lottery", "resultsUrl": "https://cphhalf.dk/en/results-archive/", "checkedOn": "2026-10-21"},
+  {"id": "lidingoloppet-2027", "name": "Lidingöloppet", "type": "running", "date": "2027-09-25", "city": "Lidingö", "country": "SE", "distancesKm": [30], "format": "cross-country", "signupUrl": "https://lidingoloppet.se/en/tcs-lidingoloppet/faq/registration-fees", "priceNote": "2027 prices are not out yet. Entries cost 796–1,395 SEK in 2026.", "status": "checkSite", "klassiker": true, "resultsUrl": "https://lidingoloppet.se/en/tcs-lidingoloppet/results-and-statistics", "checkedOn": "2026-10-21"}
 ];
 /** My races in the demo: HYROX Stockholm on the Saturday in doubles with a Train for it plan (week 3 of 10 on 21 Oct
- *  2026), Tough Viking at the stadium, Midnattsloppet. */
+ *  2026), shared as going and with a crew; Tough Viking at the stadium; Midnattsloppet 2026 (run in August, with results)
+ *  and 2027. */
 export const DEMO_MY_RACES = [
   {"id": "demo-hyrox-stockholm", "raceId": "hyrox-stockholm-2026", "name": "HYROX Stockholm", "date": "2026-12-10", "endDate": "2026-12-13", "city": "Solna", "url": "https://hyrox.com/find-my-race/", "type": "hyrox", "day": "2026-12-12", "note": "Doubles Open", "addedAt": "2026-10-01T08:00:00.000Z",
-   "remindWeek": true, "remindEve": true, "plan": {"startedOn": "2026-10-05", "weeks": 10, "perWeek": 4, "edits": {}}},
+   "remindWeek": true, "remindEve": true, "going": true, "plan": {"startedOn": "2026-10-05", "weeks": 10, "perWeek": 4, "edits": {}}},
   {"id": "demo-tough-viking", "raceId": "tough-viking-stadion-2027", "name": "Tough Viking Stockholms Stadion", "date": "2027-05-15", "city": "Stockholm", "url": "https://www.toughviking.se/", "type": "obstacle", "addedAt": "2026-10-01T08:00:00.000Z"},
+  {"id": "demo-midnattsloppet-2026", "raceId": "midnattsloppet-stockholm-2026", "name": "Midnattsloppet Stockholm", "date": "2026-08-15", "city": "Stockholm", "url": "https://midnattsloppet.com/en/all-you-need-to-know-stockholm/", "type": "running", "note": "10 km", "addedAt": "2026-06-01T08:00:00.000Z"},
   {"id": "demo-midnattsloppet-stockholm", "raceId": "midnattsloppet-stockholm-2027", "name": "Midnattsloppet Stockholm", "date": "2027-08-14", "city": "Stockholm", "url": "https://midnattsloppet.com/en/start-fee/", "type": "running", "note": "10 km", "addedAt": "2026-10-01T08:00:00.000Z"}
 ];

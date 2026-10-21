@@ -25,10 +25,15 @@
 // Race reminders (Train for it): races in My races with a race-week or day-before reminder (`PUT /me/races`, table
 // `user_races`) get a push and an email at 08:00 local on the Monday of race week and a push at 18:00 the day before,
 // each once, from the minute cron.
+//
+// Friends going and race crews: a race in My races marked going (`PUT /me/races` `going`) is shown to the member's
+// Bruce friends who share a race too (`GET /races/going`, friends checked with Bruce on each call). A crew is a
+// challenge with `race_id` and `weekly` that ends on race day; the minute cron tells its members on Sunday at 19:00 how
+// many hit their sessions that week (table `crew_updates`, once per crew and week).
 
 import {
   localDay, addDays, monthStart, visitsFromBookings, dailyRows, fromDetail, goalReminders, challengePeriod, challengeStats,
-  cleanChallenge, cohortValues, percentiles, PERCENTILE_METRICS,
+  cleanChallenge, cohortValues, percentiles, PERCENTILE_METRICS, crewWeeks, crewMessage, mondayOf,
 } from "./insights.js";
 import { brokenHabit, recommendClasses, nudgeMessage, cleanLapseDays, HABIT_LOOKBACK_DAYS, RECOMMEND_DAYS, LAPSE_DAYS } from "./habits.js";
 
@@ -86,6 +91,11 @@ const RACE_URL = "https://djui.github.io/bruce/app/#/mine/race/";
 const RACE_WEEK_HOUR = 8;
 const RACE_EVE_HOUR = 18;
 const RACE_LATE_MS = 12 * 3600_000;
+/// The crew push goes out on Sunday at this local hour, at most this long after; each minute run spends at most
+/// CREW_BUDGET requests on it (booking pages for today's visits of members not at their target yet, and APNs pushes).
+const CREW_HOUR = 19;
+const CREW_LATE_MS = 2 * 3600_000;
+const CREW_BUDGET = 20;
 
 // MARK: Time in Europe/Stockholm
 
@@ -616,6 +626,7 @@ export async function tick(env, now) {
   }));
   await sendNudges(env, now).catch((e) => console.log("nudges failed:", e.message));
   await sendRaceReminders(env, now).catch((e) => console.log("race reminders failed:", e.message));
+  await sendCrewUpdates(env, now).catch((e) => console.log("crew updates failed:", e.message));
 }
 
 /** Pushes the skipped-habit recommendations planned by the daily run whose time has come. */
@@ -717,14 +728,132 @@ export async function pruneRaces(env, now) {
   return results.length;
 }
 
-/** The races of a `PUT /me/races` body: valid ids and days, a reminder on, at most MAX_RACES (null when over). */
-export function cleanRaces(list) {
+// MARK: Race crews: the Sunday push
+
+/**
+ * The minute cron on Sunday from 19:00 local (for two hours): each crew still training (race day after today) with at
+ * least two members and a whole week behind it tells them how many hit the weekly target this week, Monday to today,
+ * once (a `crew_updates` row is written first). Visits come from the daily history read (up to last night); members
+ * not at their target yet get today's visits from their first `GET /v52/booking` pages. A run spends at most
+ * CREW_BUDGET requests (those pages and the APNs pushes): a crew that doesn't fit waits for the next minute, one that
+ * never would goes without today's visits. Members who switched crew updates off (`PUT /me` `crewUpdates: false`) or
+ * have no device get nothing; the push names nobody. Category CREW_UPDATE, payload {challengeId} (opens the crew).
+ */
+export async function sendCrewUpdates(env, now, { fetchFn = fetchBookings } = {}) {
+  const p = localParts(now);
+  if (p.weekday !== 1) return 0;
+  const at = localAt(p.y, p.m, p.d, CREW_HOUR);
+  if (now < at || now >= at + CREW_LATE_MS) return 0;
+  const DB = await db(env);
+  const today = localDay(now), monday = mondayOf(today);
+  const { results } = await DB.prepare(`SELECT c.id FROM challenges c WHERE c.race_id IS NOT NULL AND c.weekly IS NOT NULL
+      AND c.start_day <= ?1 AND c.end_day > ?1 AND NOT EXISTS (SELECT 1 FROM crew_updates u WHERE u.challenge_id = c.id AND u.week = ?2)`)
+    .bind(today, monday).all();
+  const full = +(env.CREW_BUDGET ?? CREW_BUDGET);
+  let budget = full, sent = 0;
+  for (const { id } of results) {
+    const l = await loadChallenge(DB, id);
+    if (!l) continue;
+    const ch = l.ch, accepted = l.participants.filter((x) => x.status === "accepted");
+    const mark = () => DB.prepare("INSERT INTO crew_updates (challenge_id, week, sent_at) VALUES (?, ?, ?) ON CONFLICT DO NOTHING RETURNING week")
+      .bind(id, monday, now).first();
+    // Two members at least, and a whole week: a crew started after Monday is told from its first full week.
+    if (accepted.length < 2 || ch.start > monday) { await mark(); continue; }
+    const ids = accepted.map((x) => x.userId);
+    const visits = await crewVisits(DB, ids, monday, addDays(today, -1));
+    const stats = crewWeeks(ch, accepted, visits, today);
+    const { results: rows } = await DB.prepare("SELECT * FROM users WHERE user_id IN (SELECT value FROM json_each(?))").bind(JSON.stringify(ids)).all();
+    const users = new Map(rows.map((r) => [r.user_id, rowToUser(r)]));
+    const below = stats.members.filter((m) => m.thisWeek < stats.weekly && users.has(m.userId));
+    const pushes = stats.members.reduce((n, m) => { const u = users.get(m.userId); return n + (u && u.state.crewUpdates !== false ? u.devices.length : 0); }, 0);
+    // Bruce pages for today's visits (up to two each) and one APNs request per device. A crew that doesn't fit waits
+    // for the next minute's budget; one that never would goes without today's visits.
+    let topUp = true;
+    if (2 * below.length + pushes > budget) {
+      if (budget < full) break;
+      topUp = 2 * below.length + pushes <= full;
+    }
+    if (!(await mark())) continue;   // another run has it
+    if (topUp) {
+      for (const m of below) {
+        const u = users.get(m.userId);
+        try {
+          const r = await fetchFn(u.session.access_token, u.userId, localMidnight(p.y, p.m, p.d), 2);
+          budget -= r.pages ?? 1;
+          m.thisWeek += visitsFromBookings(r.bookings, now).filter((v) => v.day === today).length;
+        } catch (e) { budget -= 1; console.log("crew visits failed:", m.userId, e.message); }
+      }
+    }
+    const hit = stats.members.filter((m) => m.thisWeek >= stats.weekly).length;
+    for (const m of stats.members) {
+      const u = users.get(m.userId);
+      if (!u?.devices.length || u.state.crewUpdates === false) continue;
+      budget -= u.devices.length;
+      const msg = crewMessage(ch.title, hit, stats.size, stats.weekly, m.thisWeek);
+      const gone = await push(env, u.devices, msg.title, msg.body, { challengeId: id }, "CREW_UPDATE");
+      if (gone.length) { u.devices = u.devices.filter((d) => !gone.includes(d.token)); await saveUser(env, u); }
+      sent++;
+    }
+  }
+  return sent;
+}
+
+/** Visits per user from the stored per-visit detail, `from` to `to` (local days). */
+async function crewVisits(DB, userIds, from, to) {
+  const { results } = await DB.prepare(`SELECT user_id, day, detail FROM daily_counts WHERE day >= ? AND day <= ? AND detail IS NOT NULL
+      AND user_id IN (SELECT value FROM json_each(?))`).bind(from, to, JSON.stringify(userIds)).all();
+  const out = new Map();
+  for (const r of results) {
+    const list = out.get(r.user_id) ?? [];
+    for (const d of JSON.parse(r.detail)) list.push(fromDetail(d, r.day));
+    out.set(r.user_id, list);
+  }
+  return out;
+}
+
+// MARK: Friends going
+
+/**
+ * `GET /races/going[?ids=a,b]`: the caller's Bruce friends (as Bruce lists them for the caller, `GET /v52/friend`)
+ * who marked an upcoming race going, by race. Only for a caller who shares a race themselves: otherwise
+ * `{going: {}, sharing: false}` and nothing is read. Nobody else is ever listed, so the answer says nothing about who
+ * uses Brüce beyond the caller's own friends.
+ */
+async function goingRoute(request, env) {
+  const auth = await authenticate(request, env);
+  if (!auth) return json({ error: "unauthorized" }, 401);
+  const DB = await db(env);
+  const today = localDay(Date.now());
+  const mine = await DB.prepare("SELECT race_id FROM user_races WHERE user_id = ? AND visibility = 'friends' AND date >= ?").bind(auth.userId, today).all();
+  const own = mine.results.map((r) => r.race_id);
+  if (!own.length) return json({ going: {}, sharing: false, mine: [] });
+  let friends;
+  try { friends = await fetchFriends(auth.token, auth.userId); } catch (e) {
+    if (e instanceof LoggedOut) return json({ error: "unauthorized" }, 401);
+    return json({ error: "Bruce is not answering" }, 502);
+  }
+  const names = new Map(friends.filter((f) => f.id !== auth.userId).map((f) => [f.id, f.name]));
+  const wanted = (new URL(request.url).searchParams.get("ids") ?? "").split(",").filter((x) => /^[a-z0-9]+(-[a-z0-9]+)*$/.test(x)).slice(0, 100);
+  if (!names.size) return json({ going: {}, sharing: true, mine: own });
+  const { results } = await DB.prepare(`SELECT user_id, race_id FROM user_races WHERE visibility = 'friends' AND date >= ?1
+      AND user_id IN (SELECT value FROM json_each(?2))${wanted.length ? " AND race_id IN (SELECT value FROM json_each(?3))" : ""}
+      ORDER BY race_id, user_id`).bind(today, JSON.stringify([...names.keys()]), ...(wanted.length ? [JSON.stringify(wanted)] : [])).all();
+  const going = {};
+  for (const r of results) (going[r.race_id] ??= []).push({ userId: r.user_id, name: names.get(r.user_id) ?? "" });
+  return json({ going, sharing: true, mine: own });
+}
+
+/** The races of a `PUT /me/races` body: valid ids and days, a reminder on or going, at most MAX_RACES (null when over).
+ *  Going is only kept for catalog races: a race added by hand ("custom-…") has no shared record to meet friends on. */
+export function cleanRaces(list, now = Date.now()) {
   const isDay = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + "T12:00:00Z"))
     && new Date(s + "T12:00:00Z").toISOString().slice(0, 10) === s;
   const out = [];
   for (const r of list) {
     if (!r || typeof r.id !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(r.id) || r.id.length > 100 || !isDay(r.date)) continue;
-    if (r.remindWeek !== true && r.remindEve !== true) continue;
+    const going = r.going === true && !r.id.startsWith("custom-");
+    if (r.remindWeek !== true && r.remindEve !== true && !going) continue;
+    if (out.length >= MAX_RACES + 1) break;
     if (out.some((x) => x.id === r.id)) continue;
     const url = typeof r.url === "string" && /^https:\/\/[^\s]+$/.test(r.url) && r.url.length <= 300 ? r.url : null;
     let plan = null;
@@ -734,13 +863,34 @@ export function cleanRaces(list) {
                raceWeek: (Array.isArray(p.raceWeek) ? p.raceWeek : []).slice(0, 6).filter((x) => x && typeof x.title === "string" && Number.isInteger(x.count))
                  .map((x) => ({ key: String(x.key ?? "").slice(0, 30), title: x.title.slice(0, 30), count: Math.max(0, Math.min(9, x.count)) })) };
     }
-    out.push({ id: r.id, name: String(r.name ?? "Race").slice(0, 120) || "Race", date: r.date, url, remindWeek: r.remindWeek === true, remindEve: r.remindEve === true, plan });
+    out.push({ id: r.id, name: String(r.name ?? "Race").slice(0, 120) || "Race", date: r.date, url, remindWeek: r.remindWeek === true, remindEve: r.remindEve === true, plan,
+               going, goingAt: goingTime(r, now) });
   }
   return out.length > MAX_RACES ? null : out;
 }
 
+/** When the member flipped going for a race (`goingAt`, UTC ms; 0 when not sent, never later than now). */
+const goingTime = (r, now) => Math.max(0, Math.min(now, Number.isFinite(+r.goingAt) && r.goingAt != null ? Math.round(+r.goingAt) : 0));
+
+/**
+ * The going switches of a `PUT /me/races` body: `{id, going, goingAt}` for each catalog race that says `going` true or
+ * false (also a race sent only to switch going off). Going is the member's, not a device's: the switch flipped last
+ * (`goingAt`) wins on every device, so a device that has not heard of a change cannot undo it.
+ */
+export function goingSwitches(list, now = Date.now()) {
+  const out = [];
+  for (const r of Array.isArray(list) ? list : []) {
+    if (!r || typeof r.going !== "boolean" || typeof r.id !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(r.id) || r.id.length > 100
+        || r.id.startsWith("custom-") || out.some((x) => x.id === r.id)) continue;
+    out.push({ id: r.id, going: r.going, goingAt: goingTime(r, now) });
+    if (out.length >= 2 * MAX_RACES) break;
+  }
+  return out;
+}
+
 const rowToRace = (r) => ({ id: r.race_id, name: r.name, date: r.date, url: r.url ?? null, remindWeek: !!r.remind_week, remindEve: !!r.remind_eve,
-  plan: r.plan ? JSON.parse(r.plan) : null, weekSentAt: r.week_sent_at ?? null, eveSentAt: r.eve_sent_at ?? null });
+  plan: r.plan ? JSON.parse(r.plan) : null, weekSentAt: r.week_sent_at ?? null, eveSentAt: r.eve_sent_at ?? null, going: r.visibility === "friends",
+  goingAt: r.going_at ?? null });
 
 /** `PUT /me/races` (replace the set) and `DELETE /me/races/<id>`. */
 async function racesRoute(request, env, raceId) {
@@ -757,34 +907,47 @@ async function racesRoute(request, env, raceId) {
   }
   const body = await request.json().catch(() => ({}));
   if (!Array.isArray(body.races)) return json({ error: "races must be an array" }, 400);
-  const races = cleanRaces(body.races);
+  const now = Date.now();
+  const races = cleanRaces(body.races, now);
   if (!races) return json({ error: `at most ${MAX_RACES} races` }, 409);
+  const switches = goingSwitches(body.races, now);
   // My races are per device: each device's PUT replaces the races it sent before, not another device's.
   const source = typeof body.device === "string" && /^[A-Za-z0-9-]{1,64}$/.test(body.device) ? body.device : "";
-  if (!races.length && !known) return json({ ok: true, races: 0, ids: [] });
+  if (!races.length && !known) return json({ ok: true, races: 0, ids: [], going: [] });
   const u = known ?? { userId: auth.userId, rules: [], devices: [], state: emptyState() };
   signIn(u, auth);
   await saveUser(env, u);
   // A reminder already sent stays sent while the race keeps its day.
-  const { results: before } = await DB.prepare("SELECT race_id, date, week_sent_at, eve_sent_at, source FROM user_races WHERE user_id = ?").bind(auth.userId).all();
+  const { results: before } = await DB.prepare("SELECT race_id, date, week_sent_at, eve_sent_at, source, visibility, going_at FROM user_races WHERE user_id = ?")
+    .bind(auth.userId).all();
   // Other devices' races stay; all devices together keep at most twice the cap.
   const others = before.filter((b) => b.source !== source && !races.some((r) => r.id === b.race_id)).length;
   if (races.length + others > 2 * MAX_RACES) return json({ error: `at most ${2 * MAX_RACES} races on all devices` }, 409);
   const at = new Date().toISOString();
-  const upsert = DB.prepare(`INSERT INTO user_races (user_id, race_id, name, date, url, remind_week, remind_eve, plan, week_sent_at, eve_sent_at, source, updated_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+  const upsert = DB.prepare(`INSERT INTO user_races (user_id, race_id, name, date, url, remind_week, remind_eve, plan, week_sent_at, eve_sent_at, source, updated_at,
+        visibility, going_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
       ON CONFLICT(user_id, race_id) DO UPDATE SET name = ?3, date = ?4, url = ?5, remind_week = ?6, remind_eve = ?7, plan = ?8,
-        week_sent_at = ?9, eve_sent_at = ?10, source = ?11, updated_at = ?12`);
+        week_sent_at = ?9, eve_sent_at = ?10, source = ?11, updated_at = ?12, visibility = ?13, going_at = ?14`);
+  // Going: kept from the row as it was, then each switch in the body applies when it is at least as recent as the
+  // row's (last flip wins, on whichever device it happened). Switching off also reaches a row another device sent.
+  const flip = DB.prepare(`UPDATE user_races SET visibility = ?1, going_at = ?2 WHERE user_id = ?3 AND race_id = ?4
+      AND (going_at IS NULL OR going_at <= ?2)`);
   await DB.batch([
     DB.prepare("DELETE FROM user_races WHERE user_id = ? AND source = ?").bind(auth.userId, source),
     ...races.map((r) => {
-      const old = before.find((b) => b.race_id === r.id && b.date === r.date);
+      const old = before.find((b) => b.race_id === r.id);
+      const sent = old && old.date === r.date ? old : null;
       return upsert.bind(auth.userId, r.id, r.name, r.date, r.url, r.remindWeek ? 1 : 0, r.remindEve ? 1 : 0, r.plan ? JSON.stringify(r.plan) : null,
-                         old?.week_sent_at ?? null, old?.eve_sent_at ?? null, source, at);
+                         sent?.week_sent_at ?? null, sent?.eve_sent_at ?? null, source, at, old?.visibility ?? "private", old?.going_at ?? null);
     }),
+    ...switches.map((g) => flip.bind(g.going ? "friends" : "private", g.goingAt, auth.userId, g.id)),
   ]);
   await keepOrDelete(env, u);
-  return json({ ok: true, races: races.length, ids: races.map((r) => r.id), push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
+  const { results: shared } = await DB.prepare("SELECT race_id FROM user_races WHERE user_id = ? AND visibility = 'friends' ORDER BY race_id").bind(auth.userId).all();
+  // `ids`: the races whose race-day reminders the server sends (the device leaves those out); `going`: shared races.
+  return json({ ok: true, races: races.length, ids: races.filter((r) => r.remindWeek || r.remindEve).map((r) => r.id), going: shared.map((r) => r.race_id),
+                push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
 }
 
 // MARK: History (daily cron): challenges, goal reminders, Wrapped percentiles
@@ -1017,7 +1180,7 @@ const newId = () => {
 
 const rowToChallenge = (r) => ({ id: r.id, ownerId: r.owner_id, title: r.title, metric: r.metric, target: r.target ?? null,
   category: r.category ?? null, categoryTitle: r.category_title ?? null, start: r.start_day, end: r.end_day,
-  repeatMonthly: !!r.repeat_monthly, createdAt: r.created_at });
+  repeatMonthly: !!r.repeat_monthly, createdAt: r.created_at, raceId: r.race_id ?? null, weekly: r.weekly ?? null });
 
 async function loadChallenge(DB, id) {
   const r = await DB.prepare("SELECT * FROM challenges WHERE id = ?").bind(id).first();
@@ -1101,6 +1264,12 @@ async function insightsRoute(request, env, ctx, path) {
       const body = await request.json().catch(() => ({}));
       const c = cleanChallenge(body, today);
       if (c.error) return json({ error: c.error }, 400);
+      if (c.raceId) {
+        // One crew per race: the race page shows it.
+        const dup = await DB.prepare(`SELECT c.id FROM challenges c JOIN participants p ON p.challenge_id = c.id
+            WHERE c.race_id = ? AND p.user_id = ? AND p.status = 'accepted' AND c.end_day >= ? LIMIT 1`).bind(c.raceId, auth.userId, today).first();
+        if (dup) return json({ error: "you are already in a crew for this race", challengeId: dup.id }, 409);
+      }
       let friends;
       try { friends = await fetchFriends(auth.token, auth.userId); } catch { return json({ error: "Bruce is not answering" }, 502); }
       const wanted = new Set((Array.isArray(body.invite) ? body.invite : []).map(Number));
@@ -1108,9 +1277,9 @@ async function insightsRoute(request, env, ctx, path) {
       const chId = newId();
       const at = new Date(now).toISOString();
       await DB.batch([
-        DB.prepare(`INSERT INTO challenges (id, owner_id, title, metric, target, category, category_title, start_day, end_day, repeat_monthly, created_at)
-            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)`)
-          .bind(chId, auth.userId, c.title, c.metric, c.target, c.category, c.categoryTitle, c.start, c.end, c.repeatMonthly ? 1 : 0, at),
+        DB.prepare(`INSERT INTO challenges (id, owner_id, title, metric, target, category, category_title, start_day, end_day, repeat_monthly, created_at, race_id, weekly)
+            VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)`)
+          .bind(chId, auth.userId, c.title, c.metric, c.target, c.category, c.categoryTitle, c.start, c.end, c.repeatMonthly ? 1 : 0, at, c.raceId, c.weekly),
         DB.prepare("INSERT INTO participants (challenge_id, user_id, name, status, invited_by, joined_at) VALUES (?, ?, ?, 'accepted', NULL, ?)")
           .bind(chId, auth.userId, auth.name, at),
         ...invitees.map((f) => DB.prepare("INSERT INTO participants (challenge_id, user_id, name, status, invited_by, joined_at) VALUES (?, ?, ?, 'invited', ?, NULL)")
@@ -1120,8 +1289,10 @@ async function insightsRoute(request, env, ctx, path) {
       backfill(env, ctx, u);
       const loaded = await loadChallenge(DB, chId);
       const label = challengePeriod(loaded.ch, today).label;
-      await Promise.all(invitees.map((f) => pushTo(env, f.id, `${auth.name || "A friend"} challenged you`, `${c.title} · ${label}. Tap to accept.`,
-                                                   { challengeId: chId }, "CHALLENGE_INVITE")));
+      const invite = c.raceId
+        ? { title: `${auth.name || "A friend"} invited you to a crew`, body: `${c.title} · ${c.weekly} ${c.weekly === 1 ? "session" : "sessions"} a week until race day. Tap to accept.` }
+        : { title: `${auth.name || "A friend"} challenged you`, body: `${c.title} · ${label}. Tap to accept.` };
+      await Promise.all(invitees.map((f) => pushTo(env, f.id, invite.title, invite.body, { challengeId: chId }, "CHALLENGE_INVITE")));
       return json({ challenge: summary(loaded, auth.userId, today) }, 201);
     }
 
@@ -1146,8 +1317,8 @@ async function insightsRoute(request, env, ctx, path) {
         // Share-link preview: no names besides the owner, no numbers.
         let joinable = false;
         try { joinable = (await fetchFriends(auth.token, auth.userId)).some((f) => f.id === l.ch.ownerId); } catch {}
-        const { id: cid, title, metric, target, categoryTitle } = l.ch;
-        return json({ challenge: { id: cid, title, metric, target, categoryTitle, period: challengePeriod(l.ch, today),
+        const { id: cid, title, metric, target, categoryTitle, raceId, weekly } = l.ch;
+        return json({ challenge: { id: cid, title, metric, target, categoryTitle, raceId, weekly, period: challengePeriod(l.ch, today),
                                    ownerName: summary(l, auth.userId, today).ownerName,
                                    participantCount: l.participants.filter((p) => p.status === "accepted").length }, joinable });
       }
@@ -1162,6 +1333,7 @@ async function insightsRoute(request, env, ctx, path) {
       }
       const stats = challengeStats(l.ch, l.participants, visitsByUser, auth.userId, today);
       return json({ challenge: summary(l, auth.userId, today), leaderboard: stats.leaderboard, months: stats.months,
+                    crew: l.ch.raceId ? crewWeeks(l.ch, l.participants, visitsByUser, today) : undefined,
                     updatedAt: known?.state.statsAt ?? null });
     }
 
@@ -1185,7 +1357,8 @@ async function insightsRoute(request, env, ctx, path) {
         const u = await rememberLogin(env, auth);
         backfill(env, ctx, u);
         if (l.ch.ownerId !== auth.userId) {
-          await pushTo(env, l.ch.ownerId, `${auth.name || "A friend"} joined ${l.ch.title}`, "Your challenge has a new rival.", { challengeId: id }, "CHALLENGE_INVITE");
+          await pushTo(env, l.ch.ownerId, `${auth.name || "A friend"} joined ${l.ch.title}`, l.ch.raceId ? "Your crew has a new member." : "Your challenge has a new rival.",
+                       { challengeId: id }, "CHALLENGE_INVITE");
         }
       }
       return json({ ok: true, challenge: summary(await loadChallenge(DB, id), auth.userId, today) });
@@ -1196,7 +1369,8 @@ async function insightsRoute(request, env, ctx, path) {
       if (!l || !l.participants.some((p) => p.userId === auth.userId)) return json({ ok: true });
       await DB.prepare("DELETE FROM participants WHERE challenge_id = ? AND user_id = ?").bind(id, auth.userId).run();
       if (!l.participants.some((p) => p.userId !== auth.userId && p.status === "accepted")) {
-        await DB.batch([DB.prepare("DELETE FROM participants WHERE challenge_id = ?").bind(id), DB.prepare("DELETE FROM challenges WHERE id = ?").bind(id)]);
+        await DB.batch([DB.prepare("DELETE FROM participants WHERE challenge_id = ?").bind(id), DB.prepare("DELETE FROM crew_updates WHERE challenge_id = ?").bind(id),
+                        DB.prepare("DELETE FROM challenges WHERE id = ?").bind(id)]);
       }
       if (!(await inChallenge(env, auth.userId))) {
         // "Leave anytime; your numbers are deleted": the per-visit detail goes with the last challenge.
@@ -1228,6 +1402,7 @@ export default {
     const opening = path.match(/^\/me\/opening\/(\d+)$/);
     if (opening && (request.method === "PUT" || request.method === "DELETE")) return openingRoute(request, env, +opening[1]);
     if (route === "PUT /me/races") return racesRoute(request, env, null);
+    if (route === "GET /races/going") return goingRoute(request, env);
     const race = path.match(/^\/me\/races\/([a-z0-9-]{1,100})$/);
     if (race && request.method === "DELETE") return racesRoute(request, env, race[1]);
     if (!["PUT /me", "GET /me", "DELETE /me", "POST /me/test-push", "PUT /me/email"].includes(route)) return json({ error: "not found" }, 404);
@@ -1245,6 +1420,7 @@ export default {
         const d = cleanDevice(body.device);
         if (d) u.devices = [d, ...u.devices.filter((x) => x.token !== d.token)].slice(0, MAX_DEVICES);
         if (typeof body.nudges === "boolean") u.state.nudges = body.nudges;
+        if (typeof body.crewUpdates === "boolean") u.state.crewUpdates = body.crewUpdates;
         if (cleanLapseDays(body.nudgeDays)) u.state.nudgeDays = body.nudgeDays;
         if (body.lateSpots === "book" || body.lateSpots === "ask") u.state.lateSpots = body.lateSpots;
         if (rulesChanged) await tickUser(env, u, Date.now(), { force: true }).catch((e) => console.log("scan failed:", e.message));
@@ -1261,13 +1437,16 @@ export default {
                       opening: (u?.state.opens ?? []).map((o) => ({ classId: o.classId, title: o.title, start: new Date(o.start).toISOString(), opens: new Date(o.opens).toISOString() })),
                       maxOpening: MAX_OPENS, log: u?.state.log ?? [], devices: u?.devices.length ?? 0,
                       email: u ? emailTo(env, u) : null, nudges: u ? u.state.nudges !== false : true,
-                      nudgeDays: u?.state.nudgeDays ?? LAPSE_DAYS, lateSpots: u?.state.lateSpots ?? "ask", races: races.map(rowToRace) });
+                      nudgeDays: u?.state.nudgeDays ?? LAPSE_DAYS, lateSpots: u?.state.lateSpots ?? "ask", crewUpdates: u ? u.state.crewUpdates !== false : true,
+                      races: races.map(rowToRace) });
       }
       case "DELETE /me": {
-        // Auto-book off: forget rules, watches, goals and races. The login stays while the user is in a challenge.
+        // Auto-book off: forget rules, watches, goals, races and push devices. The login stays while the user is in a challenge.
         const u = await getUser(env, auth.userId);
         if (u && (await inChallenge(env, auth.userId))) {
+          // The server is off for this user: no more pushes either (challenge and crew pushes go to devices sent with it on).
           u.rules = [];
+          u.devices = [];
           Object.assign(u.state, { upcoming: [], watches: [], opens: [], goals: [], goalPings: {} });
           await saveUser(env, u);
           await (await db(env)).prepare("DELETE FROM user_races WHERE user_id = ?").bind(auth.userId).run();

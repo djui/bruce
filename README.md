@@ -161,6 +161,14 @@ My classes tabs, with class and studio pages and account sheets.
   plan can make this month's **monthly goals**, and **race week** (Monday 08:00) and **the day before** (18:00)
   reminders come as notifications, or with the server on as a push and an email. It is not coaching: it doesn't
   plan long runs, rides or swims and says so.
+- **Friends going and race crews** (iPhone, Mac and web; see [Friends going and race crews](#friends-going-and-race-crews)):
+  **Show friends I'm going** on a race page (opt-in per race, off by default, needs the server) lets your Bruce
+  friends who share their races too see that you're going, and you see theirs: faces and "2 friends going" on Explore
+  race cards, the race page and My races. **Start a crew** makes a challenge that ends on race day: friends aim for the
+  same sessions a week (from your Train for it plan), the crew page shows everyone's week, and on Sundays at 19:00 the
+  server tells the crew "4 of 5 hit their 4 sessions this week" (no names; switch it off in Auto-book). **After the
+  race** the race page and My races link to the results on the race's own site (when it has a results page) and
+  suggest the recovery week's classes; past races move to **Past**.
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.
@@ -248,7 +256,8 @@ selected, Explore shows the city's studios on a map next to the list.
 - **Races**: Explore › Races, race pages with the price steps and the official link, My classes › Races (kept in
   localStorage), the next race on Home, and Add to Calendar as an .ics file. **Train for it** with the plan sheet,
   This week and Book (no Book every week: the web has no weekly auto-book), monthly goals from the plan, and race-week
-  reminders sent by the server while it is on.
+  reminders sent by the server while it is on. **Friends going** (the toggle and faces), **crews** (Start a crew, the
+  crew page with the week, invites, Leave) and results and the recovery week after the race.
 - **Friends** (their upcoming classes), **My classes** (bookings, waitlist, bookmarks under Classes; your races under
   Races) and **Notifications**.
 - **Account menu**: plan, visit meters and strikes, statistics (visits per month and the visits behind each bar),
@@ -273,7 +282,7 @@ of it built into the apps and never fetches it. Each race:
 
 | Field | |
 |---|---|
-| `id` | Stable, lower case with dashes, with the year (`tough-viking-stadion-2027`). My races and, later, friends refer to it |
+| `id` | Stable, lower case with dashes, with the year (`tough-viking-stadion-2027`). My races, friends going and crews refer to it |
 | `name` | Plain text, as the organiser writes it. No logos, no brand colours, nothing that suggests Brüce speaks for the race |
 | `type` | `running`, `hyrox`, `obstacle`, `endurance` (with `sport`: `ski`, `bike` or `swim`) or `triathlon` |
 | `date`, `endDate` | Local race days, `YYYY-MM-DD`; `endDate` only for multi-day events |
@@ -283,8 +292,14 @@ of it built into the apps and never fetches it. Each race:
 | `platform` | The named sign-up platform ("RaceID", "Haku"); left out when the race runs its own sign-up |
 | `priceNote`, `priceSteps` | The fees as the page words them, and the known steps `{from, until, amount, currency, lowest, per}` (days inclusive; `lowest`: "From 799 SEK"; `per`: "per team") |
 | `status`, `opensOn` | `open`, `opensSoon` (with `opensOn`), `soldOut`, `lottery` or `checkSite` (when the page was unclear) |
-| `klassiker`, `resultsUrl` | A leg of En Svensk Klassiker; a link to the official results (optional) |
+| `klassiker`, `resultsUrl` | A leg of En Svensk Klassiker; the results page on the race's own site (optional, https), only when the race's own site links to it. The apps show **See results** after the race |
 | `checkedOn` | The day the facts were read off the race's own page, shown on every race page |
+
+Results links were added on 21 Oct 2026 where the race's own site (the domain of `signupUrl`) links to a results page
+(a results subdomain the site links to counts, as `results.vasaloppet.se`); races whose site links only to one year's
+results on a timing platform, or to none, have none. Two editions that are already over (Göteborgsvarvet and
+Midnattsloppet Stockholm 2026, dates read on the races' own sites) are in the list so a race you just ran has its
+results link; Explore shows past races with **Past** switched on.
 
 `node --test docs/app/test/` validates the file (unique ids, real dates, `endDate` on or after `date`, known values,
 https links, sorted by date, price steps that don't overlap) and checks that the demo races match it. Apps skip an
@@ -352,6 +367,41 @@ Norway and Denmark (for now).
   what you booked that week), and the device leaves out the ones the server confirmed
   ([server/README.md](server/README.md#race-reminders)).
 
+## Friends going and race crews
+
+The social layer of races ([`Shared/BruceCore/RaceSocial.swift`](Shared/BruceCore/RaceSocial.swift), the same logic in
+[`docs/app/js/crews.js`](docs/app/js/crews.js), tested with the same cases), built on our server and the challenges.
+Nothing is shared with anyone outside Brüce and your Bruce friends.
+
+- **Going** is opt-in per race and off by default: **Show friends I'm going** on a race page marks the race in My
+  races, and the device sends it with `PUT /me/races` (`going: true`) while the server is on. The server stores the
+  user id, the race id and that friends may see it (`user_races.visibility`). Only catalog races can be shared: a race
+  added by hand has no shared record. The first time, the app says what the server keeps. Going is yours, not a
+  device's: the switch you flipped last counts on all your devices, and a device that missed a change takes it over.
+- **Who sees it**: `GET /races/going` answers only a member who shares a race themselves ("you see theirs once you
+  share one too"), and only with their Bruce friends, as Bruce lists them for that member (`GET /v52/friend`, checked
+  on each call), who marked an upcoming race going. Nobody else is ever listed, so it reveals nothing about who uses
+  Brüce beyond your own friends. The apps show faces (photo or initials, as for friends on class rows) and
+  "2 friends going" on Explore race cards (mockup 1), the race page above the sign-up link (mockup 2) and My races.
+- **Crews**: **Start a crew** on a race page creates a challenge (`POST /challenges` with `raceId` and `weekly`) from
+  today to your race day: a name ("HYROX Stockholm crew"), sessions a week (1 to 7, from the Train for it plan's
+  classes a week, else 3) and friends who use Brüce (others get the share link). It reuses the challenges' invites,
+  pushes, share link, Accept, Join and Leave, and counts the same way (everything counts: classes, check-ins and
+  drop-ins), per week from Monday to Sunday. The crew page (Friends › Challenges, the race page's crew card, on the Mac
+  the race page) shows each member's sessions this week against the target and how many hit it last week; an app
+  that doesn't know crews shows it as a "Most visits" challenge.
+- **The Sunday push** (mockup 5): at 19:00 local the server tells each crew with two or more members "Crew: HYROX
+  Sthlm Doubles" / "4 of 5 hit their 4 sessions this week. You did 3 of 4.", once per crew and week. Nobody is named
+  and invited friends who haven't accepted aren't counted. **Weekly crew update** in Menu › Auto-book switches it off.
+- **After the race** the race page says the race is over, links to **See results** on the race's own site when the
+  catalog has a results page, and from the day after until the end of the recovery week suggests that week's Train for
+  it mix (Mobility and Sauna after HYROX, Massage and Mobility after a run) with Find buttons; with a plan, its own
+  recovery week shows under This week. My races lists past races under **Past** with See results.
+- **Leaving and deleting**: switching going off or removing the race deletes the row on the next sync (and the
+  daily cron drops races that are over); leaving a crew deletes your numbers in it (as for challenges), and a crew
+  without members is deleted with its push records. Switching the server off (`DELETE /me`) deletes your races
+  and going.
+
 ## Repository layout
 
 ```
@@ -415,7 +465,9 @@ specific screen (`explore`, `classes`, `studio`, `detail`, `checkin`, `friends`,
 `settings`, `welcome`, `mybookings`, `similar`, `alerts`, `area`, `races` (Explore › Races), `race` (a race page),
 `myraces` (My classes › Races with This week of a plan in week 3 of 10), `myrace` (a race in My races), `addrace`
 (add a race by hand), `trainforit` (a race page with Train for it), `planstart` (the plan sheet before starting),
-`raceplan` (the plan sheet in week 3 of 10), …; the full list is in
+`raceplan` (the plan sheet in week 3 of 10), `racegoing` (a race page with two friends going), `racefriends` (its With
+friends card: Show friends I'm going and Start a crew), `crewrace` (a race page with a crew), `crew` (the crew page),
+`newcrew` (Start a crew), `racedone` (a race that is over, with See results), `myracespast` (My races › Past), …; the full list is in
 [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)). Demo Home shows the Next race card with the plan's week.
 Demo mode is not reachable from the UI.
 
@@ -488,9 +540,10 @@ so they are **not** included in this repository. Examples in the docs use placeh
   plus Apple Maps. There is no analytics, tracking or third-party SDK. The race list is read from this project's
   own GitHub Pages site (`djui.github.io/bruce/app/races.json`, no data sent); race links open in your browser.
 - My races, their reminders, Train for it plans and your race notes stay on the device (Application Support on
-  iPhone and Mac, localStorage on the web). Only with the server on and a race-week or day-before reminder switched on
-  does a race (its id, name, your day and the plan's race-week mix) go to the server, which deletes it with your
-  account.
+  iPhone and Mac, localStorage on the web). Only with the server on and a race-week or day-before reminder or
+  **Show friends I'm going** switched on does a race (its id, name, your day, the plan's race-week mix and whether
+  friends may see it) go to the server, which deletes it with your account. Friends going is shown only to your Bruce
+  friends who share a race too; a crew is a challenge, with the same consent and Leave.
 - Your password is sent once to log in and never stored. The session tokens are stored only in the
   Keychain (iOS service `net.dauernheim.bruce`; macOS `net.dauernheim.BruceMacOS`). Log out removes them.
 - Location (iOS, when in use) is used on the device for distances and the check-in suggestion. The

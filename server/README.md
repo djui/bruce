@@ -159,8 +159,62 @@ have one of the two switched on with `PUT /me/races` and leave the notifications
   nothing else on the server. A user whose only data is race reminders (a web user without a device) keeps their
   row until then; `DELETE /me` and an expired login delete the races too.
 
-Phase 3 (friends going, race crews) builds on `user_races`: who may see a race is a column to add, friends on the same
-race are found by `race_id` (indexed), and a crew will be a challenge that ends on race day.
+## Friends going
+
+A race in My races can be shared with Bruce friends: **Show friends I'm going** on the race page, opt-in per race and
+off by default (the apps' copy and logic: `Shared/BruceCore/RaceSocial.swift`, `docs/app/js/crews.js`).
+
+- The device sends it in its `PUT /me/races` as `"going": true` or `false` with `"goingAt"`, the moment the member
+  flipped it (UTC ms; later than now counts as now). A race with going on is stored even without a reminder, with the
+  same per-device rules (each device replaces only the races it sent); a race switched off is sent too, so the
+  switch reaches a row another device sent. Going is the member's, not a device's: a row keeps its going while a
+  device sends the race without the switch, and a switch applies only when it is at least as recent as the row's
+  (`going_at`), so a device that has not heard of a change cannot undo it. The apps take over the server's state
+  (`mine` in `GET /races/going`) for races they did not switch since their last sync. Only catalog races can be
+  shared: `going` on a `custom-…` id is ignored (a race added by hand has no shared record to meet friends on).
+- `user_races.visibility` (`migrations/0004_race_social.sql`) is `friends` while going is on, else `private`, and
+  `going_at` the last flip. The row holds the user id, the race id, the member's race day and these columns (and the
+  reminder fields above). `PUT /me/races` answers `ids` (the races whose race-day reminders the server sends, so the
+  device leaves those out) and `going` (the member's shared races). It goes when
+  going and the reminders are switched off or the race is removed (the next `PUT`, or `DELETE /me/races/<id>`), the day
+  after race day (the daily cron), with `DELETE /me` and with an expired login.
+- `GET /races/going` (optionally `?ids=a,b`) answers only a caller who shares an upcoming race themselves: otherwise
+  `{going: {}, sharing: false, mine: []}` and nothing is read. Then it reads the caller's Bruce friends with the
+  caller's login (`GET /v52/friend`, one Bruce request per call) and returns those of them who marked an upcoming race
+  going: `{going: {"<raceId>": [{userId, name}]}, sharing: true, mine: [raceId]}`, names as Bruce gives them to the
+  caller. Nobody who is not the caller's Bruce friend is ever listed, so the answer says nothing about who uses Brüce
+  beyond the caller's own friends. The apps ask at most every 10 minutes.
+
+## Race crews
+
+A crew is a challenge (see above) that ends on race day: `challenges.race_id` (the catalog race) and
+`challenges.weekly` (sessions per week, 1-14; the apps offer 1-7 from the Train for it plan). Its metric is `visits`
+(everything counts), its period runs from the day it was started to race day, and invites, pushes, the share link,
+accept, join and leave work as for any challenge, so an app version without crews shows it as a "Most visits"
+challenge.
+
+- `POST /challenges` with `{"raceId","weekly","title","end","invite"}` creates one (`end` is the member's race day;
+  `start` is today, an earlier `start` is moved to today). One crew per race and member: a second one for a race
+  you are already in answers 409 with that crew's `challengeId`. Invitees get "Uwe invited you to a crew" / "HYROX
+  Sthlm Doubles · 4 sessions a week until race day. Tap to accept."
+- `GET /challenges/<id>` adds `crew`: `{raceId, weekly, size, week:{start,end}, lastWeek:{start,end,hit} | null,
+  weeksLeft, members:[{userId, name, thisWeek, lastWeek}]}` (Monday to Sunday, local days; `lastWeek` null in the
+  crew's first week). Only accepted members are counted or listed. The preview for a share link also has `raceId`
+  and `weekly`.
+- **The Sunday push**: the minute cron on Sunday from 19:00 local (for two hours) tells each crew that is still
+  training (race day after today) and has at least two accepted members how many hit the weekly target that week,
+  Monday to today: "Crew: HYROX Sthlm Doubles" / "4 of 5 hit their 4 sessions this week. You did 3 of 4." (or "You
+  hit yours."). Push only, category `CREW_UPDATE`, payload `{challengeId}` (opens the crew). Nobody is named. A
+  `crew_updates` row (crew, the week's Monday) is written before sending, only if there is none, so each crew hears
+  once a week. A crew started after the Monday is told from its first full week; counts start on the crew's first day
+  (as on the crew page). The counts come from the stored per-visit detail (the daily read, up to last night); members
+  not at their target yet get today's visits from their first `GET /v52/booking` pages (up to two each). A minute run
+  spends at most `CREW_BUDGET` (20) requests on it, those pages and one APNs request per device: a crew that doesn't
+  fit waits for the next minute, and one that never would goes without today's visits. Members with
+  `"crewUpdates": false` (`PUT /me`, the apps' Auto-book › Weekly crew update, sent once chosen there) or without a
+  push device get nothing.
+- Leaving a crew is leaving the challenge: the member's per-visit detail goes when they are in no other challenge,
+  and a crew without accepted members is deleted with its `crew_updates` rows.
 
 ## Users and what is stored
 
@@ -172,10 +226,12 @@ One row per user in a D1 table: the Bruce access token (to book with), the rules
 series), push device tokens, the Bruce email address (for booking emails), upcoming classes and a short log. Bruce's server does not expire access tokens in
 practice (see API.md "Refresh"), so whoever can read the database can use those accounts until they log out of
 Bruce. Switching "Let the server book for me" off in the app deletes the user's row, unless they are in a challenge:
-then only the rules, watches and goals go and the login stays (joining a challenge stores it, auto-book on or off).
+then the rules, watches, goals, races and push devices go and the login stays (joining a challenge stores it,
+auto-book on or off).
 A 401 from Bruce deletes the row too (and pushes "Auto-book paused"; the app sends the new login on its next start).
 Challenge, participant and history tables: see "Challenges with friends" above; the `nudges` table (one row per user:
-the last skipped habit told and its push) under "Skipped a habit"; `user_races` under "Race reminders".
+the last skipped habit told and its push) under "Skipped a habit"; `user_races` under "Race reminders" and "Friends
+going"; crews (`challenges.race_id`, `challenges.weekly`, `crew_updates`) under "Race crews".
 
 ## Set up
 
@@ -187,7 +243,7 @@ npx wrangler secret put APNS_KEY               # contents of the APNs AuthKey_XX
 npx wrangler secret put APNS_KEY_ID            # its Key ID
 npx wrangler secret put APNS_TEAM_ID           # Apple team id
 npx wrangler secret put RESEND_API_KEY         # optional: Resend API key, for booking emails
-npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges, user_races
+npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges, user_races, crews
 npx wrangler deploy
 ```
 
@@ -210,9 +266,9 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 
 | Request | Body | Effect |
 |---|---|---|
-| `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true,"lateSpots":"ask"}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes, `nudgeDays` (1-7, default 4) sets their quiet days; `lateSpots` (optional, `ask` or `book`, default `ask`) is what happens to a spot 3-12 h before the class (see "Late spots") |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], opening:[{classId,title,start,opens}], maxOpening, log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots, races:[{id,name,date,url,remindWeek,remindEve,plan,weekSentAt,eveSentAt}]}` |
-| `DELETE /me` | | Deletes the user's row, history and races; in a challenge it keeps the login and clears rules, watches, goals and races |
+| `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true,"crewUpdates":true,"lateSpots":"ask"}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes, `nudgeDays` (1-7, default 4) sets their quiet days; `crewUpdates` (optional, default on) switches the Sunday crew push; `lateSpots` (optional, `ask` or `book`, default `ask`) is what happens to a spot 3-12 h before the class (see "Late spots") |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], opening:[{classId,title,start,opens}], maxOpening, log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots, crewUpdates, races:[{id,name,date,url,remindWeek,remindEve,plan,weekSentAt,eveSentAt,going}]}` |
+| `DELETE /me` | | Deletes the user's row, history and races; in a challenge it keeps the login and clears rules, watches, goals, races and push devices |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |
 | `PUT /me/opening/<classId>` | | Books a listed class that is not bookable yet once, the moment its window opens (404 if the class is gone or started, 409 if it is already open or over 5 pending). Stores the login; creates the user's row if needed |
@@ -221,11 +277,12 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | `PUT /me/email` | `{"enabled":false}` | Stops (or with `true` restarts) the booking emails → `{email}`: the address used, or null |
 | `GET /email/off?u=<userId>&t=<token>` | | The unsubscribe link in each email (no login needed; `POST` for one-click) |
 | `PUT /me/goals` | `{"goals":[{"id","title","category","studioId","target","remind"}]}` | Stores the goals with `remind` for "Behind on your goal" pushes (max 10; `[]` clears) |
-| `PUT /me/races` | `{"device":"<id>","races":[{"id","name","date","url","remindWeek","remindEve","plan":{"perWeek","weeks","startedOn","raceWeek":[{"key","title","count"}]}}]}` | Replaces the races this `device` sent with race-day reminders (`id` lower case with dashes, `date` the member's race day; races without a reminder on are left out; 409 over 20, or 40 on all devices) → `{races, ids, push, email}`: `push` true when the server can push to a device. Stores the login; creates the user's row if needed |
+| `PUT /me/races` | `{"device":"<id>","races":[{"id","name","date","url","remindWeek","remindEve","going","goingAt","plan":{"perWeek","weeks","startedOn","raceWeek":[{"key","title","count"}]}}]}` | Replaces the races this `device` sent with race-day reminders or going (`id` lower case with dashes, `date` the member's race day; races with neither are left out; `going` only for catalog ids; 409 over 20, or 40 on all devices) → `{races, ids, going, push, email}`: `push` true when the server can push to a device. Stores the login; creates the user's row if needed |
 | `DELETE /me/races/<id>` | | Removes one race → `{races}` |
-| `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366), invites friends by push → 201 `{challenge}` |
+| `GET /races/going?ids=` | | `{going:{raceId:[{userId,name}]}, sharing, mine}`: the caller's Bruce friends who marked an upcoming race going (`ids` optional, comma-separated); empty with `sharing: false` while the caller shares no race (see "Friends going") |
+| `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}`, or a crew `{"title","raceId","weekly","end","invite"}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366) or a race crew (see "Race crews"; 409 when already in a crew for the race), invites friends by push → 201 `{challenge}` |
 | `GET /challenges` | | `{challenges:[…], usesBruce:[userId]}`: the caller's challenges and invites, and which friends use the server |
-| `GET /challenges/<id>` | | Participants: `{challenge, leaderboard:[{userId,name,status,rank,score,visits,classes,dropins,minutes,studios,topStudio,topClass,categories,together,lastVisit,done,daily,recent}], months:[{month,label,entries}], updatedAt}`; others: a preview `{challenge, joinable}` |
+| `GET /challenges/<id>` | | Participants: `{challenge, leaderboard:[{userId,name,status,rank,score,visits,classes,dropins,minutes,studios,topStudio,topClass,categories,together,lastVisit,done,daily,recent}], months:[{month,label,entries}], crew, updatedAt}` (`crew` for crews only); others: a preview `{challenge, joinable}` |
 | `POST /challenges/<id>/accept` | | Accepts an invite; stores the login and reads the history |
 | `POST /challenges/<id>/join` | | Joins from the share link (friends of the creator only, else 403) |
 | `POST /challenges/<id>/leave` | | Leaves; deletes the per-visit detail when in no other challenge |

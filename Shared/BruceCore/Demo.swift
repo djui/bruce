@@ -214,6 +214,15 @@ extension AppModel {
         case "planstart": tab = .myClasses; showRacesInMyClasses = true; push(.race("tough-viking-stadion-2027")); present(.racePlan("tough-viking-stadion-2027"))
         case "raceplan": tab = .myClasses; showRacesInMyClasses = true; push(.race("hyrox-stockholm-2026")); present(.racePlan("hyrox-stockholm-2026"))
         case "addrace": tab = .myClasses; showRacesInMyClasses = true; present(.editRace(nil))
+        // Friends going and crews (RaceSocial.swift): a race page with two friends going and Start a crew, the crew
+        // page, the new crew sheet, a race that is over (results) and the Past list in My races.
+        case "racegoing": tab = .explore; demoExploreTab = 2; push(.race("tough-viking-stadion-2027"))
+        case "crew": tab = .myClasses; showRacesInMyClasses = true; push(.race("hyrox-stockholm-2026")); push(.challenge("demoCrew"))
+        case "racefriends": tab = .explore; demoExploreTab = 2; push(.race("tough-viking-stadion-2027")); demoScrollBottom = true
+        case "crewrace": tab = .explore; demoExploreTab = 2; push(.race("hyrox-stockholm-2026")); demoScrollBottom = true
+        case "newcrew": tab = .explore; demoExploreTab = 2; push(.race("tough-viking-stadion-2027")); present(.newCrew("tough-viking-stadion-2027"))
+        case "racedone": tab = .myClasses; showRacesInMyClasses = true; push(.race("midnattsloppet-stockholm-2026"))
+        case "myracespast": tab = .myClasses; showRacesInMyClasses = true; demoScrollBottom = true
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
         case "detail": push(.classDetail(9001))

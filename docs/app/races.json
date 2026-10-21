@@ -4,6 +4,33 @@
   "notice": "Hand-curated Nordic race events for Brüce, an unofficial Bruce Studios client. Facts as shown on each race's own page on checkedOn; they change, so the race page always links there. Not affiliated with any race, organiser or platform. Race names are trademarks of their owners. Schema and upkeep: README.md, section Races.",
   "races": [
     {
+      "id": "goteborgsvarvet-2026",
+      "name": "Göteborgsvarvet",
+      "type": "running",
+      "date": "2026-05-23",
+      "city": "Gothenburg",
+      "country": "SE",
+      "distancesKm": [21.1],
+      "signupUrl": "https://www.goteborgsvarvet.se/nyheter/24-varv-runt-jorden-och-64-nationer-arets-goteborgsvarvet-i-siffror",
+      "status": "checkSite",
+      "resultsUrl": "https://www.goteborgsvarvet.se/startlista-resultat",
+      "checkedOn": "2026-10-21"
+    },
+    {
+      "id": "midnattsloppet-stockholm-2026",
+      "name": "Midnattsloppet Stockholm",
+      "type": "running",
+      "date": "2026-08-15",
+      "city": "Stockholm",
+      "country": "SE",
+      "distancesKm": [5, 10, 21],
+      "format": "evening run",
+      "signupUrl": "https://midnattsloppet.com/en/all-you-need-to-know-stockholm/",
+      "status": "checkSite",
+      "resultsUrl": "https://midnattsloppet.com/en/startlist-results/",
+      "checkedOn": "2026-10-21"
+    },
+    {
       "id": "hyrox-stockholm-2026",
       "name": "HYROX Stockholm",
       "type": "hyrox",
@@ -18,6 +45,7 @@
       "priceNote": "Single 1,530 SEK, doubles 1,470 SEK per person",
       "priceSteps": [{ "amount": 1470, "currency": "SEK", "lowest": true }],
       "status": "open",
+      "resultsUrl": "https://results.hyrox.com/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -38,6 +66,7 @@
       ],
       "status": "open",
       "klassiker": true,
+      "resultsUrl": "https://results.vasaloppet.se/?lang=EN_CAP",
       "checkedOn": "2026-10-21"
     },
     {
@@ -55,6 +84,7 @@
       "priceNote": "1,800 NOK now",
       "priceSteps": [{ "amount": 1800, "currency": "NOK" }],
       "status": "open",
+      "resultsUrl": "https://www.birken.no/en/results",
       "checkedOn": "2026-10-21"
     },
     {
@@ -72,6 +102,7 @@
       "priceNote": "Single 1,045 DKK",
       "priceSteps": [{ "amount": 1045, "currency": "DKK", "lowest": true }],
       "status": "open",
+      "resultsUrl": "https://results.hyrox.com/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -87,6 +118,7 @@
       "priceNote": "900 NOK until 31 Jan",
       "priceSteps": [{ "until": "2027-01-31", "amount": 900, "currency": "NOK" }],
       "status": "open",
+      "resultsUrl": "https://www.bergencitymarathon.no/resultater/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -133,6 +165,7 @@
       "priceNote": "4,700 NOK per team",
       "priceSteps": [{ "amount": 4700, "currency": "NOK", "per": "team" }],
       "status": "open",
+      "resultsUrl": "https://holmenkollstafetten.no/resultater",
       "checkedOn": "2026-10-21"
     },
     {
@@ -148,6 +181,7 @@
       "priceNote": "995 DKK. The lottery is done; more than 80,000 applied.",
       "priceSteps": [{ "amount": 995, "currency": "DKK" }],
       "status": "lottery",
+      "resultsUrl": "https://copenhagenmarathon.dk/mit-loeb/resultatarkiv/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -182,6 +216,7 @@
       "platform": "njuko",
       "priceNote": "Sold out. There is a waitlist with entry transfers.",
       "status": "soldOut",
+      "resultsUrl": "https://www.goteborgsvarvet.se/startlista-resultat",
       "checkedOn": "2026-10-21"
     },
     {
@@ -197,6 +232,7 @@
       "priceNote": "799–999 SEK",
       "priceSteps": [{ "amount": 799, "currency": "SEK", "lowest": true }],
       "status": "open",
+      "resultsUrl": "https://www.toughest.se/hinderbanor/malmo/resultat/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -226,6 +262,7 @@
       "priceNote": "799–999 SEK",
       "priceSteps": [{ "amount": 799, "currency": "SEK", "lowest": true }],
       "status": "open",
+      "resultsUrl": "https://www.toughest.se/hinderbanor/stockholm/resultat/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -241,6 +278,7 @@
       "priceNote": "845 NOK now",
       "priceSteps": [{ "amount": 845, "currency": "NOK" }],
       "status": "open",
+      "resultsUrl": "https://www.birken.no/en/results",
       "checkedOn": "2026-10-21"
     },
     {
@@ -259,6 +297,7 @@
       "status": "opensSoon",
       "opensOn": "2026-11-25",
       "klassiker": true,
+      "resultsUrl": "https://result.vatternrundan.se/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -275,6 +314,7 @@
       "priceSteps": [{ "amount": 1345, "currency": "SEK", "lowest": true }],
       "status": "open",
       "klassiker": true,
+      "resultsUrl": "https://vansbrosimningen.se/resultat/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -302,6 +342,7 @@
       "priceNote": "550 EUR entry. Places go by lottery; draw results from 21 Oct 2026.",
       "priceSteps": [{ "amount": 550, "currency": "EUR" }],
       "status": "lottery",
+      "resultsUrl": "https://results.nxtri.com/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -317,6 +358,7 @@
       "priceNote": "2027 prices come with the sign-up. The first price step was 499 SEK in 2026.",
       "status": "opensSoon",
       "opensOn": "2026-11-01",
+      "resultsUrl": "https://midnattsloppet.com/en/startlist-results/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -346,6 +388,7 @@
       "signupUrl": "https://midnattsloppet.com/en/start-fee/",
       "priceNote": "Date and prices to be confirmed",
       "status": "checkSite",
+      "resultsUrl": "https://midnattsloppet.com/en/startlist-results/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -422,6 +465,7 @@
       "priceNote": "1,425 NOK now",
       "priceSteps": [{ "amount": 1425, "currency": "NOK" }],
       "status": "open",
+      "resultsUrl": "https://www.birken.no/en/results",
       "checkedOn": "2026-10-21"
     },
     {
@@ -437,6 +481,7 @@
       "priceNote": "799–999 NOK",
       "priceSteps": [{ "amount": 799, "currency": "NOK", "lowest": true }],
       "status": "open",
+      "resultsUrl": "https://www.toughest.se/hinderbanor/oslo/resultat/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -451,6 +496,7 @@
       "platform": "Haku",
       "priceNote": "1,350 NOK for the marathon",
       "status": "open",
+      "resultsUrl": "https://oslomaraton.no/resultater-og-historie/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -466,6 +512,7 @@
       "priceNote": "799–999 SEK",
       "priceSteps": [{ "amount": 799, "currency": "SEK", "lowest": true }],
       "status": "open",
+      "resultsUrl": "https://www.toughest.se/hinderbanor/goteborg/resultat/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -480,6 +527,7 @@
       "priceNote": "795 DKK. The lottery is done; about 188,000 entered the draw.",
       "priceSteps": [{ "amount": 795, "currency": "DKK" }],
       "status": "lottery",
+      "resultsUrl": "https://cphhalf.dk/en/results-archive/",
       "checkedOn": "2026-10-21"
     },
     {
@@ -495,6 +543,7 @@
       "priceNote": "2027 prices are not out yet. Entries cost 796–1,395 SEK in 2026.",
       "status": "checkSite",
       "klassiker": true,
+      "resultsUrl": "https://lidingoloppet.se/en/tcs-lidingoloppet/results-and-statistics",
       "checkedOn": "2026-10-21"
     }
   ]

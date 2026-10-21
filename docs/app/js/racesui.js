@@ -1,19 +1,26 @@
 // Races on the web (races.js; RaceViews.swift on iPhone): Explore › Races, the race page, My classes › Races, Home's
 // "Next race" and the editor for a race added by hand. Race names are plain text on the app's own colours, sign-up
 // always opens the race's own page, and every race page says Brüce is not affiliated with the organiser.
-import { $, esc, icon, todayKey } from './util.js';
+import { $, esc, icon, todayKey, ls } from './util.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import * as R from './races.js';
-import { glassBtn, empty, loading, toast, sheet, chip } from './ui.js';
+import { glassBtn, empty, loading, toast, sheet, chip, avatar, confirmSheet } from './ui.js';
 import { addToCalendar, icsForRace, icsFileName } from './calendar.js';
 import { bannerPlanHTML, promptHTML, weekSectionHTML, homePlan, raceCardHTML, planClick, planOf, refreshPlanGoals } from './raceplanui.js';
+import { goingText, goingNames, resultsUrl, recovery } from './crews.js';
+import { crewBlockHTML, crewClick, loadIfAllowed as loadChallengesIfAllowed } from './challenges.js';
 
 export const NOT_AFFILIATED = "Brüce is not affiliated with this race or its organiser. Sign-up, prices and rules are theirs: check the race's own page before you sign up.";
 const CATALOG_NOTE = "Races are picked by hand from each race's own page, with the day they were checked. Brüce links to those pages and is not affiliated with any race or organiser.";
 const DEVICE_NOTE = 'My races stay in this browser. Reminders for sign-up and price steps are in the Brüce iPhone app; race-week reminders come from our server while it is on.';
 const CUSTOM_NOTE = 'You added this race. It stays in this browser; Brüce has no facts or prices for it.';
 const GONE_NOTE = "This race is no longer in Brüce's list. The details are the ones you saved.";
+const GOING_HINT = "Your Bruce friends who share their races in Brüce see that you're going, and you see theirs. Off by default, per race.";
+const GOING_SERVER = 'Going is shared through our server, which is off in Settings.';
+const GOING_SHARE = 'Friends who share their races show up here once you share one too.';
+const GOING_CONSENT = "Our server stores your Bruce user id, this race and that your Bruce friends may see it. Only friends who share a race themselves see it, nobody else. It's deleted when you switch this off, remove the race, after race day, or with your data on the server.";
+const RECOVERY_HINT = 'An easy week after the race, from the Train for it mix. Brüce books nothing for you.';
 
 /** Explore › Races chips (for this visit). */
 export const rf = { types: [], countries: [], past: false };
@@ -45,6 +52,29 @@ export function removeRace(key) {
 function updateMine(key, change) {
   St.saveMyRaces(St.myRaces().map((m) => (R.keyOf(m) === key ? Object.assign({}, m, change) : m)));
 }
+/** "Show friends I'm going" (opt-in per race, catalog races only): adds the race to My races if needed; says once what
+ *  the server keeps. Returns whether it changed. */
+export async function setGoing(r, on) {
+  if (R.isCustom(r)) return false;
+  if (on && !St.canShareGoing()) { toast(GOING_SERVER); return false; }
+  if (on && !St.isDemo() && !ls.get('bruce.goingConsent', false)) {
+    if (!(await confirmSheet("Show friends you're going?", GOING_CONSENT, 'Show friends', 'lime'))) return false;
+    ls.set('bruce.goingConsent', true);
+  }
+  // The moment it was flipped goes with it: the last flip wins on every device.
+  if (!mineFor(r.id)) St.saveMyRaces(St.myRaces().concat(Object.assign(R.fromRace(r), { going: on, goingAt: Date.now() })));
+  else updateMine(r.id, { going: on, goingAt: Date.now() });
+  toast(on ? "Friends can see you're going" : 'Not shared any more');
+  return true;
+}
+
+/** Faces and "2 friends going". */
+export function goingHTML(users, size) {
+  if (!users.length) return '';
+  return '<span class="going" role="img" aria-label="' + esc(goingNames(users.map((u) => u.first_name))) + '"><span class="going-faces">' +
+    users.slice(0, 3).map((u) => avatar(u, size || 24)).join('') + (users.length > 3 ? '<span class="going-more">+' + (users.length - 3) + '</span>' : '') +
+    '</span><span>' + esc(goingText(users.length)) + '</span></span>';
+}
 
 // ---------------------------------------------------------------- building blocks
 
@@ -65,7 +95,8 @@ export function raceCard(r, href, o) {
   const pill = R.pillText(r, today);
   return '<a class="rcard t-' + esc(r.type) + (opt.selected ? ' selected' : '') + '" href="' + href + '" aria-label="' + esc([r.name, R.dateText(r), R.kindLabel(r), sub, pill].filter(Boolean).join(', ')) + '">' +
     bib(r) + '<span class="rcard-body"><small>' + esc(R.kindLabel(r).toUpperCase()) + '</small><b>' + esc(r.name) + '</b>' +
-    (sub ? '<span>' + esc(sub) + '</span>' : '') + (pill ? '<em>' + esc(pill) + '</em>' : '') + '</span>' +
+    (sub ? '<span>' + esc(sub) + '</span>' : '') + (pill || (opt.going && opt.going.length) ? '<span class="rcard-row">' + (pill ? '<em>' + esc(pill) + '</em>' : '') +
+      goingHTML(opt.going || [], 22) + '</span>' : '') + '</span>' +
     (opt.mine ? '<span class="rcard-mine" title="In My races">' + icon('check') + '</span>' : '') +
     icon(R.glyph(r), 'rcard-glyph') + '</a>';
 }
@@ -96,7 +127,7 @@ export function racesListHTML(query, hrefOf, selectedId) {
   if (!list.length) return empty('flag', 'No races match. Brüce lists about 30 races in Sweden, Norway and Denmark.');
   const mine = new Set(St.myRaces().map(R.keyOf));
   return R.byMonth(list).map((g) => '<h3 class="section-head">' + esc(g.title) + '</h3><div class="rcards">' +
-    g.races.map((r) => raceCard(r, hrefOf(r.id), { mine: mine.has(r.id), selected: selectedId === r.id })).join('') + '</div>').join('') +
+    g.races.map((r) => raceCard(r, hrefOf(r.id), { mine: mine.has(r.id), selected: selectedId === r.id, going: St.friendsGoing(r.id) })).join('') + '</div>').join('') +
     '<p class="muted small note">' + esc(CATALOG_NOTE) + '</p>';
 }
 
@@ -126,25 +157,49 @@ export function myRacesHTML(hrefOf, selectedId) {
   }
   const row = (e) => {
     const h = R.hint(e, today);
-    const right = R.isPast(e.race, today, e.mine.day) ? 'Done' : R.daysToGo(e.race, today, e.mine.day) <= 0 ? 'Today' : R.daysToGo(e.race, today, e.mine.day) + ' d';
-    return '<a class="trow race-row' + (selectedId === e.race.id ? ' selected' : '') + '" href="' + hrefOf(e.race.id) + '">' + bib(e.race, e.mine.day) +
-      '<span class="grow"><b>' + esc(e.race.name) + '</b><p class="muted">' + esc(h || [e.race.venue || e.race.city, R.distanceText(e.race)].filter(Boolean).join(' · ')) + '</p></span>' +
-      '<b class="muted">' + esc(right) + '</b></a>';
+    const past = R.isPast(e.race, today, e.mine.day), results = past && resultsUrl(e.race);
+    const right = past ? (results ? '' : 'Done') : R.daysToGo(e.race, today, e.mine.day) <= 0 ? 'Today' : R.daysToGo(e.race, today, e.mine.day) + ' d';
+    const going = past ? [] : St.friendsGoing(e.race.id);
+    return '<div class="race-row-wrap"><a class="trow race-row' + (selectedId === e.race.id ? ' selected' : '') + '" href="' + hrefOf(e.race.id) + '">' + bib(e.race, e.mine.day) +
+      '<span class="grow"><b>' + esc(e.race.name) + '</b><p class="muted">' + esc(h || [e.race.venue || e.race.city, R.distanceText(e.race)].filter(Boolean).join(' · ')) + '</p>' +
+      goingHTML(going, 20) + '</span>' + (right ? '<b class="muted">' + esc(right) + '</b>' : '') + '</a>' +
+      (results ? '<a class="btn glass sm race-results" href="' + esc(results) + '" target="_blank" rel="noopener noreferrer">See results</a>' : '') + '</div>';
   };
   let html = '';
+  const jr = done.map((e) => ({ e, rec: recovery(e, today) })).find((x) => x.rec && !planOf(x.e));
+  if (jr) html += afterHTML(jr.e.race, jr.rec, 'After ' + jr.e.race.name);
   const next = up[0];
   if (next) {
     const r = next.race, h = R.hint(next, today);
     html += '<a class="race-banner t-' + esc(r.type) + (selectedId === r.id ? ' selected' : '') + '" href="' + hrefOf(r.id) + '">' +
       '<span class="race-banner-top"><em>' + esc([R.heroTag(r), next.mine.note].filter(Boolean).join(' · ')) + '</em><b>' + esc(R.countdownShort(r, today, next.mine.day)) + '</b></span>' +
       '<b class="race-banner-name">' + esc(r.name) + '</b><span>' + esc([R.shortDay(next.day, true), r.venue || r.city].filter(Boolean).join(' · ')) + '</span>' +
-      (planOf(next) ? bannerPlanHTML(next) : h ? '<small>' + icon('info') + esc(h) + '</small>' : '') + icon(R.glyph(r), 'rcard-glyph') + '</a>';
+      (planOf(next) ? bannerPlanHTML(next) : h ? '<small>' + icon('info') + esc(h) + '</small>' : '') + goingHTML(St.friendsGoing(r.id), 22) + icon(R.glyph(r), 'rcard-glyph') + '</a>';
     if (!planOf(next) && R.daysToGo(r, today, next.mine.day) > 0) html += promptHTML(R.keyOf(next.mine));
   }
   html += weekSectionHTML();
   if (up.length > 1) html += '<div class="sec-row"><h2 class="sec-title">Later</h2><small class="muted">' + (up.length - 1) + (up.length - 1 === 1 ? ' race' : ' races') + '</small></div><div class="list card flush">' + up.slice(1).map(row).join('') + '</div>';
-  if (done.length) html += '<div class="sec-row"><h2 class="sec-title">Done</h2><small class="muted">' + done.length + (done.length === 1 ? ' race' : ' races') + '</small></div><div class="list card flush">' + done.map(row).join('') + '</div>';
+  if (done.length) html += '<div class="sec-row"><h2 class="sec-title">Past</h2><small class="muted">' + done.length + (done.length === 1 ? ' race' : ' races') + '</small></div><div class="list card flush">' + done.map(row).join('') + '</div>';
   return html + '<p class="muted small note">' + esc(DEVICE_NOTE) + '</p>';
+}
+
+/** After the race: results on the race's own site and the recovery week's mix with Find buttons. */
+function afterHTML(r, rec, title) {
+  const results = resultsUrl(r);
+  return '<div class="card race-after"><p class="race-after-title">' + icon('flag') + '<b>' + esc(title || (results ? "The race is over. Results are on the race's own site." : 'The race is over.')) + '</b></p>' +
+    (results ? '<a class="btn lime" href="' + esc(results) + '" target="_blank" rel="noopener noreferrer">See results on ' + esc(R.host(results)) + icon('external') + '</a>' : '') +
+    (rec ? '<p><b>Recovery week: ' + esc(rec.text) + '</b><br><span class="muted small">' + esc(RECOVERY_HINT) + '</span></p><div class="row2">' +
+      rec.mix.map((x) => '<button class="btn glass sm" data-plan-find="' + esc(x.key) + '">Find ' + esc(x.title) + '</button>').join('') + '</div>' : '') + '</div>';
+}
+
+/** Race page: "Show friends I'm going" and the crew (challenges.js). */
+function friendsCardHTML(r, mine) {
+  const on = !!(mine && mine.going), can = St.canShareGoing();
+  return '<div class="card form-rows race-friends"><h3 class="section-head">With friends</h3>' +
+    '<label class="toggle"><span>Show friends I\'m going<small class="muted">' + esc(can ? GOING_HINT : GOING_SERVER) + '</small></span><input type="checkbox" data-rgoing' +
+      (on ? ' checked' : '') + (!can && !on ? ' disabled' : '') + '><i></i></label>' +
+    (can && !S.raceGoing.sharing && !St.friendsGoing(r.id).length ? '<p class="muted small">' + esc(GOING_SHARE) + '</p>' : '') +
+    crewBlockHTML(r) + '</div>';
 }
 
 // ---------------------------------------------------------------- race page
@@ -158,26 +213,30 @@ export function renderRace(el, id, ctx) {
     const mine = mineFor(id);
     const day = mine && mine.day;
     const custom = R.isCustom(r);
+    const past = R.isPast(r, today, day);
     const facts = [];
     const fl = R.factsLine(r);
     if (fl) facts.push(['flag', fl]);
     facts.push(['clock', R.countdownText(r, today, day)]);
-    const su = R.signupLine(r, today);
+    const su = !past && R.signupLine(r, today);
     if (su) facts.push(['ticket', su]);
-    if (r.status !== 'open' && !custom && r.checkedOn && !R.opensLater(r, today)) facts.push(['info', R.statusText(r, today)]);
+    if (!past && r.status !== 'open' && !custom && r.checkedOn && !R.opensLater(r, today)) facts.push(['info', R.statusText(r, today)]);
     if (r.klassiker) facts.push(['trophy', 'A leg of En Svensk Klassiker']);
     const h = R.host(r.signupUrl);
-    const openLabel = !custom && (r.status === 'open' || r.status === 'opensSoon') ? 'Sign up on ' + h : 'Open ' + h;
+    const openLabel = !custom && !past && (r.status === 'open' || r.status === 'opensSoon') ? 'Sign up on ' + h : 'Open ' + h;
+    const entry = mine && myEntries().find((x) => R.keyOf(x.mine) === id);
 
     el.innerHTML = '<header class="hero race-hero t-' + esc(r.type) + '">' + icon(R.glyph(r), 'race-hero-glyph') +
       '<div class="hero-bar">' + back + '<span class="spacer"></span>' + (h ? glassBtn('share', 'data-ract="share"', 'Share the race page') : '') + '</div>' +
       '<div class="hero-text"><span class="hero-tag">' + esc(R.heroTag(r)) + '</span><h1>' + esc(r.name) + '</h1>' + (R.placeLine(r) ? '<p>' + esc(R.placeLine(r)) + '</p>' : '') + '</div></header>' +
       '<div class="pane-pad"><h2 class="date-line">' + esc(R.longDateText(r, day)) + '</h2>' +
       '<div class="facts race-facts">' + facts.map(([ic, t]) => '<span>' + icon(ic) + esc(t) + '</span>').join('') + '</div>' +
+      (past ? afterHTML(r, entry && !planOf(entry) ? recovery(entry, today) : null) : goingHTML(St.friendsGoing(r.id), 30)) +
       (h ? '<a class="btn glass race-link" href="' + esc(r.signupUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(openLabel) + icon('external') + '</a>' : '') +
-      (!custom && r.checkedOn ? feeCard(r, today) : '') +
-      (R.opensLater(r, today) ? '<div class="card notice-card">' + icon('calendar') + '<p><b>' + esc(R.statusText(r, today)) + '</b><br><span class="muted small">Places can go fast. The Brüce iPhone app can remind you that morning.</span></p></div>' : '') +
+      (!past && !custom && r.checkedOn ? feeCard(r, today) : '') +
+      (!past && R.opensLater(r, today) ? '<div class="card notice-card">' + icon('calendar') + '<p><b>' + esc(R.statusText(r, today)) + '</b><br><span class="muted small">Places can go fast. The Brüce iPhone app can remind you that morning.</span></p></div>' : '') +
       (mine && mine.plan ? raceCardHTML(id) : '') +
+      (!past && !custom ? friendsCardHTML(r, mine) : '') +
       (mine ? yourRace(r, mine) : '') +
       '<p class="muted small note">' + (custom ? esc(CUSTOM_NOTE) : !r.checkedOn ? esc(GONE_NOTE)
         : "Facts as shown on the race's own page on " + esc(R.shortDay(r.checkedOn, false, true)) + '. They change; the link is always one tap away.') +
@@ -216,6 +275,7 @@ export function renderRace(el, id, ctx) {
 
   el.onclick = (e) => {
     if (planClick(e)) return;
+    if (crewClick(e, draw)) return;
     const b = e.target.closest('[data-ract]');
     if (!b) return;
     const r = raceById(id);
@@ -240,10 +300,15 @@ export function renderRace(el, id, ctx) {
     if (e.target.matches('[data-rday]')) { updateMine(id, { day: e.target.value || null }); draw(); }
     else if (e.target.matches('[data-rnote]')) updateMine(id, { note: e.target.value.trim() || null });
     else if (e.target.matches('[data-rremind]')) updateMine(id, { [e.target.dataset.rremind]: e.target.checked });
+    else if (e.target.matches('[data-rgoing]')) {
+      const r = raceById(id), want = e.target.checked;
+      if (r) setGoing(r, want).then((changed) => { if (!changed) e.target.checked = !want; draw(); });
+    }
   };
   draw();
   // With a plan, the week's check-ins too (the Train for it card counts them).
-  Promise.all([St.loadRaces(), mineFor(id) && mineFor(id).plan ? St.loadHistory().catch(() => []) : null])
+  loadChallengesIfAllowed();
+  Promise.all([St.loadRaces(), St.loadGoing(), S.challengesLoading, mineFor(id) && mineFor(id).plan ? St.loadHistory().catch(() => []) : null])
     .then(() => { if (el.isConnected && !el.contains(document.activeElement)) draw(); });
 }
 

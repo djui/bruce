@@ -335,6 +335,14 @@ enum AutoBookServer {
         get { UserDefaults.standard.object(forKey: "habitNudges") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "habitNudges") }
     }
+    /// "Weekly crew update": on Sundays at 19:00 the server tells each crew (RaceSocial.swift) how many hit their sessions
+    /// that week. On by default; sent with the rules only once chosen here or read from the server, so a device that
+    /// never showed the setting (the Mac) does not switch it back on.
+    static var crewUpdates: Bool {
+        get { UserDefaults.standard.object(forKey: "crewUpdates") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "crewUpdates") }
+    }
+    static var crewUpdatesChosen: Bool { UserDefaults.standard.object(forKey: "crewUpdates") != nil }
     /// What happens to a spot found after the free cancellation, 3-12 h before the class (under 3 h it is always offered,
     /// see `AutoBook.offersInstead`). Sent with the rules only once chosen here or read from the server, so a device that
     /// never showed the setting does not overwrite another's choice.
@@ -378,6 +386,8 @@ enum AutoBookServer {
         let opening: [Watch]?
         /// "ask" or "book" (`LateSpots`).
         let lateSpots: String?
+        /// The Sunday crew push (RaceSocial.swift).
+        var crewUpdates: Bool? = nil
     }
 
     static func request(_ method: String, _ path: String, session: Session, body: Any? = nil) throws -> URLRequest {
@@ -393,11 +403,12 @@ enum AutoBookServer {
         return req
     }
 
-    /// `PUT /me`: the rules (same JSON as stored locally), this device's push token, the skipped-habit and late-spot
-    /// settings, and with them the login.
+    /// `PUT /me`: the rules (same JSON as stored locally), this device's push token, the skipped-habit, crew-update and
+    /// late-spot settings, and with them the login.
     static func sync(_ rules: [AutoBookRule], session: Session) async throws {
         let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
         var body: [String: Any] = ["rules": try JSONSerialization.jsonObject(with: enc.encode(rules)), "nudges": habitNudges, "nudgeDays": habitNudgeDays]
+        if crewUpdatesChosen { body["crewUpdates"] = crewUpdates }
         if let t = deviceToken { body["device"] = ["token": t, "env": pushEnvironment] }
         if lateSpotsChosen { body["lateSpots"] = lateSpots.rawValue }
         try await BruceAPI.send(request("PUT", "me", session: session, body: body))

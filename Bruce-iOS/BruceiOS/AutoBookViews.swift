@@ -10,6 +10,7 @@ struct AutoBookView: View {
     @State private var working = false
     @State private var booksForMe = AutoBookServer.booksForMe
     @State private var habitNudges = AutoBookServer.habitNudges
+    @State private var crewUpdates = AutoBookServer.crewUpdates
     @State private var habitNudgeDays = AutoBookServer.habitNudgeDays
     @State private var lateSpots = AutoBookServer.lateSpots
     @State private var showServerFields = false
@@ -75,6 +76,16 @@ struct AutoBookView: View {
                             ForEach(AutoBookServer.habitNudgeDayChoices, id: \.self) { Text("\($0) days").tag($0) }
                         }
                     }
+                    Toggle(isOn: Binding(get: { crewUpdates }, set: { on in
+                        crewUpdates = on
+                        AutoBookServer.crewUpdates = on
+                        run { await m.syncAutoBookServer(); if let n = m.autoBookServerNote { throw ServerError(n) } }
+                    })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Weekly crew update")
+                            Text(Copy.crewUpdatesHint).bruceFont(13).foregroundStyle(Theme.secondary)
+                        }
+                    }
                 }
                 if booksForMe, (server?.devices ?? 0) > 0 {
                     Button("Send a test notification") {
@@ -120,6 +131,7 @@ struct AutoBookView: View {
         server = try? await AutoBookServer.status(session: s)
         // The server's choice may come from another device.
         if let v = server?.lateSpots.flatMap(AutoBookServer.LateSpots.init) { AutoBookServer.lateSpots = v; lateSpots = v }
+        if let v = server?.crewUpdates { AutoBookServer.crewUpdates = v; crewUpdates = v }
     }
 
     func run(_ op: @escaping () async throws -> Void) {

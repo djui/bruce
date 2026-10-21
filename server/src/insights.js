@@ -271,8 +271,63 @@ export function challengeStats(ch, participants, visitsByUser, viewerId, today) 
   return { period, leaderboard: entries, months };
 }
 
-/** Validates a `POST /challenges` body; returns `{ error }` or the clean challenge fields. */
+// MARK: Race crews
+
+/** A crew trains for a race together: sessions per week, Monday to Sunday (local days). */
+export const MAX_WEEKLY = 14;
+/** The Monday of a local day's week. */
+export const mondayOf = (day) => addDays(day, -((new Date(toUTC(day)).getUTCDay() + 6) % 7));
+const isRaceId = (s) => typeof s === "string" && s.length <= 100 && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(s) && !s.startsWith("custom-");
+
+/**
+ * A crew's weeks: for each accepted member the visits ("everything counts", as the leaderboard) this week (Monday up
+ * to today) and last week, and how many hit the weekly target last week. `lastWeek` is null while the crew is in its
+ * first week. Invited members are not counted or listed: nothing of theirs is read before they accept.
+ */
+export function crewWeeks(ch, participants, visitsByUser, today) {
+  const monday = mondayOf(today);
+  const last = { start: addDays(monday, -7), end: addDays(monday, -1) };
+  const upTo = minDay(today, ch.end);
+  // The crew's own days only (as the leaderboard): its first week counts from the day it started.
+  const count = (uid, from, to) => (visitsByUser.get(uid) ?? []).filter((v) => v.day >= maxDay(from, ch.start) && v.day <= to).length;
+  const hadLastWeek = ch.start <= last.end;
+  const members = participants.filter((p) => p.status === "accepted").map((p) => ({
+    userId: p.userId, name: p.name, thisWeek: monday <= upTo ? count(p.userId, monday, upTo) : 0,
+    lastWeek: hadLastWeek ? count(p.userId, last.start, minDay(last.end, ch.end)) : null,
+  })).sort((a, b) => b.thisWeek - a.thisWeek || a.name.localeCompare(b.name));
+  const weekly = ch.weekly ?? 1;
+  return {
+    raceId: ch.raceId ?? null, weekly, size: members.length,
+    week: { start: monday, end: addDays(monday, 6) },
+    lastWeek: hadLastWeek ? { ...last, hit: members.filter((m) => m.lastWeek >= weekly).length } : null,
+    weeksLeft: Math.max(0, Math.ceil(diffDays(today, ch.end) / 7)),
+    members,
+  };
+}
+
+/** The Sunday push: "Crew: HYROX Sthlm Doubles" / "4 of 5 hit their 4 sessions this week. You did 3 of 4." (or "You
+ *  hit yours."). Nobody is named. */
+export function crewMessage(title, hit, size, weekly, mine) {
+  const s = weekly === 1 ? "session" : "sessions";
+  const you = mine == null ? "" : mine >= weekly ? " You hit yours." : ` You did ${mine} of ${weekly}.`;
+  return { title: `Crew: ${title}`, body: `${hit} of ${size} hit their ${weekly} ${s} this week.${you}` };
+}
+
+/** Validates a `POST /challenges` body; returns `{ error }` or the clean challenge fields. A body with `raceId` is a
+ *  crew: metric 'visits', `weekly` sessions a week, one period from today (or `start`) to race day (`end`). */
 export function cleanChallenge(body, today) {
+  if (body?.raceId != null) {
+    if (!isRaceId(body.raceId)) return { error: "raceId must be a race id from the catalog" };
+    const weekly = Math.round(+body.weekly);
+    if (!(weekly >= 1 && weekly <= MAX_WEEKLY)) return { error: `weekly must be 1-${MAX_WEEKLY}` };
+    const start = isDay(body.start) ? maxDay(body.start, today) : today;
+    const end = body.end;
+    if (!isDay(end) || end < start) return { error: "end must be race day (YYYY-MM-DD), not before the start" };
+    if (diffDays(start, end) > 365) return { error: "a crew lasts at most 366 days" };
+    const title = String(body.title ?? "").trim().slice(0, 80) || "Race crew";
+    return { metric: "visits", target: null, start, end, category: null, categoryTitle: null, title, repeatMonthly: false,
+             raceId: body.raceId, weekly };
+  }
   const metric = METRICS.includes(body?.metric) ? body.metric : null;
   if (!metric) return { error: `metric must be one of ${METRICS.join(", ")}` };
   const target = metric === "target" ? Math.round(+body.target) : null;
@@ -284,7 +339,7 @@ export function cleanChallenge(body, today) {
   const category = body.category == null || body.category === "" ? null : String(body.category).slice(0, 40);
   const title = String(body.title ?? "").trim().slice(0, 80) || defaultTitle(metric, target);
   return { metric, target, start, end, category, categoryTitle: category ? String(body.categoryTitle ?? "").slice(0, 60) || null : null,
-           title, repeatMonthly: !!body.repeatMonthly };
+           title, repeatMonthly: !!body.repeatMonthly, raceId: null, weekly: null };
 }
 
 // MARK: Wrapped percentiles

@@ -63,6 +63,7 @@ export const Home = {
     });
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
     St.loadRaces().then(() => this.refresh());
+    St.loadGoing().then(() => this.refresh());   // friends going (crews.js), only while the server is on
   },
   refresh() {
     const b = $('#home-body', this.el);
@@ -224,6 +225,7 @@ export const Explore = {
     St.loadStudios().catch((e) => toast(e.message));
     this.loadClasses();
     St.loadRaces().then(() => this.refresh());
+    St.loadGoing().then(() => this.refresh());   // friends going (crews.js), only while the server is on
     this.refresh();
   },
   filterChip() { const n = activeCount(ex, !!this.cat, curArea()); return chip(icon('filter') + (n ? '<span class="num">' + n + '</span>' : ''), n > 0, 'data-x="filter" aria-label="Filter"'); },
@@ -453,6 +455,7 @@ export const Mine = {
     St.loadMine().then(() => this.refresh()).catch((e) => toast(e.message));
     St.loadReviewable();
     St.loadRaces().then(() => { refreshPlanGoals(); this.refresh(); });   // goals made from a plan follow the month
+    St.loadGoing().then(() => this.refresh());
     this.refresh();
   },
   refresh() {

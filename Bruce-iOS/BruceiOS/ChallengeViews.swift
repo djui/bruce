@@ -30,13 +30,19 @@ struct ChallengesSegment: View {
                 EmptyState(system: "wifi.exclamationmark", text: e)
             }
             ForEach(invites) { c in ChallengeInviteCard(c: c) }
-            ForEach(Array(running.enumerated()), id: \.1.id) { i, c in
+            let firstChallenge = running.first { !$0.isCrew }?.id
+            ForEach(running, id: \.id) { c in
                 VStack(alignment: .leading, spacing: 10) {
                     NavigationLink(value: Route.challenge(c.id)) { ChallengeHeaderCard(c: c) }.buttonStyle(.plain)
                     if let d = m.challengeDetails[c.id] {
-                        Leaderboard(detail: d, limit: 5) { _ in m.push(.challenge(c.id)) }
-                        if i == 0, let me = d.leaderboard?.first(where: { m.isMe($0.userId) }) {
-                            YourDays(entry: me, challenge: c)
+                        if c.isCrew, let w = d.crew {
+                            // A race crew (RaceSocial.swift): this week, not a leaderboard.
+                            NavigationLink(value: Route.challenge(c.id)) { CrewListLine(weeks: w) }.buttonStyle(.plain)
+                        } else {
+                            Leaderboard(detail: d, limit: 5) { _ in m.push(.challenge(c.id)) }
+                            if c.id == firstChallenge, let me = d.leaderboard?.first(where: { m.isMe($0.userId) }) {
+                                YourDays(entry: me, challenge: c)
+                            }
                         }
                     }
                 }
@@ -57,17 +63,44 @@ struct ChallengesSegment: View {
     }
 }
 
-/// Gradient card: month chip, days left, title, "4 friends · everything counts · started 1 Oct".
+/// A crew in the Challenges list: your week and how the crew did last week.
+struct CrewListLine: View {
+    @Environment(AppModel.self) var m
+    let weeks: CrewWeeks
+    var body: some View {
+        let weekly = weeks.weekly ?? 1
+        let me = weeks.members.first { m.isMe($0.userId) }
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("You: \(RaceSocialText.thisWeek(me?.thisWeek ?? 0, weekly))").bruceFont(15, weight: .semibold)
+                CrewBar(done: me?.thisWeek ?? 0, weekly: weekly).frame(maxWidth: 180)
+                Text(RaceSocialText.lastWeek(weeks) ?? RaceSocialText.doneThisWeek(weeks)).bruceFont(13).foregroundStyle(Theme.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right").foregroundStyle(Theme.tertiary)
+        }
+        .foregroundStyle(Theme.ink)
+        .padding(14)
+        .background(Theme.sectionGrey, in: .rect(cornerRadius: 22))
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Gradient card: month chip, days left, title, "4 friends · everything counts · started 1 Oct". A crew: "Crew" chip,
+/// days to race day, "5 people · 4 sessions a week".
 struct ChallengeHeaderCard: View {
     let c: ChallengeSummary
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Label(chip, systemImage: "trophy.fill")
+                Label(c.isCrew ? "Crew" : chip, systemImage: c.isCrew ? "person.3.fill" : "trophy.fill")
                     .bruceFont(12.5, weight: .semibold).foregroundStyle(.black)
                     .padding(.horizontal, 10).padding(.vertical, 5).background(Theme.lime, in: .capsule)
                 Spacer()
-                if let left = c.period?.daysLeft { Text(left == 0 ? "Last day" : "\(left) day\(left == 1 ? "" : "s") left").bruceFont(13).opacity(0.8) }
+                if let left = c.period?.daysLeft {
+                    Text(c.isCrew ? (left == 0 ? "Race day" : "\(left) day\(left == 1 ? "" : "s") to race day")
+                         : (left == 0 ? "Last day" : "\(left) day\(left == 1 ? "" : "s") left")).bruceFont(13).opacity(0.8)
+                }
             }
             Text(c.displayTitle).bruceFont(22, weight: .heavy, width: .expanded).padding(.top, 12).padding(.bottom, 2)
             Text(line).bruceFont(14).opacity(0.85)
@@ -91,6 +124,7 @@ struct ChallengeHeaderCard: View {
 
     var line: String {
         let n = c.accepted.count
+        if c.isCrew { return "\(n) \(n == 1 ? "person" : "people") · \(RaceSocialText.weekly(c.weekly ?? 1))" }
         var parts = ["\(n) friend\(n == 1 ? "" : "s")", c.countsLabel]
         if let s = c.startDate {
             parts.append(s > Date() ? "starts \(BruceDate.format(s, "d MMM"))" : "started \(BruceDate.format(s, "d MMM"))")
@@ -108,8 +142,8 @@ struct ChallengeInviteCard: View {
                 HStack(spacing: 12) {
                     LetterFace(name: c.ownerName ?? "?", size: 40)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(c.ownerName ?? "A friend") challenged you").bruceFont(16, weight: .bold)
-                        Text("\(c.displayTitle) · \(c.period?.label ?? "")").bruceFont(14).foregroundStyle(Theme.secondary)
+                        Text(c.isCrew ? "\(c.ownerName ?? "A friend") invited you to a crew" : "\(c.ownerName ?? "A friend") challenged you").bruceFont(16, weight: .bold)
+                        Text("\(c.displayTitle) · \(c.isCrew ? RaceSocialText.weekly(c.weekly ?? 1) : c.period?.label ?? "")").bruceFont(14).foregroundStyle(Theme.secondary)
                     }
                     Spacer(minLength: 0)
                 }
@@ -126,7 +160,7 @@ struct ChallengeInviteCard: View {
                 }
                 .buttonStyle(.glass)
             }
-            Text(ChallengeCopy.privacy).bruceFont(12).foregroundStyle(Theme.secondary)
+            Text(c.isCrew ? ChallengeCopy.crewPrivacy : ChallengeCopy.privacy).bruceFont(12).foregroundStyle(Theme.secondary)
         }
         .padding(16)
         .background(Theme.sectionGrey, in: .rect(cornerRadius: 24))
@@ -258,21 +292,25 @@ struct ChallengeView: View {
         let d = m.challengeDetails[challengeId]
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                PageHeading(text: "Challenge")
+                PageHeading(text: summary?.isCrew == true ? "Crew" : "Challenge")
                 if let c = summary {
                     ChallengeHeaderCard(c: c)
                     if c.isInvite || d?.isPreview == true { joinBar(c, preview: d?.isPreview == true, joinable: d?.joinable ?? true) }
                     if let d, !d.isPreview {
-                        Leaderboard(detail: d) { member = $0 }
-                        if let me = d.leaderboard?.first(where: { m.isMe($0.userId) }), !me.isInvited { YourDays(entry: me, challenge: c) }
-                        months(d)
+                        if c.isCrew, let w = d.crew {
+                            CrewWeekSection(crew: c, weeks: w) { uid in member = d.leaderboard?.first { $0.userId == uid } }
+                        } else {
+                            Leaderboard(detail: d) { member = $0 }
+                            if let me = d.leaderboard?.first(where: { m.isMe($0.userId) }), !me.isInvited { YourDays(entry: me, challenge: c) }
+                            months(d)
+                        }
                         sendLink(c)
                         if let u = d.updatedAt.flatMap(BruceDate.parse) {
                             Text("Updated daily. Last update \(BruceDate.format(u, "d MMM HH:mm")).").bruceFont(12).foregroundStyle(Theme.secondary)
                         }
-                        Text(ChallengeCopy.privacy).bruceFont(13).foregroundStyle(Theme.secondary)
+                        Text(c.isCrew ? ChallengeCopy.crewPrivacy : ChallengeCopy.privacy).bruceFont(13).foregroundStyle(Theme.secondary)
                         if !c.isInvite {
-                            Button("Leave challenge", role: .destructive) { confirmLeave = true }.buttonStyle(.glass).padding(.top, 6)
+                            Button(c.isCrew ? "Leave crew" : "Leave challenge", role: .destructive) { confirmLeave = true }.buttonStyle(.glass).padding(.top, 6)
                         }
                     }
                 } else if let e = m.challengesError {
@@ -284,11 +322,14 @@ struct ChallengeView: View {
             .padding(.horizontal, Theme.gutter).padding(.bottom, 30)
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
-        .pushedPage("Challenge")
+        .pushedPage(summary?.isCrew == true ? "Crew" : "Challenge")
         .toolbar {
             if let c = summary {
                 ToolbarItem(placement: .topBarTrailing) {
-                    ShareLink(item: c.link, message: Text("Join my challenge on Brüce: \(c.displayTitle)")) { Image(systemName: "square.and.arrow.up") }
+                    ShareLink(item: c.link, message: Text(c.isCrew ? "Join my crew on Brüce: \(c.displayTitle)" : "Join my challenge on Brüce: \(c.displayTitle)")) {
+                        Image(systemName: "square.and.arrow.up")
+                    }
+                    .accessibilityLabel("Share the link")
                 }
             }
         }
@@ -297,7 +338,7 @@ struct ChallengeView: View {
         .sheet(item: $member) { e in
             ParticipantSheet(entry: e, metric: summary?.metric ?? "classes").presentationDetents([.medium, .large])
         }
-        .confirmationDialog("Leave this challenge?", isPresented: $confirmLeave, titleVisibility: .visible) {
+        .confirmationDialog(summary?.isCrew == true ? "Leave this crew?" : "Leave this challenge?", isPresented: $confirmLeave, titleVisibility: .visible) {
             Button("Leave", role: .destructive) { Task { await m.leaveChallenge(challengeId) } }
         } message: { Text("Your numbers in it are deleted from our server.") }
         .onAppear {
@@ -309,7 +350,8 @@ struct ChallengeView: View {
 
     func joinBar(_ c: ChallengeSummary, preview: Bool, joinable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(preview ? "\(c.ownerName ?? "A friend") started this challenge." : "\(c.ownerName ?? "A friend") challenged you.")
+            Text(c.isCrew ? (preview ? "\(c.ownerName ?? "A friend") started this crew." : "\(c.ownerName ?? "A friend") invited you to this crew.")
+                 : preview ? "\(c.ownerName ?? "A friend") started this challenge." : "\(c.ownerName ?? "A friend") challenged you.")
                 .bruceFont(16, weight: .semibold)
             if preview && !joinable {
                 Text("Only Bruce friends of \(c.ownerName ?? "the owner") can join.").bruceFont(14).foregroundStyle(Theme.secondary)
