@@ -5,7 +5,8 @@ import * as St from './store.js';
 import { S } from './store.js';
 import { classRow, classList, photoCard, underlineTabs, chip, empty, loading, sectionHeader, avatar, toast, makeMap } from './ui.js';
 import { openNotifications, openMenu, openReview, openScanner, openTicket, checkInFlow } from './sheets.js';
-import { ex, saveEx, areas, selectedArea, studioPasses, classPasses, activeCount } from './filters.js';
+import { ex, saveEx, areas, selectedArea, studioPasses, classPasses, activeCount, sortClasses } from './filters.js';
+import { travelMinutes } from './recommend.js';
 import { openFilters } from './filtersheet.js';
 import { forYouHTML, forYouClick } from './foryou.js';
 import { challengesHTML, challengesClick, openNewChallenge, loadIfAllowed } from './challenges.js';
@@ -111,20 +112,30 @@ function filteredStudios(cat) {
   return St.cityStudios().filter((s) => studioMatches(s, q, cat)).map((s) => Object.assign({ dist: here && s.lat ? metres(here.lat, here.lon, s.lat, s.lon) : null }, s))
     .sort((a, b) => (S.favorites.has(b.id) - S.favorites.has(a.id)) || ((a.dist == null ? 1e9 : a.dist) - (b.dist == null ? 1e9 : b.dist)) || a.name.localeCompare(b.name, 'sv'));
 }
+/** Where distances and travel times are measured from: your location, else the city centre. */
+function here() {
+  return S.here || (St.city().coordinates ? { lat: St.city().coordinates.latitude, lon: St.city().coordinates.longitude } : null);
+}
+const minuteOfDay = (c) => { const [h, m] = time(c.start_time).split(':').map(Number); return h * 60 + m; };
 function filteredClasses(list, cat, day) {
   const q = ex.q.trim().toLowerCase();
   const now = Date.now(), area = curArea();
-  return (list || []).filter((c) => {
+  const rules = { now, minuteOf: minuteOfDay, minutes: (c) => (c.end_time ? Math.round((Date.parse(c.end_time) - Date.parse(c.start_time)) / 60000) : null) };
+  const ps = St.placesState(), home = (ps.places || []).find((p) => p.kind === 'home' && p.lat != null);
+  const h = S.here || home || here(), mode = ps.mode || 'bike';
+  const dist = (sid) => { const s = St.studio(sid); return h && s && s.lat ? metres(h.lat, h.lon, s.lat, s.lon) : null; };
+  const by = { distance: dist, travel: (sid) => { const s = St.studio(sid); return h && s && s.lat ? travelMinutes(h, s, mode) : null; } };
+  return sortClasses((list || []).filter((c) => {
     if (!isListed(c)) return false;
     if (day === todayKey() && c.end_time && new Date(c.end_time) < now) return false;
-    if (!classPasses(c, St.studio(c.studio_id), ex, S.favorites, area)) return false;
+    if (!classPasses(c, St.studio(c.studio_id), ex, S.favorites, area, rules)) return false;
     if (cat && !(c.class_categories || []).some((x) => x.category_id === cat.id)) return false;
     if (q) {
       const s = St.studio(c.studio_id) || {};
       if (![c.title, s.name, s.vicinity, instructor(c.instructor)].some((x) => x && x.toLowerCase().includes(q))) return false;
     }
     return true;
-  });
+  }), ex, by);
 }
 
 export const Explore = {

@@ -320,6 +320,7 @@ extension AppModel {
             present(.quickCheckIn)
         case "confirm": present(.quickCheckIn); if let t = checkInTargets.first { askCheckIn(t) }
         case "filter": tab = .explore; demoExploreTab = 1; filterOpen = true
+        case "classfilters": tab = .explore; demoExploreTab = 1; filterOpen = true; classFilters.slots = [.lunch]; classFilters.durations = [.short]; classFilters.sort = .distance
         case "selectcity": tab = .explore; filterOpen = true; present(.selectCity)
         case "newarea", "drawarea": tab = .explore; present(.newArea)
         case "areas", "deletearea": tab = .explore; filterOpen = true; selectedAreaId = areas.first?.id

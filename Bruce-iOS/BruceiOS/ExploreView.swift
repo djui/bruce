@@ -67,7 +67,9 @@ struct ExploreView: View {
         if m.favoritesOnly { c = c.filter { m.favorites.contains($0.studioId) } }
         if m.hideFull { c = c.filter { ($0.availableSpots ?? 1) > 0 } }
         if m.selectedArea != nil { c = c.filter { m.studioInSelectedArea($0.studioId) } }
-        return c
+        let f = m.classFilters
+        if !f.isEmpty { c = c.filter { ClassFilters.passes($0, f) } }
+        return ClassFilters.sorted(c, f, distance: m.studioDistance, travel: m.studioTravelMinutes)
     }
 
     /// What the list and the Classes badge show: for today only classes that haven't started yet, as in the original.
@@ -392,7 +394,7 @@ struct FilterSheet: View {
     @Environment(AppModel.self) var m
     @State private var showAllCategories = false
     @State private var detent: PresentationDetent =
-        AppModel.demo && ["areas", "deletearea"].contains(AppModel.setting("BRUCE_SCREEN") ?? "") ? .large : .medium
+        AppModel.demo && ["areas", "deletearea", "classfilters"].contains(AppModel.setting("BRUCE_SCREEN") ?? "") ? .large : .medium
 
     var body: some View {
         NavigationStack {
@@ -410,6 +412,26 @@ struct FilterSheet: View {
                         GlassChip("Currently open", selected: m.currentlyOpen) { m.currentlyOpen.toggle() }
                         GlassChip("Solo training only", selected: m.soloOnly) { m.soloOnly.toggle() }
                         GlassChip("Hide full classes", selected: m.hideFull) { m.hideFull.toggle() }
+                    }
+                    section("Classes: time of day") {
+                        ForEach(DaySlot.allCases, id: \.self) { s in
+                            GlassChip(s.name, selected: m.classFilters.slots.contains(s)) {
+                                if m.classFilters.slots.contains(s) { m.classFilters.slots.remove(s) } else { m.classFilters.slots.insert(s) }
+                            }
+                        }
+                    }
+                    section("Classes: duration") {
+                        ForEach(DurationBand.allCases, id: \.self) { d in
+                            GlassChip(d.title, selected: m.classFilters.durations.contains(d)) {
+                                if m.classFilters.durations.contains(d) { m.classFilters.durations.remove(d) } else { m.classFilters.durations.insert(d) }
+                            }
+                        }
+                    }
+                    section("Classes: sort by") {
+                        ForEach(ClassSort.allCases, id: \.self) { s in
+                            GlassChip(s.title, selected: m.classFilters.sort == s) { m.classFilters.sort = s }
+                        }
+                        GlassChip("Bookable now", selected: m.classFilters.bookableNow) { m.classFilters.bookableNow.toggle() }
                     }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {

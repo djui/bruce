@@ -124,7 +124,7 @@ struct Recommendation: Identifiable, Hashable {
 }
 
 /// Time of day the user tends to train ("Lunch slot you use").
-enum DaySlot: Int, CaseIterable, Hashable {
+enum DaySlot: Int, CaseIterable, Hashable, Codable {
     case early, morning, lunch, afternoon, evening, late
     init(minuteOfDay m: Int) {
         switch m {

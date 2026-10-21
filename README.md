@@ -54,7 +54,10 @@ My classes tabs, with class and studio pages and account sheets.
 - **Explore** all live studios (about 700 in Sweden) and the city-wide class schedule, with category,
   tier, Wellness and favourite filters, search, a map, and **custom areas**: draw an outline on the map and
   filter studios and classes to it. Long-press (iOS) or right-click (macOS) an area to show it on the map,
-  rename it or delete it. As in the official app, areas stay on the device.
+  rename it or delete it. As in the official app, areas stay on the device. The Classes list can also be
+  narrowed by **time of day** (Early, Morning, Lunch, Afternoon, Evening, Late), **duration** (≤ 45, 45–60, 60+ min)
+  and **"Bookable now"**, and sorted by start, distance, travel time (your commute mode from Places & commute) or
+  spots left, all in the same filter sheet and on the device.
   Class rows mark Wellness classes, show a "Waitlist" pill when you are on the waitlist ("Spot open" once it has a free spot) and "Fully
   booked" otherwise, and show the faces of friends who booked the class;
   lists say "Filter active" at the end while filters apply. Deleted classes are hidden, as in the official app.
@@ -240,6 +243,7 @@ Requires macOS 14+ and Xcode 16+ (Swift 5.9+).
 cd Bruce-MacOS
 swift build
 swift run BruceMacOS
+swift test            # unit tests for the shared logic in Shared/BruceCore (Bruce-MacOS/Tests/BruceCoreTests)
 ```
 
 ### iOS app

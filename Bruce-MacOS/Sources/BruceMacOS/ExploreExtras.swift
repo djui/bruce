@@ -81,6 +81,32 @@ struct FilterPanel: View {
                             PanelChip(title: "Hide full classes", selected: m.hideFull) { m.hideFull.toggle() }
                         }
                     }
+                    section("Classes: time of day") {
+                        FlowLayout {
+                            ForEach(DaySlot.allCases, id: \.self) { s in
+                                PanelChip(title: s.name, selected: m.classFilters.slots.contains(s)) {
+                                    if m.classFilters.slots.contains(s) { m.classFilters.slots.remove(s) } else { m.classFilters.slots.insert(s) }
+                                }
+                            }
+                        }
+                    }
+                    section("Classes: duration") {
+                        FlowLayout {
+                            ForEach(DurationBand.allCases, id: \.self) { d in
+                                PanelChip(title: d.title, selected: m.classFilters.durations.contains(d)) {
+                                    if m.classFilters.durations.contains(d) { m.classFilters.durations.remove(d) } else { m.classFilters.durations.insert(d) }
+                                }
+                            }
+                        }
+                    }
+                    section("Classes: sort by") {
+                        FlowLayout {
+                            ForEach(ClassSort.allCases, id: \.self) { s in
+                                PanelChip(title: s.title, selected: m.classFilters.sort == s) { m.classFilters.sort = s }
+                            }
+                            PanelChip(title: "Bookable now", selected: m.classFilters.bookableNow) { m.classFilters.bookableNow.toggle() }
+                        }
+                    }
                     section("Area", link: ("Change city", { m.present(.selectCity) })) {
                         FlowLayout {
                             PanelChip(title: "Entire \(m.cityName)", selected: m.selectedAreaId == nil) { m.selectedAreaId = nil }

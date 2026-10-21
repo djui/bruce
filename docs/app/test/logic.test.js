@@ -6,7 +6,7 @@ import { visitsFrom, local, weekOf, addMonths } from '../js/visits.js';
 import { counts, progress, summary, weekStreak, longestWeekStreak, calendar, suggestions, goalTitle, remindPayload } from '../js/goals.js';
 import { travelMinutes, detourMinutes, recommend, slotOf } from '../js/recommend.js';
 import { wrappedStats, archetype, together, longestStreak, topPercent, cardsFor } from '../js/wrapped-stats.js';
-import { loadState, tierOK, inPolygon, studioInArea, rectangle, studioPasses, classPasses, activeCount, clearFilters, selectedArea } from '../js/filters.js';
+import { loadState, tierOK, inPolygon, studioInArea, rectangle, studioPasses, classPasses, activeCount, clearFilters, selectedArea, slotOfMinute, durBand, bookableNow, sortClasses } from '../js/filters.js';
 import { challengeIdFromHash, challengeShareUrl, challengeRoute } from '../js/links.js';
 import { cancelStrikes, nextCancelStep, cancelCost, cancelChip, POLICY } from '../js/rules.js';
 import { icsFor, icsTime, icsFileName, feedUrl } from '../js/calendar.js';
@@ -408,4 +408,44 @@ test('book again matches the next class of the series by weekday, time and maste
   // The same weekday today only counts while the class is still ahead.
   assert.equal(candidateDays(t, Date.parse('2026-10-27T15:00:00Z'))[0], '2026-10-27');
   assert.equal(candidateDays(t, Date.parse('2026-10-27T17:00:00Z'))[0], '2026-11-03');
+});
+
+// ---------------------------------------------------------------- class filters: time of day, duration, sort, bookable now
+
+test('time of day, duration and bookable-now rules on the Classes list', () => {
+  assert.deepEqual([8 * 60, 8 * 60 + 30, 11 * 60, 14 * 60, 17 * 60, 20 * 60].map(slotOfMinute), ['early', 'morning', 'lunch', 'afternoon', 'evening', 'late']);
+  assert.deepEqual([30, 45, 46, 60, 61, 90].map(durBand), ['short', 'short', 'medium', 'medium', 'long', 'long']);
+  const now = Date.parse('2026-10-21T10:00:00Z');
+  const cls = (o) => Object.assign({ studio_id: 1, start_time: '2026-10-22T16:00:00Z', end_time: '2026-10-22T17:00:00Z', available_spots: 4 }, o);
+  assert.equal(bookableNow(cls({}), now), true);
+  assert.equal(bookableNow(cls({ available_spots: 0 }), now), false);
+  assert.equal(bookableNow(cls({ bookable_earliest_time: '2026-10-21T16:00:00Z' }), now), false);   // opens later
+  assert.equal(bookableNow(cls({ bookable_earliest: 7 * 86400 }), now), true);
+  assert.equal(bookableNow(cls({ bookable_latest_time: '2026-10-21T09:00:00Z' }), now), false);     // closed
+  assert.equal(bookableNow(cls({ start_time: '2026-10-21T09:00:00Z' }), now), false);               // started
+  const f = loadState({ slots: ['lunch'], durs: ['medium'], sort: 'nope', bookable: true });
+  assert.deepEqual([f.slots, f.durs, f.sort, f.bookable], [['lunch'], ['medium'], 'start', true]);
+  const favs = new Set();
+  const rules = { now, minuteOf: (c) => c.min, minutes: (c) => c.len };
+  assert.equal(classPasses(cls({ min: 12 * 60, len: 60 }), {}, f, favs, null, rules), true);
+  assert.equal(classPasses(cls({ min: 9 * 60, len: 60 }), {}, f, favs, null, rules), false);        // morning, not lunch
+  assert.equal(classPasses(cls({ min: 12 * 60, len: 45 }), {}, f, favs, null, rules), false);       // short, not medium
+  assert.equal(classPasses(cls({ min: 12 * 60, len: 60, available_spots: 0 }), {}, f, favs, null, rules), false);   // not bookable
+  assert.equal(classPasses(cls({ min: 9 * 60, len: 45 }), {}, f, favs, null), true);                // without the extra rules: untouched
+  assert.equal(activeCount(f, false, null), 3);
+  clearFilters(f);
+  assert.deepEqual([f.slots, f.durs, f.sort, f.bookable, activeCount(f, false, null)], [[], [], 'start', false, 0]);
+});
+
+test('the Classes list sorts by start, distance, travel time or spots left, unknown last', () => {
+  const a = { id: 1, studio_id: 1, start_time: '2026-10-22T16:00:00Z', available_spots: 2 };
+  const b = { id: 2, studio_id: 2, start_time: '2026-10-22T15:00:00Z', available_spots: 0 };
+  const c = { id: 3, studio_id: 3, start_time: '2026-10-22T17:00:00Z', available_spots: null };
+  const d = { id: 4, studio_id: 4, start_time: '2026-10-22T14:00:00Z', available_spots: 9 };
+  const by = { distance: (sid) => ({ 1: 500, 2: 100, 3: null, 4: 2000 })[sid], travel: (sid) => ({ 1: 9, 2: 3, 3: 12, 4: null })[sid] };
+  const ids = (l) => l.map((x) => x.id);
+  assert.deepEqual(ids(sortClasses([a, b, c, d], { sort: 'start' }, by)), [4, 2, 1, 3]);
+  assert.deepEqual(ids(sortClasses([a, b, c, d], { sort: 'distance' }, by)), [2, 1, 4, 3]);
+  assert.deepEqual(ids(sortClasses([a, b, c, d], { sort: 'travel' }, by)), [2, 1, 3, 4]);
+  assert.deepEqual(ids(sortClasses([a, b, c, d], { sort: 'spots' }, by)), [4, 1, 3, 2]);   // unknown before full
 });

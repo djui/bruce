@@ -55,7 +55,9 @@ struct ExploreView: View {
         if m.favoritesOnly { c = c.filter { m.favorites.contains($0.studioId) } }
         if m.hideFull { c = c.filter { ($0.availableSpots ?? 1) > 0 } }
         if m.selectedArea != nil { c = c.filter { m.studioInSelectedArea($0.studioId) } }
-        return c
+        let f = m.classFilters
+        if !f.isEmpty { c = c.filter { ClassFilters.passes($0, f) } }
+        return ClassFilters.sorted(c, f, distance: m.studioDistance, travel: m.studioTravelMinutes)
     }
 
     func distance(_ s: BruceAPI.Studio) -> Double? {
