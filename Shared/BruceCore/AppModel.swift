@@ -56,6 +56,8 @@ enum SheetRoute: Hashable {
     case racePlan(String)
     /// Start a crew for a race by its My races key (RaceSocial.swift).
     case newCrew(String)
+    /// The member's result for a race by its My races key (Races.swift RaceResult).
+    case raceResult(String)
 }
 
 @MainActor
@@ -235,6 +237,8 @@ final class AppModel {
     var goals: [MonthlyGoal] = AppModel.demo ? MonthlyGoal.demo : MonthlyGoal.load()
     /// Race catalog (Races.swift): the published races.json, its last good copy on disk, demo races in demo mode.
     var races: [Race] = []
+    /// Studios with an organiser's training status (the catalog's `trainingClubs`; Races.swift).
+    var trainingClubs: [TrainingClub] = []
     var racesLoading = false
     var racesError: String?
     @ObservationIgnored var racesFetchedAt: Date?

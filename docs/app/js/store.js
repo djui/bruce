@@ -5,9 +5,9 @@ import { icsFor, icsFileName, feedUrl } from './calendar.js';
 import { visitsFrom } from './visits.js';
 import { remindPayload, goalTitle } from './goals.js';
 import { DEFAULT_PREFS } from './recommend.js';
-import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRaces, keyOf as raceKey, priceReminder } from './races.js';
+import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRaces, keyOf as raceKey, priceReminder, mergeFeed, decodeClubs } from './races.js';
 import { makePlan, count as planCount, category as planCategory } from './raceplan.js';
-import { DEMO_RACES, DEMO_MY_RACES } from './demo.js';
+import { DEMO_RACES, DEMO_MY_RACES, DEMO_TRAINING_CLUBS } from './demo.js';
 import { sharesGoing } from './crews.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
@@ -39,6 +39,7 @@ export const S = {
   skippedReviews: new Set(ls.get('bruce.skippedReviews', [])),
   learnedDoors: ls.get('bruce.doors', {}),
   races: null, racesError: null, racesLoading: null,   // the race catalog (races.js), null until read
+  trainingClubs: [],                                   // studios with an organiser's training status (the catalog's trainingClubs)
   raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0, raceGoingLoading: null,   // friends going (crews.js)
 };
 
@@ -384,18 +385,21 @@ export function chipCategories() {
 /** The race catalog: races.json next to this page (GitHub Pages publishes docs/), the last good copy in this browser,
  *  demo races in demo mode. A failed read keeps whatever is shown. */
 export function loadRaces(force) {
-  if (isDemo()) { if (!S.races) S.races = decodeRaces({ races: DEMO_RACES }); return Promise.resolve(S.races); }
+  if (isDemo()) { if (!S.races) { S.races = decodeRaces({ races: DEMO_RACES }); S.trainingClubs = DEMO_TRAINING_CLUBS; } return Promise.resolve(S.races); }
   if (S.racesLoading) return S.racesLoading;
   const cached = ls.get('bruce.races', null);
-  if (!S.races && cached && Array.isArray(cached.races)) S.races = decodeRaces(cached);
+  if (!S.races && cached && Array.isArray(cached.races)) { S.races = decodeRaces(cached); S.trainingClubs = decodeClubs(cached); }
   if (!force && cached && Date.now() - cached.at < RACES_CACHE_MS && S.races && S.races.length) return Promise.resolve(S.races);
   S.racesLoading = fetch('races.json', { cache: 'no-cache' })
     .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
-    .then((json) => {
+    .then(async (json) => {
       const list = decodeRaces(json);
       if (!list.length) throw new Error('no races');
-      S.races = list; S.racesError = null;
-      ls.set('bruce.races', { at: Date.now(), races: json.races });
+      // An organiser feed on our server lays over the file (none while the server is off; a failed read changes nothing).
+      const feed = serverOn() ? await Server.races().then((f) => decodeRaces(f)).catch(() => []) : [];
+      S.races = mergeFeed(list, feed); S.racesError = null;
+      S.trainingClubs = decodeClubs(json);
+      ls.set('bruce.races', { at: Date.now(), races: json.races, trainingClubs: json.trainingClubs || [] });
     })
     .catch(() => { if (!S.races || !S.races.length) { S.races = []; S.racesError = "Couldn't load the race list. Check your connection and reload."; } })
     .then(() => { S.racesLoading = null; emit(); return S.races; });

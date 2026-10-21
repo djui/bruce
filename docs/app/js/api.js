@@ -123,6 +123,8 @@ export const Server = {
   putRaces: (races, device) => server('PUT', '/me/races', { device, races }),
   /** Friends going: {going: {raceId: [{userId, name}]}, sharing, mine} (crews.js). */
   going: () => server('GET', '/races/going'),
+  /** The organiser feed: {races: [catalog entries], sources, importedAt}; laid over races.json (races.js mergeFeed). */
+  races: () => server('GET', '/races'),
 };
 
 const yyyymmdd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');

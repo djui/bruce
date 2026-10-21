@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { d1 } from "./d1.js";
-import worker, { raceReminderTimes, raceWeekMessage, raceEveMessage, sendRaceReminders, cleanRaces, localAt, pruneRaces } from "../src/worker.js";
+import worker, { raceReminderTimes, raceWeekMessage, raceEveMessage, sendRaceReminders, cleanRaces, localAt, pruneRaces, cleanFeedRace } from "../src/worker.js";
 
 const ok = (body) => new Response(JSON.stringify(body), { status: 200 });
 const iso = (ms) => (ms == null ? null : new Date(ms).toISOString());
@@ -184,6 +184,43 @@ test("cron: the price step push and email at 09:00 the day before the fee change
   // Switched off: the race goes with the next PUT.
   await call(env, "PUT", "/me/races", { races: [{ ...tv, remindPrice: false }] });
   assert.equal(DB.rows("user_races").length, 0);
+});
+
+test("race feed: POST /races/import with the token replaces a source's races; GET /races serves them", async () => {
+  const DB = d1();
+  const good = { id: "example-run-2027", name: "Example Run", type: "running", date: "2027-06-05", city: "Stockholm", country: "SE", distancesKm: [10],
+    signupUrl: "https://example.org/run", status: "open", priceSteps: [{ amount: 400, currency: "SEK" }], checkedOn: "2026-10-21" };
+  assert.deepEqual(cleanFeedRace(good), good);
+  for (const bad of [{ ...good, id: "Bad Id" }, { ...good, id: "custom-x" }, { ...good, type: "paddle" }, { ...good, status: "maybe" }, { ...good, date: "2027-02-30" },
+    { ...good, endDate: "2027-06-04" }, { ...good, signupUrl: "http://example.org" }, { ...good, checkedOn: undefined }, { ...good, name: " " }, null, [good]]) {
+    assert.equal(cleanFeedRace(bad), null, JSON.stringify(bad));
+  }
+  const post = (env, body, token) => worker.fetch(new Request("https://x/races/import", { method: "POST", headers: token ? { authorization: `Bearer ${token}` } : {},
+    body: JSON.stringify(body) }), env, {}).then(async (r) => ({ status: r.status, body: await r.json() }));
+  const get = (env) => worker.fetch(new Request("https://x/races"), env, {}).then((r) => r.json());
+  // Without a token configured nothing can be imported; with one, only with it.
+  assert.equal((await post({ DB }, { source: "hyrox", races: [good] }, "t")).status, 503);
+  const env = { DB, RACE_FEED_TOKEN: "feed-secret" };
+  assert.equal((await post(env, { source: "hyrox", races: [good] })).status, 401);
+  assert.equal((await post(env, { source: "hyrox", races: [good] }, "wrong")).status, 401);
+  assert.equal((await post(env, { source: "HYROX", races: [good] }, "feed-secret")).status, 400);
+  assert.equal((await post(env, { source: "hyrox", races: "x" }, "feed-secret")).status, 400);
+  assert.deepEqual(await get(env), { races: [], sources: [], importedAt: null });
+  const first = await post(env, { source: "hyrox", races: [good, { ...good, id: "example-hyrox-2027", type: "hyrox" }, { ...good, type: "paddle" }, good] }, "feed-secret");
+  assert.equal(first.status, 200);
+  assert.deepEqual(first.body, { ok: true, source: "hyrox", imported: 2, skipped: ["example-run-2027", "example-run-2027"] });
+  const served = await get(env);
+  assert.deepEqual(served.races.map((r) => r.id), ["example-hyrox-2027", "example-run-2027"]);
+  assert.deepEqual(served.sources, ["hyrox"]);
+  assert.ok(served.importedAt > 0);
+  // Another source can't take a race over; a source's new post replaces its own.
+  const other = await post(env, { source: "marathongruppen", races: [good, { ...good, id: "example-half-2027" }] }, "feed-secret");
+  assert.deepEqual(other.body, { ok: true, source: "marathongruppen", imported: 1, skipped: ["example-run-2027"] });
+  await post(env, { source: "hyrox", races: [{ ...good, id: "example-hyrox-2027", type: "hyrox", checkedOn: "2026-11-01" }] }, "feed-secret");
+  const now = await get(env);
+  assert.deepEqual(now.races.map((r) => [r.id, r.checkedOn]), [["example-half-2027", "2026-10-21"], ["example-hyrox-2027", "2026-11-01"]]);
+  assert.deepEqual(now.sources, ["hyrox", "marathongruppen"]);
+  assert.equal((await post(env, { source: "hyrox", races: Array.from({ length: 201 }, (_, i) => ({ ...good, id: "r" + i })) }, "feed-secret")).status, 409);
 });
 
 test("cron: late reminders are dropped (12 hours, or race day's midnight for the evening before)", async () => {

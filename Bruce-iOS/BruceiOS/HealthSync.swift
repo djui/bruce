@@ -84,17 +84,17 @@ final class HealthSync {
     private func save(_ w: ExportWorkout) async throws {
         let config = HKWorkoutConfiguration()
         config.activityType = w.kind.healthKitType
-        config.locationType = .indoor
-        if w.kind == .swimming { config.swimmingLocationType = .pool }
+        config.locationType = w.race ? .outdoor : .indoor
+        if w.kind == .swimming { config.swimmingLocationType = w.race ? .openWater : .pool }
         let builder = HKWorkoutBuilder(healthStore: store, configuration: config, device: .local())
         try await builder.beginCollection(at: w.start)
         let kcal = HKQuantity(unit: .kilocalorie(), doubleValue: w.kcal)
         try await builder.addSamples([HKCumulativeQuantitySample(type: energy, quantity: kcal, start: w.start, end: w.end)])
         var meta: [String: Any] = [
-            HKMetadataKeySyncIdentifier: "bruce-visit-\(w.visitId)",
+            HKMetadataKeySyncIdentifier: w.syncId,
             HKMetadataKeySyncVersion: 1,
-            HKMetadataKeyIndoorWorkout: true,
-            HKMetadataKeyWorkoutBrandName: w.studio.isEmpty ? "Bruce" : w.studio,
+            HKMetadataKeyIndoorWorkout: !w.race,
+            HKMetadataKeyWorkoutBrandName: w.race ? w.title : (w.studio.isEmpty ? "Bruce" : w.studio),
             "BruceTitle": w.title,
         ]
         if let i = w.instructor { meta["BruceInstructor"] = i }
@@ -151,6 +151,7 @@ extension WorkoutKind {
         case .dance: .cardioDance
         case .climbing: .climbing
         case .mixedCardio: .mixedCardio
+        case .skiing: .crossCountrySkiing
         }
     }
 }

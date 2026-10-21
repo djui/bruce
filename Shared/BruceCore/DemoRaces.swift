@@ -48,8 +48,15 @@ extension AppModel {
             },
             pick("tough-viking-stadion-2027").map { MyRace(race: $0, remindPrice: true) },
             pick("midnattsloppet-stockholm-2027").map { MyRace(race: $0, note: "10 km", remindSignup: true) },
-            pick("midnattsloppet-stockholm-2026").map { MyRace(race: $0, note: "10 km") },
+            pick("midnattsloppet-stockholm-2026").map { r -> MyRace in
+                var m = MyRace(race: r, note: "10 km")
+                m.wave = "21:40"
+                m.result = RaceResult(seconds: 3130, place: 2140, field: 18400, splits: [RaceSplit(title: "5 km", seconds: 1545)])
+                return m
+            },
         ].compactMap { $0 }
+        // The fictional box from the plan week has the organiser's training status (TrainingClub).
+        trainingClubs = [TrainingClub(studioId: 9810, name: "Example Box Hornstull", badge: "HYROX Training Club", raceType: .hyrox)]
         loadDemoGoing()
         loadDemoPlanWeek()
     }

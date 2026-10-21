@@ -862,6 +862,17 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .race-fees .toggle.race-next-step { display: flex; }
 .race-fees .toggle.race-next-step span { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; }
 .race-fees .toggle.race-next-step small { grid-column: 2; font-weight: 400; }
+/* Your result (racesui.js openResultEditor) and training clubs */
+.race-result { display: grid; gap: 8px; }
+.race-result-time { font: 900 26px/1 var(--display); font-variant-numeric: tabular-nums; }
+.race-splits { display: grid; gap: 4px; }
+.race-splits > span { display: flex; justify-content: space-between; font-size: 14px; }
+.race-splits b { font-variant-numeric: tabular-nums; }
+.race-split-row { display: flex; gap: 8px; align-items: center; }
+.race-split-row input:first-child { flex: 1; min-width: 0; }
+.race-split-row input:nth-child(2) { width: 90px; }
+.race-clubs a { color: var(--lime-ink); font-weight: 600; }
+.club-card .i { color: var(--lime-ink); }
 /* Home: Upcoming races carousel */
 .race-mini-row { gap: 12px; }
 .race-mini { flex: none; display: grid; align-content: start; gap: 4px; width: 200px; min-height: 180px; padding: 14px; border-radius: 22px; color: #fff; text-decoration: none; background: linear-gradient(135deg, var(--r1), var(--r2)); }

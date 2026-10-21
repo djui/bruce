@@ -209,6 +209,8 @@ extension AppModel {
         case "race": tab = .explore; demoExploreTab = 2; push(.race("vasaloppet-2027"))
         case "myraces", "thisweek": tab = .myClasses; showRacesInMyClasses = true
         case "myrace": tab = .myClasses; showRacesInMyClasses = true; push(.race("hyrox-stockholm-2026"))
+        // A race that is over, with the member's result (RaceResult) and the recovery week.
+        case "raceresult": tab = .myClasses; showRacesInMyClasses = true; push(.race("midnattsloppet-stockholm-2026"))
         // Race day (RaceViews.swift RaceDayCard): the demo's HYROX day moved to today, so My classes shows the ticket.
         case "raceday":
             tab = .myClasses

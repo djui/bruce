@@ -569,6 +569,9 @@ export const DEMO_RACES = [
   {"id": "cph-half-2027", "name": "CPH Half", "type": "running", "date": "2027-09-19", "city": "Copenhagen", "country": "DK", "distancesKm": [21.1], "signupUrl": "https://cphhalf.dk/en/lottery/", "priceNote": "795 DKK. The lottery is done; about 188,000 entered the draw.", "priceSteps": [{"amount": 795, "currency": "DKK"}], "status": "lottery", "resultsUrl": "https://cphhalf.dk/en/results-archive/", "checkedOn": "2026-10-21"},
   {"id": "lidingoloppet-2027", "name": "Lidingöloppet", "type": "running", "date": "2027-09-25", "city": "Lidingö", "country": "SE", "distancesKm": [30], "format": "cross-country", "signupUrl": "https://lidingoloppet.se/en/tcs-lidingoloppet/faq/registration-fees", "priceNote": "2027 prices are not out yet. Entries cost 796–1,395 SEK in 2026.", "status": "checkSite", "klassiker": true, "resultsUrl": "https://lidingoloppet.se/en/tcs-lidingoloppet/results-and-statistics", "checkedOn": "2026-10-21"}
 ];
+/** The demo's training clubs (the catalog's `trainingClubs`): the fictional box from the Train for it week. */
+export const DEMO_TRAINING_CLUBS = [{ studioId: 9810, name: 'Example Box Hornstull', badge: 'HYROX Training Club', raceType: 'hyrox' }];
+
 /** My races in the demo: HYROX Stockholm on the Saturday in doubles with a Train for it plan (week 3 of 10 on 21 Oct
  *  2026), shared as going and with a crew; Tough Viking at the stadium; Midnattsloppet 2026 (run in August, with results)
  *  and 2027. */
@@ -576,6 +579,7 @@ export const DEMO_MY_RACES = [
   {"id": "demo-hyrox-stockholm", "raceId": "hyrox-stockholm-2026", "name": "HYROX Stockholm", "date": "2026-12-10", "endDate": "2026-12-13", "city": "Solna", "url": "https://hyrox.com/find-my-race/", "type": "hyrox", "day": "2026-12-12", "format": "doubles", "note": "Open", "wave": "14:20", "bib": "1427", "addedAt": "2026-10-01T08:00:00.000Z",
    "remindWeek": true, "remindEve": true, "going": true, "plan": {"startedOn": "2026-10-05", "weeks": 10, "perWeek": 4, "edits": {}}},
   {"id": "demo-tough-viking", "raceId": "tough-viking-stadion-2027", "name": "Tough Viking Stockholms Stadion", "date": "2027-05-15", "city": "Stockholm", "url": "https://www.toughviking.se/", "type": "obstacle", "addedAt": "2026-10-01T08:00:00.000Z"},
-  {"id": "demo-midnattsloppet-2026", "raceId": "midnattsloppet-stockholm-2026", "name": "Midnattsloppet Stockholm", "date": "2026-08-15", "city": "Stockholm", "url": "https://midnattsloppet.com/en/all-you-need-to-know-stockholm/", "type": "running", "note": "10 km", "addedAt": "2026-06-01T08:00:00.000Z"},
+  {"id": "demo-midnattsloppet-2026", "raceId": "midnattsloppet-stockholm-2026", "name": "Midnattsloppet Stockholm", "date": "2026-08-15", "city": "Stockholm", "url": "https://midnattsloppet.com/en/all-you-need-to-know-stockholm/", "type": "running", "note": "10 km", "wave": "21:40", "addedAt": "2026-06-01T08:00:00.000Z",
+   "result": {"seconds": 3130, "place": 2140, "field": 18400, "splits": [{"title": "5 km", "seconds": 1545}]}},
   {"id": "demo-midnattsloppet-stockholm", "raceId": "midnattsloppet-stockholm-2027", "name": "Midnattsloppet Stockholm", "date": "2027-08-14", "city": "Stockholm", "url": "https://midnattsloppet.com/en/start-fee/", "type": "running", "note": "10 km", "addedAt": "2026-10-01T08:00:00.000Z"}
 ];

@@ -267,7 +267,10 @@ export async function renderStudio(el, id, ctx) {
     const ticket = St.todaysCheckIn(id);
     const tg = St.target(id, s.vicinity || '');
     const today = todayKey();
+    // Training club (races.js): the organiser's status from the race catalog, names only.
+    const club = (S.trainingClubs || []).find((c) => c.studioId === id);
     body.innerHTML =
+      (club ? '<div class="card notice-card club-card">' + icon('trophy') + '<p><b>' + esc(club.badge) + '</b><br><span class="muted small">A Bruce studio with the organiser\'s training status, as the race catalog lists it.</span></p></div>' : '') +
       (ticket ? '<button class="btn lime" data-x="ticket">' + icon('ticket') + ' Show ticket</button>' : tg ? '<button class="btn lime" data-x="checkin">' + icon('checkSeal') + ' Check in</button>' : '') +
       '<div id="hours"></div>' + notice(currentAlert(s.alerts)) + firstVisitCard(s, null, null) +
       ((s.integration_door_type || '').toLowerCase() === 'parakey' ? '<div class="card parakey">' + icon('door') + '<div class="grow"><b>Doors open with Parakey</b><p class="muted">Use the Parakey app at the door. It is linked to your Bruce account at check-in.</p></div><a class="btn glass sm" href="https://parakey.co" target="_blank" rel="noopener">Parakey</a></div>' : '') +

@@ -1,0 +1,33 @@
+{
+  "source": "example-organiser",
+  "notice": "An organiser feed for POST /races/import (server/README.md, section Race feed). One entry per race in the catalog's schema (README.md, section Race catalog); fields the apps don't know are skipped by them. Example data, not a real race.",
+  "races": [
+    {
+      "id": "example-city-run-2027",
+      "name": "Example City Run",
+      "type": "running",
+      "date": "2027-06-05",
+      "city": "Stockholm",
+      "country": "SE",
+      "venue": "Example Park",
+      "distancesKm": [10, 5],
+      "format": "10 km and 5 km",
+      "signupUrl": "https://example.org/city-run",
+      "platform": "Example Sign-up",
+      "priceNote": "400 SEK until 30 April, then 450 SEK",
+      "priceSteps": [
+        { "until": "2027-04-30", "amount": 400, "currency": "SEK" },
+        { "from": "2027-05-01", "amount": 450, "currency": "SEK" }
+      ],
+      "formats": [
+        { "code": "10k", "title": "10 km", "distanceKm": 10 },
+        { "code": "5k", "title": "5 km", "distanceKm": 5, "priceSteps": [{ "amount": 300, "currency": "SEK" }] }
+      ],
+      "changeRule": "Name change through the organiser until 1 June.",
+      "startInfo": "Start groups by expected finish time, sent by email the week before.",
+      "status": "open",
+      "resultsUrl": "https://example.org/city-run/results",
+      "checkedOn": "2026-10-21"
+    }
+  ]
+}

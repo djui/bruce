@@ -361,6 +361,67 @@ final class RacesTests: XCTestCase {
         XCTAssertEqual(RaceReminders.plan(mine, catalog: catalog, now: now, serverIds: ["tough-viking-stadion-2027"]).count, 0)
     }
 
+    func testResultsRegisterLinkFeedAndClubs() throws {
+        // Results: times in and out, the summary, HYROX's split rows, a file round trip.
+        XCTAssertEqual(RaceResult.timeText(4132), "1:08:52"); XCTAssertEqual(RaceResult.timeText(2290), "38:10"); XCTAssertEqual(RaceResult.timeText(0), "0:00")
+        XCTAssertEqual(RaceResult.seconds("1:08:52"), 4132); XCTAssertEqual(RaceResult.seconds("68:52"), 4132); XCTAssertEqual(RaceResult.seconds("38:10"), 2290)
+        XCTAssertEqual(RaceResult.seconds("1.08.52"), 4132); XCTAssertEqual(RaceResult.seconds("1h 08m"), 4080); XCTAssertEqual(RaceResult.seconds("45m"), 2700)
+        XCTAssertNil(RaceResult.seconds("fast")); XCTAssertNil(RaceResult.seconds("1:60")); XCTAssertNil(RaceResult.seconds("")); XCTAssertNil(RaceResult.seconds("12"))
+        let res = RaceResult(seconds: 4132, place: 212, field: 1040, splits: [RaceSplit(title: "SkiErg", seconds: 245)])
+        XCTAssertEqual(res.summary, "1:08:52 · Place 212 of 1,040")
+        XCTAssertEqual(RaceResult(seconds: 0, dnf: true).summary, "Did not finish")
+        XCTAssertEqual(RaceResult(seconds: 2290).summary, "38:10")
+        XCTAssertEqual(RaceResult.splitTemplate(.hyrox).count, 9); XCTAssertEqual(RaceResult.splitTemplate(.running), [])
+        // The 2026 edition is in the published file, not the frozen fixture: the 2027 entry moved back a year.
+        var mid = race("midnattsloppet-stockholm-2027"); mid.id = "midnattsloppet-stockholm-2026"; mid.date = "2026-08-15"
+        var mine = MyRace(race: mid, note: "10 km"); mine.result = res
+        let back = try JSONDecoder().decode(MyRace.self, from: JSONEncoder().encode(mine))
+        XCTAssertEqual(back.result, res)
+        // The register link: the race's page, with the affiliate code only when the catalog has one.
+        var tv = race("tough-viking-stadion-2027")
+        XCTAssertEqual(tv.registerURL, tv.url)
+        tv.affiliate = RaceAffiliate(param: "ref", code: "bruce")
+        XCTAssertEqual(tv.registerURL?.absoluteString, "https://www.toughviking.se/?ref=bruce")
+        var lid = race("lidingoloppet-2027"); lid.affiliate = RaceAffiliate(param: "utm_source", code: "bruce")
+        XCTAssertTrue(lid.registerURL!.absoluteString.hasSuffix("registration-fees?utm_source=bruce"))
+        // The feed overlay: newer facts win, new races are added, the catalog is never shortened.
+        var fresh = race("stockholm-marathon-2027"); fresh.checkedOn = "2026-11-01"; fresh.status = .open
+        var stale = race("vasaloppet-2027"); stale.checkedOn = "2026-01-01"; stale.name = "Old"
+        let new = Race(id: "example-run-2027", name: "Example Run", type: .running, date: "2027-06-05", city: "Stockholm", country: "SE",
+                       signupUrl: "https://example.org", status: .open, checkedOn: "2026-10-21")
+        let merged = RaceCatalog.merge(catalog, feed: [fresh, stale, new])
+        XCTAssertEqual(merged.count, catalog.count + 1)
+        XCTAssertEqual(merged.first { $0.id == "stockholm-marathon-2027" }?.status, .open)
+        XCTAssertEqual(merged.first { $0.id == "vasaloppet-2027" }?.name, "Vasaloppet")
+        XCTAssertEqual(merged.first { $0.id == "example-run-2027" }?.name, "Example Run")
+        XCTAssertEqual(merged.map(\.date), merged.map(\.date).sorted())
+        // Training clubs: read from the file (none in the published one yet), by race type.
+        XCTAssertEqual(RaceCatalog.decodeClubs(Self.repoFile("docs/app/races.json")), [])
+        let clubs = RaceCatalog.decodeClubs(Data(#"{"races":[],"trainingClubs":[{"studioId":9810,"name":"Box","badge":"HYROX Training Club","raceType":"hyrox"},{"studioId":1,"name":"Any","badge":"Club"},{"studioId":2,"name":"","badge":"X"}]}"#.utf8))
+        XCTAssertEqual(clubs.map(\.studioId), [9810, 1])
+        // The race as a workout for Apple Health: from the wave on the race day, as long as the time, outdoors.
+        mine.wave = "21:40"
+        let e = MyRaces.entries([mine, MyRace(race: tv)], catalog: catalog)
+        let w = WorkoutExport.raceWorkouts(e, weightKg: 75, now: now)
+        XCTAssertEqual(w.count, 1)
+        XCTAssertEqual(w[0].kind, .running); XCTAssertTrue(w[0].race); XCTAssertEqual(w[0].minutes, 68)
+        XCTAssertEqual(w[0].start, at("2026-08-15T19:40:00Z")); XCTAssertEqual(w[0].title, "Midnattsloppet Stockholm · 10 km")
+        XCTAssertTrue(w[0].visitId < 0); XCTAssertEqual(w[0].syncId, "bruce-race-\(-w[0].visitId)")
+        XCTAssertEqual(WorkoutExport.raceId("midnattsloppet-stockholm-2026"), WorkoutExport.raceId("midnattsloppet-stockholm-2026"))
+        XCTAssertNotEqual(WorkoutExport.raceId("a"), WorkoutExport.raceId("b"))
+        XCTAssertEqual(WorkoutKind.forRace(.endurance, sport: .ski), .skiing); XCTAssertEqual(WorkoutKind.forRace(.hyrox, sport: nil), .hiit)
+        mine.result = RaceResult(seconds: 0, dnf: true)
+        XCTAssertTrue(WorkoutExport.raceWorkouts(MyRaces.entries([mine], catalog: catalog), weightKg: 75, now: now).isEmpty)
+        // Wrapped's race chapter: this year's races that are over, with the result.
+        mine.result = res
+        let wr = Wrapped.races(MyRaces.entries([mine, MyRace(race: race("hyrox-stockholm-2026"), day: "2026-12-12")], catalog: catalog), now: now)
+        XCTAssertEqual(wr.map(\.name), ["Midnattsloppet Stockholm"])
+        XCTAssertEqual(wr[0].timeText, "1:08:52"); XCTAssertEqual(wr[0].placeText, "Place 212 of 1,040"); XCTAssertEqual(wr[0].kind, "Running · 10 km")
+        var s = WrappedStats(year: 2026); s.visits = 5; s.races = wr
+        XCTAssertTrue(s.cards.contains(.race))
+        XCTAssertTrue(s.shareTiles.contains { $0.value == "1:08:52" })
+    }
+
     func testRaceCalendarEvent() throws {
         let hyrox = race("hyrox-stockholm-2026")
         let one = try XCTUnwrap(CalendarEvent(race: hyrox, day: "2026-12-12"))

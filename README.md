@@ -178,7 +178,11 @@ My classes tabs, with class and studio pages and account sheets.
   same sessions a week (from your Train for it plan), the crew page shows everyone's week, and on Sundays at 19:00 the
   server tells the crew "4 of 5 hit their 4 sessions this week" (no names; switch it off in Auto-book). **After the
   race** the race page and My races link to the results on the race's own site (when it has a results page) and
-  suggest the recovery week's classes; past races move to **Past**.
+  suggest the recovery week's classes; past races move to **Past**. **Your result**: type your finish time, place and
+  splits (HYROX offers its eight stations and the runs as rows) from the organiser's results; it shows on the race page
+  and in Past, gets a **race chapter in Wrapped** ("Your races": each race of the year with its time), and on the
+  iPhone goes to **Apple Health** as an outdoor workout of the race's kind when Health export is on. Studios with an
+  organiser's training status wear a **Training club** badge, and the race page lists them (names only).
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.
@@ -307,7 +311,12 @@ of it built into the apps and never fetches it. Each race:
 | `formats` | Ways to enter, when the race prices or sizes them apart: `{code, title, distanceKm, teamSize, priceSteps, note}` (`code` lower case with dashes, stable: My races saves it; `priceSteps` as above, left out when the race's own steps apply; `note`: "Open or Pro"). The race page shows them as chips with the fee of the one picked |
 | `changeRule`, `startInfo` | The organiser's rule for changes, refunds and transfers, and how the start works (wave by email, start groups, bib pick-up), as the page words them |
 | `arriveMinutesBefore` | How long before their start wave the organiser wants runners there (HYROX: 90); the apps use 60 without it |
+| `affiliate` | `{param, code}`: a partner code an organiser gave Brüce, added to the sign-up link as a query parameter (`?ref=bruce`). None is set; Brüce never tracks the tap |
 | `checkedOn` | The day the facts were read off the race's own page, shown on every race page |
+
+The file's top-level `trainingClubs` lists Bruce studios with a race organiser's training status, `{studioId, name,
+badge, raceType}` ("HYROX Training Club"; `raceType` optional): the studio page shows the badge and the race page lists
+the clubs for its type. Names only, no logos; the list is empty until an organiser confirms a studio.
 
 Results links were added on 21 Oct 2026 where the race's own site (the domain of `signupUrl`) links to a results page
 (a results subdomain the site links to counts, as `results.vasaloppet.se`); races whose site links only to one year's
@@ -334,8 +343,12 @@ platforms (vivenu, RaceID, Haku, njuko, Onreg, Sportstiming, EQ Timing, RACE RES
 GET per link with a named User-Agent and reports the HTTP status and whether the race date appears on the page. It
 never edits the catalog and nothing runs it automatically.
 
-**Not planned:** selling entries, affiliate links, scraped results, Strava sync, pace coaching, races outside Sweden,
-Norway and Denmark (for now).
+**With a partner** (phase 3 of the plan, the pieces that need no partner are in): an organiser can keep its races
+current through the server's [race feed](server/README.md#race-feed) instead of this file; the `affiliate` field and the
+`trainingClubs` list are ready for a code and a studio list an organiser confirms.
+
+**Not planned:** selling entries, scraped results, Strava sync, pace coaching, races outside Sweden, Norway and Denmark
+(for now).
 
 ## Train for it
 

@@ -128,6 +128,20 @@ struct RaceAfterCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(Copy.raceOver(race)).font(.system(size: 15, weight: .semibold))
+            // Your result (RaceViews.swift RaceResultEditor), typed by hand.
+            if let e = entry {
+                if let res = e.mine.result {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text(res.dnf ? Copy.raceResultDNF : res.timeText).font(.system(size: 24, weight: .black).width(.expanded)).monospacedDigit()
+                        Spacer()
+                        if let p = res.placeText { Text(p).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.secondary) }
+                    }
+                    ForEach(res.splits) { s in
+                        HStack { Text(s.title).font(.system(size: 13)); Spacer(); Text(RaceResult.timeText(s.seconds)).font(.system(size: 13, weight: .semibold)).monospacedDigit() }
+                    }
+                }
+                Button(e.mine.result == nil ? Copy.raceResultAdd : "Edit result…") { m.present(.raceResult(e.mine.key)) }.font(.system(size: 14, weight: .semibold))
+            }
             if let u = race.results {
                 Button { NSWorkspace.shared.open(u) } label: {
                     Label("\(Copy.raceResults) on \(u.host?.replacingOccurrences(of: "www.", with: "") ?? "the race's site")", systemImage: "list.number")
