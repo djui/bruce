@@ -85,6 +85,12 @@ enum Copy {
     /// Under "Book every week" on the Book again sheet (BookAgain.swift).
     static let bookEveryWeek = "Books this series every week the moment it opens and tells you each time (Menu › Auto-book lists it)."
 
+    /// Class page: a listed class whose booking window has not opened yet (AutoBook.swift `OpeningWatch`).
+    static func bookingOpens(_ d: Date) -> String { "Booking opens \(BruceDate.format(d, "EEE d MMM, HH:mm"))" }
+    static let oneOffClass = "One-off class, not a weekly series"
+    static func openingWatching(_ d: Date) -> String { "Brüce tries once at \(BruceDate.time(d)) on \(BruceDate.format(d, "d MMM")) and tells you how it went." }
+    static func openingUsed(_ n: Int) -> String { "\(n) of \(AutoBook.maxOpenings) one-off watches used" }
+
     /// Settings toggle for CancelReminders.swift.
     static let cancelReminder = "A notification 1 h before cancelling a booked class starts to cost a strike. Nothing is cancelled for you."
 

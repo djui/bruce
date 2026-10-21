@@ -21,6 +21,7 @@ export const S = {
   bookings: new Map(),                           // class id -> booking (with class); drop-ins keyed by "s<id>"
   standbys: new Map(),                           // class id -> standby
   watches: new Set(),                            // class ids the auto-book server books when a waitlist spot frees up
+  openings: new Set(),                           // one-off class ids the server books the moment their window opens
   bookmarks: new Map(),                          // class id -> bookmark
   favorites: new Map(),                          // studio id -> favorite id
   friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null,
@@ -58,7 +59,7 @@ export function setAuth(a) {
   applySession();
 }
 export function clearData() {
-  ['studios', 'studioDetails', 'classDetails', 'bookings', 'standbys', 'watches', 'bookmarks', 'favorites', 'classCache'].forEach((k) => S[k].clear());
+  ['studios', 'studioDetails', 'classDetails', 'bookings', 'standbys', 'watches', 'openings', 'bookmarks', 'favorites', 'classCache'].forEach((k) => S[k].clear());
   Object.assign(S, { history: null, historyLoading: null, challenges: null, friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null, limits: [], user: null, membership: null, block: null, home: null, studiosLoading: null });
 }
 
@@ -120,12 +121,18 @@ export async function loadMine() {
 }
 /** Reads which classes the auto-book server watches (a request to the server, so only when a class page needs it). */
 export async function loadWatches() {
-  S.watches = new Set(await Autobook.watching(S.settings.autoBookServer));
+  const st = await Autobook.status(S.settings.autoBookServer);
+  S.watches = new Set(st.waitlist); S.openings = new Set(st.opening);
   emit();
 }
 export async function setWatch(classId, on) {
   await Autobook.watch(classId, on, S.settings.autoBookServer);
   on ? S.watches.add(classId) : S.watches.delete(classId);
+}
+/** "Book when booking opens" for a one-off class (server only: the browser cannot book while it is closed). */
+export async function setOpening(classId, on) {
+  await Autobook.opening(classId, on, S.settings.autoBookServer);
+  on ? S.openings.add(classId) : S.openings.delete(classId);
 }
 export async function loadFavorites() {
   const f = await Bruce.favorites().catch(() => []);

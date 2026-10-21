@@ -279,6 +279,7 @@ body.logged-out .main { display: block; }
 .pill.teal { background: color-mix(in srgb, var(--teal) 16%, transparent); color: var(--teal); }
 .pill.orange { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
 .pill.red { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
+.teal { color: var(--teal); }
 .card.first-visit { background: color-mix(in srgb, var(--lime) 12%, var(--card)); display: grid; gap: 10px; }
 .card.first-visit > div { display: flex; gap: 10px; align-items: flex-start; }
 .card.first-visit > div > .i { flex: none; width: 20px; height: 20px; margin-top: 1px; color: var(--lime-ink, var(--label)); }

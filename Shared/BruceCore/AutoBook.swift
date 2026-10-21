@@ -49,6 +49,24 @@ struct AutoBookRule: Codable, Identifiable, Hashable {
     }
 }
 
+/// A one-off class the user asked to book the moment its window opens (class page "Book when booking opens").
+/// Kept on the device; with the server on, the server books it (`PUT /me/opening/<id>`), else the app does
+/// (an iOS notification with a Book button, the Mac's in-app booker), exactly like a weekly occurrence.
+struct OpeningWatch: Codable, Identifiable, Hashable {
+    let classId: Int
+    let title: String
+    let studioId: Int
+    let start: Date
+    let opens: Date
+    var id: Int { classId }
+
+    init?(_ c: BruceAPI.BruceClass) {
+        guard let s = c.start, let o = c.bookingOpens else { return nil }
+        classId = c.id; title = c.title; studioId = c.studioId; start = s; opens = o
+    }
+    var occurrence: AutoBookOccurrence { AutoBookOccurrence(classId: classId, ruleId: AutoBook.onceRuleId, title: title, studioId: studioId, start: start, opens: opens) }
+}
+
 /// One upcoming class of a rule.
 struct AutoBookOccurrence: Codable, Identifiable, Hashable {
     let classId: Int
@@ -96,6 +114,21 @@ enum AutoBook {
         if now < freeUntil { return false }
         if start.timeIntervalSince(now) < alwaysAsk { return true }
         return choice == .ask
+    }
+
+    /// One-off classes to book the moment they open (`OpeningWatch`); at most `maxOpenings` pending.
+    static let maxOpenings = 5
+    static let onceRuleId = UUID(uuidString: "00000000-0000-4000-8000-000000000001")!
+    static var openingWatches: [OpeningWatch] {
+        get {
+            guard let d = UserDefaults.standard.data(forKey: "autoBookOpeningWatches") else { return [] }
+            let dec = JSONDecoder(); dec.dateDecodingStrategy = .iso8601
+            return (try? dec.decode([OpeningWatch].self, from: d)) ?? []
+        }
+        set {
+            let enc = JSONEncoder(); enc.dateEncodingStrategy = .iso8601
+            if let d = try? enc.encode(newValue) { UserDefaults.standard.set(d, forKey: "autoBookOpeningWatches") }
+        }
     }
 
     /// Full classes the user asked the server to book as soon as a spot on the waitlist frees up.
@@ -341,6 +374,8 @@ enum AutoBookServer {
         struct Watch: Decodable, Hashable { let classId: Int; let title: String?; let start: String? }
         /// Full classes the server watches for a free waitlist spot.
         let waitlist: [Watch]?
+        /// One-off classes it books when their window opens.
+        let opening: [Watch]?
         /// "ask" or "book" (`LateSpots`).
         let lateSpots: String?
     }
@@ -379,6 +414,11 @@ enum AutoBookServer {
     /// spot is free (Bruce itself only sends a "Free spot" notification), then sends a push. Also stores the login.
     static func watchWaitlist(_ on: Bool, classId: Int, session: Session) async throws {
         try await BruceAPI.send(request(on ? "PUT" : "DELETE", "me/waitlist/\(classId)", session: session))
+    }
+
+    /// `PUT|DELETE /me/opening/<classId>`: book a listed, not yet bookable class once when its window opens.
+    static func watchOpening(_ on: Bool, classId: Int, session: Session) async throws {
+        try await BruceAPI.send(request(on ? "PUT" : "DELETE", "me/opening/\(classId)", session: session))
     }
 
     /// `POST /me/test-push`: a test notification to this user's devices.
@@ -444,6 +484,57 @@ extension AppModel {
         } catch { flash("Server: \(error.localizedDescription)") }
     }
 
+    // MARK: One-off classes: book the moment booking opens
+
+    func isWatchingOpening(_ classId: Int) -> Bool { openingWatches.contains { $0.classId == classId } }
+
+    /// Whether the class page offers "Book when booking opens": listed, not booked, and its window not open yet.
+    func offersOpeningWatch(_ c: BruceAPI.BruceClass) -> Bool {
+        guard isLoggedIn, c.isListed, let start = c.start, start > Date(), booking(forClass: c.id) == nil,
+              let opens = c.bookingOpens, opens > Date() else { return false }
+        return true
+    }
+
+    /// The class page button. With the server on, the server books it; else the app (notification / in-app booker).
+    func setWatchOpening(_ on: Bool, for c: BruceAPI.BruceClass) async {
+        guard let w = OpeningWatch(c) else { return }
+        if on, !isWatchingOpening(c.id), openingWatches.count >= AutoBook.maxOpenings {
+            flash("At most \(AutoBook.maxOpenings) classes can wait to open. Remove one in Menu › Auto-book first."); return
+        }
+        if !AppModel.demo, tokenUsable, let s = session, AutoBookServer.isConfigured, AutoBookServer.booksForMe {
+            do { try await AutoBookServer.watchOpening(on, classId: c.id, session: s) }
+            catch { flash("Server: \(error.localizedDescription)"); return }
+        }
+        if on { openingWatches.removeAll { $0.classId == c.id }; openingWatches.append(w) } else { openingWatches.removeAll { $0.classId == c.id } }
+        if !AppModel.demo { AutoBook.openingWatches = openingWatches }
+        if on {
+            #if os(iOS)
+            if !AppModel.demo { await AutoBook.requestPermission() }
+            #endif
+            flash("Will book \(c.title) the moment booking opens, \(BruceDate.format(w.opens, "EEE d MMM, HH:mm"))")
+        }
+        await refreshAutoBook()
+    }
+
+    func removeOpeningWatch(_ w: OpeningWatch) {
+        Task {
+            if !AppModel.demo, let s = session, AutoBookServer.isConfigured, AutoBookServer.booksForMe {
+                try? await AutoBookServer.watchOpening(false, classId: w.classId, session: s)
+            }
+            openingWatches.removeAll { $0.classId == w.classId }
+            if !AppModel.demo { AutoBook.openingWatches = openingWatches }
+            await refreshAutoBook()
+        }
+    }
+
+    /// Drops watches whose class was booked (by the server, the app or by hand) or has started.
+    func pruneOpeningWatches() {
+        let keep = openingWatches.filter { $0.start > Date() && booking(forClass: $0.classId) == nil }
+        guard keep.count != openingWatches.count else { return }
+        openingWatches = keep
+        if !AppModel.demo { AutoBook.openingWatches = keep }
+    }
+
     /// Whether the class page offers "Book when a spot opens": a class the user could not book (full or already
     /// waitlisted), not yet started and not booked.
     func offersWaitlistAutoBook(_ c: BruceAPI.BruceClass) -> Bool {
@@ -498,7 +589,8 @@ extension AppModel {
     /// Resolves the rules to upcoming classes, schedules the iOS notifications and (re)starts the in-app booker.
     /// Called at start, when the app returns to the foreground and when the rules change.
     func refreshAutoBook() async {
-        guard !AppModel.demo, tokenUsable, !autoBookRules.isEmpty else {
+        pruneOpeningWatches()
+        guard !AppModel.demo, tokenUsable, !(autoBookRules.isEmpty && openingWatches.isEmpty) else {
             autoBookUpcoming = []
             autoBookTask?.cancel(); autoBookTask = nil
             #if os(iOS)
@@ -507,8 +599,10 @@ extension AppModel {
             return
         }
         let found = await AutoBook.occurrences(token: token, rules: autoBookRules)
+        // One-off "book when it opens" classes join the weekly ones (a class in both is tried once).
+        let once = openingWatches.filter { w in !found.contains { $0.classId == w.classId } && !AutoBook.handled.contains(w.classId) }.map(\.occurrence)
         // A class that is already booked or waitlisted needs nothing.
-        autoBookUpcoming = found.filter { booking(forClass: $0.classId) == nil && standby(forClass: $0.classId) == nil }
+        autoBookUpcoming = (found + once).filter { booking(forClass: $0.classId) == nil && standby(forClass: $0.classId) == nil }.sorted { $0.opens < $1.opens }
         #if os(iOS)
         // While the server books, its push reports the result; the local "Book" prompt is only the fallback.
         let names = Dictionary(autoBookUpcoming.map { ($0.studioId, studioName($0.studioId)) }, uniquingKeysWith: { a, _ in a })
@@ -543,6 +637,7 @@ extension AppModel {
     private func autoBookNow(_ o: AutoBookOccurrence) async {
         autoBookUpcoming.removeAll { $0.classId == o.classId }
         AutoBook.handled.insert(o.classId)
+        if o.ruleId == AutoBook.onceRuleId { openingWatches.removeAll { $0.classId == o.classId }; AutoBook.openingWatches = openingWatches }
         guard booking(forClass: o.classId) == nil else { return }
         // Opened while the app was not running and cancelling already costs a strike: leave it to the user.
         if AutoBook.offersInstead(start: o.start, freeUntil: o.start.addingTimeInterval(-43_200), choice: AutoBookServer.lateSpots) {

@@ -67,6 +67,11 @@ My classes tabs, with class and studio pages and account sheets.
   "cancel until" and check-in windows. Waitlist entries that turn into a spot show as booked. A "Free spot"
   notification does not book for you: the class page then offers Book next to Leave waitlist. A fully booked class also offers **Book when a spot opens** (the auto-book server joins the waitlist for you and books the spot the moment one frees up; once cancelling would cost a strike it asks first, see [Late spots](server/README.md#late-spots-ask-before-booking-what-costs-a-strike-to-cancel)) and **Similar classes**: nearby classes
   around the same time, as swipeable cards.
+- **Book when booking opens** a one-off class (a workshop listed two weeks ahead but bookable only a week
+  before): the button replaces the greyed-out Book on its class page. The server (or, without it, the iPhone's
+  notification with a Book button / the Mac while it runs) books it once at the open moment with the same retries
+  and late-spot rule as weekly classes; at most 5 classes wait this way, nothing is polled in between. Menu ›
+  Auto-book lists them.
 - **Auto-book** a weekly class: switch on "Book every week" on a class page. A class opens for booking a
   fixed time before it starts (7 days for almost all classes), so the apps know the moment in advance. The
   Mac app books by itself at that moment while it runs; the iPhone shows a notification at that moment

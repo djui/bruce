@@ -42,6 +42,9 @@ const LOG_SIZE = 30;
 /// Waitlist watches: a class starting within a day is polled every minute (a freed spot is taken by whoever books
 /// first), a later one every WATCH_FAR_EVERY_MIN minutes, one request per class. Capped per user.
 const MAX_WATCHES = 10;
+/// One-off "Book when booking opens" watches (a listed class that is not bookable yet; `PUT /me/opening/<id>`): booked
+/// once at its open moment like a weekly class, same retries and late-spot rule. Capped per user, no polling.
+const MAX_OPENS = 5;
 const WATCH_NEAR_MS = 24 * 3600_000;
 const WATCH_FAR_EVERY_MIN = 5;
 /// After a failed booking attempt on a free spot the watch waits this long, and is dropped after MAX_WATCH_FAILS.
@@ -396,7 +399,7 @@ async function db(env) {
 // goals: goals with "Reminder when behind" (PUT /me/goals); goalPings: when each goal last pushed a reminder;
 // nudges: false when the user switched off skipped-habit pushes (on by default); nudgeDays: their quiet days (default 4);
 // lateSpots: "book" or "ask" (default) for spots that free up after the free cancellation (see FREE_CANCEL_S).
-const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null, watches: [],
+const emptyState = () => ({ upcoming: [], handled: {}, log: [], lastScan: null, watches: [], opens: [],
                             goals: [], goalPings: {}, statsFrom: null, statsAt: null, detailFrom: null, nudges: true });
 
 function rowToUser(r) {
@@ -439,7 +442,7 @@ async function inChallenge(env, userId) {
  * watches, goal reminders, a push device or a challenge. Otherwise the row and the stored history go.
  */
 async function keepOrDelete(env, u) {
-  if (u.rules.length || u.state.watches.length || u.state.goals?.length || u.devices.length || (await inChallenge(env, u.userId))) {
+  if (u.rules.length || u.state.watches.length || u.state.opens?.length || u.state.goals?.length || u.devices.length || (await inChallenge(env, u.userId))) {
     await saveUser(env, u);
     return true;
   }
@@ -534,14 +537,16 @@ export async function watchWaitlists(env, u, now, { bookFn = book, classFn = fet
 export async function tickUser(env, u, now, { force = false, bookFn = book, classFn = fetchClass } = {}) {
   const { rules, session, state } = u;
   let loggedOut = false;
-  const due = state.upcoming.filter((o) => o.opens <= now + DUE_AHEAD_MS && o.start > now && !state.handled[o.classId]);
+  // Weekly occurrences plus one-off "book when it opens" watches (a class in both is tried once).
+  const all = [...state.upcoming, ...(state.opens ?? []).filter((o) => !state.upcoming.some((x) => x.classId === o.classId))];
+  const due = all.filter((o) => o.opens <= now + DUE_AHEAD_MS && o.start > now && !state.handled[o.classId]);
   // At the open moment; an occurrence from before freeUntil was stored counts 12 h.
   const freeUntil = (o) => o.freeUntil ?? o.start - FREE_CANCEL_S * 1000;
   const at = (o) => Math.max(now, o.opens);
   const offer = due.filter((o) => lateSpotAction(o.start, freeUntil(o), at(o), state.lateSpots) === "ask");
   for (const o of offer) {
     state.handled[o.classId] = o.start;
-    state.log.unshift({ classId: o.classId, title: o.title, at: new Date().toISOString(), outcome: "Offered (opened late)" });
+    state.log.unshift({ classId: o.classId, title: o.title, at: new Date().toISOString(), outcome: o.once ? "Offered (opened late, one-off)" : "Offered (opened late)" });
     const m = askMessage(o.title, o.start, at(o), false);
     await notify(env, u, m.title, m.body, o.classId, "LATE_SPOT");
   }
@@ -549,13 +554,14 @@ export async function tickUser(env, u, now, { force = false, bookFn = book, clas
   for (const { o, outcome } of results) {
     // Tried once: an auto-booked class that is cancelled later is not booked again.
     state.handled[o.classId] = o.start;
-    state.log.unshift({ classId: o.classId, title: o.title, at: new Date().toISOString(), outcome });
+    state.log.unshift({ classId: o.classId, title: o.title, at: new Date().toISOString(), outcome: o.once ? `${outcome} (one-off)` : outcome });
     if (outcome === "Login expired") { loggedOut = true; continue; }
     const booked = outcome === "Booked" || outcome === "Already booked";
-    await notify(env, u, `${outcome}: ${o.title}`, `${when(o.start)} · auto-book${booked ? `. ${cancelNote(o.start, freeUntil(o), at(o))}` : ""}`,
+    await notify(env, u, `${outcome}: ${o.title}`, `${when(o.start)} · ${o.once ? "booked when it opened" : "auto-book"}${booked ? `. ${cancelNote(o.start, freeUntil(o), at(o))}` : ""}`,
                  o.classId, booked ? "AUTOBOOK_BOOKED" : "AUTOBOOK_RESULT");
   }
   state.upcoming = state.upcoming.filter((o) => !state.handled[o.classId] && o.start > now);
+  state.opens = (state.opens ?? []).filter((o) => !state.handled[o.classId] && o.start > now);
   if (state.watches?.length && !loggedOut && !(await watchWaitlists(env, u, now, { bookFn, classFn }))) loggedOut = true;
   const minute = Math.floor(now / 60_000);
   if (!loggedOut && rules.length && (force || minute % SCAN_EVERY_MIN === u.userId % SCAN_EVERY_MIN || !state.lastScan)) {
@@ -757,6 +763,32 @@ async function watchRoute(request, env, classId) {
   }
   await saveUser(env, u);
   return json({ ok: true, watches: u.state.watches.length, push: apnsConfigured(env) && u.devices.length > 0 });
+}
+
+/** `PUT|DELETE /me/opening/<classId>`: book a listed, not yet bookable class once, the moment its window opens. */
+async function openingRoute(request, env, classId, now = Date.now()) {
+  const auth = await authenticate(request, env);
+  if (!auth) return json({ error: "unauthorized" }, 401);
+  const u = (await getUser(env, auth.userId)) ?? { userId: auth.userId, rules: [], devices: [], state: emptyState() };
+  signIn(u, auth);
+  u.state.opens ??= [];
+  if (request.method === "DELETE") {
+    u.state.opens = u.state.opens.filter((o) => o.classId !== classId);
+    await keepOrDelete(env, u);
+    return json({ ok: true, opens: u.state.opens.length, max: MAX_OPENS });
+  }
+  if (!u.state.opens.some((o) => o.classId === classId)) {
+    if (u.state.opens.length >= MAX_OPENS) return json({ error: `at most ${MAX_OPENS} classes waiting to open` }, 409);
+    let c;
+    try { c = await fetchClass(auth.token, classId); } catch { return json({ error: "Bruce is not answering" }, 502); }
+    const start = c ? Date.parse(c.start_time) : NaN;
+    if (!c || c.deleted || c.deleted_at || c.canceled || !(start > now)) return json({ error: "class not found or already started" }, 404);
+    const opens = opensAt(c);
+    if (opens <= now) return json({ error: "booking is already open: book it in the app" }, 409);
+    u.state.opens.push({ classId, title: String(c.title).slice(0, 200), studioId: c.studio_id, start, opens, freeUntil: freeCancelUntil(c), once: true });
+  }
+  await saveUser(env, u);
+  return json({ ok: true, opens: u.state.opens.length, max: MAX_OPENS, push: apnsConfigured(env) && u.devices.length > 0 });
 }
 
 /** The caller's Bruce user id if `X-Access-Token` is a live Bruce login for `X-User-Id`, else null. */
@@ -1010,6 +1042,8 @@ export default {
     if (path === "/email/off" && (request.method === "GET" || request.method === "POST")) return unsubscribeRoute(request, env);
     const watch = path.match(/^\/me\/waitlist\/(\d+)$/);
     if (watch && (request.method === "PUT" || request.method === "DELETE")) return watchRoute(request, env, +watch[1]);
+    const opening = path.match(/^\/me\/opening\/(\d+)$/);
+    if (opening && (request.method === "PUT" || request.method === "DELETE")) return openingRoute(request, env, +opening[1]);
     if (!["PUT /me", "GET /me", "DELETE /me", "POST /me/test-push", "PUT /me/email"].includes(route)) return json({ error: "not found" }, 404);
     const auth = await authenticate(request, env);
     if (!auth) return json({ error: "unauthorized" }, 401);
@@ -1036,7 +1070,9 @@ export default {
         const opens = (o) => ({ classId: o.classId, title: o.title, at: new Date(o.opens).toISOString(), outcome: "Opens" });
         return json({ hasSession: !!u, rules: u?.rules ?? [], lastScan: u?.state.lastScan ?? null,
                       upcoming: (u?.state.upcoming ?? []).map(opens),
-                      waitlist: (u?.state.watches ?? []).map((w) => ({ classId: w.classId, title: w.title, start: new Date(w.start).toISOString() })), log: u?.state.log ?? [], devices: u?.devices.length ?? 0,
+                      waitlist: (u?.state.watches ?? []).map((w) => ({ classId: w.classId, title: w.title, start: new Date(w.start).toISOString() })),
+                      opening: (u?.state.opens ?? []).map((o) => ({ classId: o.classId, title: o.title, start: new Date(o.start).toISOString(), opens: new Date(o.opens).toISOString() })),
+                      maxOpening: MAX_OPENS, log: u?.state.log ?? [], devices: u?.devices.length ?? 0,
                       email: u ? emailTo(env, u) : null, nudges: u ? u.state.nudges !== false : true,
                       nudgeDays: u?.state.nudgeDays ?? LAPSE_DAYS, lateSpots: u?.state.lateSpots ?? "ask" });
       }
@@ -1045,7 +1081,7 @@ export default {
         const u = await getUser(env, auth.userId);
         if (u && (await inChallenge(env, auth.userId))) {
           u.rules = [];
-          Object.assign(u.state, { upcoming: [], watches: [], goals: [], goalPings: {} });
+          Object.assign(u.state, { upcoming: [], watches: [], opens: [], goals: [], goalPings: {} });
           await saveUser(env, u);
           return json({ ok: true, kept: "challenges" });
         }

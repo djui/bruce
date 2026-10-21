@@ -202,6 +202,8 @@ struct ClassDetailView: View {
                     }
                     .buttonStyle(.glass).controlSize(.large).disabled(true)
                 }
+            } else if m.offersOpeningWatch(c), let opens = c.bookingOpens {
+                OpeningWatchBar(c: c, opens: opens)
             } else {
                 LimeButton(title: "Book") { m.present(.bookingRules(c.id)) }
             }

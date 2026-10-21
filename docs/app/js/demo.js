@@ -82,6 +82,13 @@ for (let day = -1; day < 8; day++) {
     };
   });
 }
+// A one-off workshop listed ten days ahead but bookable only from three days ahead ("Book when booking opens").
+const ws = new Date(at(10, 14, 0)).getTime();
+classes[9999] = { id: 9999, studio_id: 9520, presentation_studio_id: 9520, title: 'Sound Bath Workshop', start_time: new Date(ws).toISOString(), end_time: new Date(ws + 90 * 60000).toISOString(),
+  instructor: 'Instructor G', spots: 12, available_spots: 12, canceled: false, deleted: false, currency: 'sek', bookable_earliest_time: at(3, 14, 0),
+  bookable_latest_time: new Date(ws - 600000).toISOString(), unbookable_latest: 43200, unbookable_latest_time: new Date(ws - 43200000).toISOString(),
+  early_check_in_minutes: 30, late_check_in_minutes: 5, class_categories: [{ category_id: 5, main: true }],
+  description: 'A placeholder one-off workshop for the offline demo. Listed two weeks ahead, bookable from a week before.' };
 // A class starting in 15 minutes, so the check-in window is open in the demo.
 const soon = Date.now() + 15 * 60000;
 classes[9950] = { id: 9950, studio_id: 1724, title: 'Strength Circuit', start_time: new Date(soon).toISOString(), end_time: new Date(soon + 45 * 60000).toISOString(),

@@ -134,8 +134,35 @@ struct ServerError: LocalizedError {
 
 enum AutoBookCopy {
     static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. While this app is running (and the Mac is awake) it books the class the moment it opens. Cancelling an auto-booked class does not rebook it."
+    static let openings = "One-off classes booked once the moment their window opens, with the same retries and late-spot rule as weekly classes. At most \(AutoBook.maxOpenings) at a time."
     static let lateSpots = "Cancelling then costs a strike. Ask me first sends a notification with a Book button to your iPhone (and an email) instead. Under 3 h before, when cancelling costs 2 strikes (3 under 1 h, as much as a no-show), you're always asked; 12 h or more before, it's always booked."
     static let server = "Books even when no device is awake: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes your login and classes from the server."
+}
+
+/// Class page: "Book when booking opens" for a listed class whose window has not opened yet (`OpeningWatch`).
+struct OpeningWatchBar: View {
+    @Environment(AppModel.self) var m
+    let c: BruceAPI.BruceClass
+    let opens: Date
+    @State private var working = false
+    var watching: Bool { m.isWatchingOpening(c.id) }
+    var body: some View {
+        VStack(spacing: 10) {
+            Text(watching ? "Watching · \(Copy.openingWatching(opens))" : "\(Copy.bookingOpens(opens)) · \(Copy.oneOffClass)")
+                .font(.system(size: 14, weight: .medium)).foregroundStyle(watching ? Color(red: 0.05, green: 0.5, blue: 0.2) : Theme.secondary)
+                .multilineTextAlignment(.center)
+            if watching {
+                HStack {
+                    Text(Copy.openingUsed(m.openingWatches.count)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    Spacer()
+                    Button(working ? "Stopping…" : "Stop watching") { toggle(false) }.disabled(working)
+                }
+            } else {
+                LimeButton(title: working ? "Saving…" : "Book when booking opens") { toggle(true) }
+            }
+        }
+    }
+    func toggle(_ on: Bool) { working = true; Task { await m.setWatchOpening(on, for: c); working = false } }
 }
 
 /// Class page toggle on a full class: the server books it as soon as a waitlist spot frees up.
