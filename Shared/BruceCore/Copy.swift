@@ -153,6 +153,11 @@ enum Copy {
     static let planRemindWeek = "Race week: Monday 08:00"
     static let planRemindEve = "The day before: 18:00"
     static let planRemindHint = "Notifications on this device. With the server on, they come as a push and an email instead."
+    static let planAutoTaper = "Taper: pause hard classes"
+    static let planAutoTaperHint = "From the week before race week, Book every week pauses for Hyrox, Strength, High-intensity and CrossFit until race day is over. Nothing already booked is cancelled."
+    static func planTaperPaused(_ n: Int) -> String { n == 1 ? "Taper: Book every week paused for 1 class until after the race" : "Taper: Book every week paused for \(n) classes until after the race" }
+    static let raceDayHint = "Start times, the bib and what to bring are the organiser's; check their page or your email."
+    static let raceRemindPriceServer = "With the server on, as a push and an email; else a notification on this device."
     static func planStartsHint(_ day: String) -> String { "Your \(RaceDay.format(day, "d MMMM")) start counts back from race day. Until then, Explore and For you work as usual." }
 
     /// Under "Book every week" on the Book again sheet (BookAgain.swift).

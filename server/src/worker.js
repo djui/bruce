@@ -90,6 +90,7 @@ const RACE_URL = "https://djui.github.io/bruce/app/#/mine/race/";
 /// minute, the race was added late), later it is dropped.
 const RACE_WEEK_HOUR = 8;
 const RACE_EVE_HOUR = 18;
+const RACE_PRICE_HOUR = 9;   // "Price goes up tomorrow", the day before the step (as the apps' local notification)
 const RACE_LATE_MS = 12 * 3600_000;
 /// The crew push goes out on Sunday at this local hour, at most this long after; each minute run spends at most
 /// CREW_BUDGET requests on it (booking pages for today's visits of members not at their target yet, and APNs pushes).
@@ -670,6 +671,17 @@ export function raceEveMessage(r) {
   const host = r.url ? hostOf(r.url) : null;
   return { title: `Tomorrow: ${r.name}`, body: host ? `Race day tomorrow. Start times and what to bring are on ${host}.` : "Race day tomorrow." };
 }
+/** 09:00 local the day before the price changes (`price_at`), UTC ms. */
+export function racePriceTime(priceAt) {
+  const [y, m, d] = priceAt.split("-").map(Number);
+  return localAt(y, m, d - 1, RACE_PRICE_HOUR);
+}
+/** The device's words for the step ("HYROX Stockholm: 750 SEK until today, 775 SEK from tomorrow. Sign up on hyrox.com."),
+ *  else a plain line. */
+export function racePriceMessage(r) {
+  const host = r.url ? hostOf(r.url) : null;
+  return { title: "Price goes up tomorrow", body: r.price_body || `${r.name}: the entry fee changes tomorrow.${host ? ` Check ${host}.` : ""}` };
+}
 
 /** The user's booked classes from now until race day (the first page of `GET /v52/booking`), for the race-week push. */
 export async function raceWeekBookings(u, r, now) {
@@ -691,14 +703,18 @@ export async function raceWeekBookings(u, r, now) {
 export async function sendRaceReminders(env, now, { bookingsFn = raceWeekBookings } = {}) {
   const DB = await db(env);
   const today = localDay(now);
-  const { results } = await DB.prepare(`SELECT * FROM user_races WHERE date >= ? AND date <= ?
-      AND ((remind_week = 1 AND week_sent_at IS NULL) OR (remind_eve = 1 AND eve_sent_at IS NULL))`).bind(today, addDays(today, 7)).all();
+  // Race-day reminders in the week of the race; the price step the day before it changes (its `price_at` is tomorrow
+  // or, when a minute was missed, today).
+  const { results } = await DB.prepare(`SELECT * FROM user_races WHERE (date >= ?1 AND date <= ?2
+      AND ((remind_week = 1 AND week_sent_at IS NULL) OR (remind_eve = 1 AND eve_sent_at IS NULL)))
+      OR (remind_price = 1 AND price_sent_at IS NULL AND price_at >= ?1 AND price_at <= ?3)`).bind(today, addDays(today, 7), addDays(today, 1)).all();
   for (const r of results) {
     const t = raceReminderTimes(r.date);
-    for (const kind of ["week", "eve"]) {
-      const on = kind === "week" ? r.remind_week && r.week_sent_at == null : r.remind_eve && r.eve_sent_at == null;
+    for (const kind of ["week", "eve", "price"]) {
+      const on = kind === "week" ? r.remind_week && r.week_sent_at == null : kind === "eve" ? r.remind_eve && r.eve_sent_at == null
+        : r.remind_price && r.price_sent_at == null && r.price_at;
       // A Monday race has no race week before it: its race-week switch is the evening before (once, if both are on).
-      const due = kind === "week" && t.week == null ? (r.remind_eve ? null : t.eve) : t[kind];
+      const due = kind === "price" ? (r.price_at ? racePriceTime(r.price_at) : null) : kind === "week" && t.week == null ? (r.remind_eve ? null : t.eve) : t[kind];
       if (!on || now < (due ?? t.week ?? t.eve)) continue;
       // Marked first and only once (overlapping runs), so it goes out once.
       const mine = await DB.prepare(`UPDATE user_races SET ${kind}_sent_at = ? WHERE user_id = ? AND race_id = ? AND ${kind}_sent_at IS NULL RETURNING race_id`)
@@ -708,10 +724,11 @@ export async function sendRaceReminders(env, now, { bookingsFn = raceWeekBooking
       if (!u) continue;
       const weekly = kind === "week" && t.week != null;
       const booked = weekly ? await bookingsFn(u, r, now).catch(() => []) : [];
-      const msg = weekly ? raceWeekMessage(r, booked) : raceEveMessage(r);
-      // Race week by push and email (web users have no device); the evening before by push.
+      const msg = kind === "price" ? racePriceMessage(r) : weekly ? raceWeekMessage(r, booked) : raceEveMessage(r);
+      // Race week and the price step by push and email (web users have no device); the evening before by push.
+      const mail = weekly || kind === "price";
       const [gone] = await Promise.all([push(env, u.devices, msg.title, msg.body, { raceId: r.race_id }, "RACE_REMINDER"),
-                                        weekly && email(env, u, msg.title, msg.body, null, { link: RACE_URL + encodeURIComponent(r.race_id), linkText: "Open the race" })]);
+                                        mail && email(env, u, msg.title, msg.body, null, { link: RACE_URL + encodeURIComponent(r.race_id), linkText: "Open the race" })]);
       if (gone.length) { u.devices = u.devices.filter((x) => !gone.includes(x.token)); await saveUser(env, u); }
     }
   }
@@ -852,7 +869,9 @@ export function cleanRaces(list, now = Date.now()) {
   for (const r of list) {
     if (!r || typeof r.id !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(r.id) || r.id.length > 100 || !isDay(r.date)) continue;
     const going = r.going === true && !r.id.startsWith("custom-");
-    if (r.remindWeek !== true && r.remindEve !== true && !going) continue;
+    // The price step needs the day it changes; the words are the device's (at most a short paragraph).
+    const price = r.remindPrice === true && isDay(r.priceAt) && !r.id.startsWith("custom-");
+    if (r.remindWeek !== true && r.remindEve !== true && !price && !going) continue;
     if (out.length >= MAX_RACES + 1) break;
     if (out.some((x) => x.id === r.id)) continue;
     const url = typeof r.url === "string" && /^https:\/\/[^\s]+$/.test(r.url) && r.url.length <= 300 ? r.url : null;
@@ -864,6 +883,7 @@ export function cleanRaces(list, now = Date.now()) {
                  .map((x) => ({ key: String(x.key ?? "").slice(0, 30), title: x.title.slice(0, 30), count: Math.max(0, Math.min(9, x.count)) })) };
     }
     out.push({ id: r.id, name: String(r.name ?? "Race").slice(0, 120) || "Race", date: r.date, url, remindWeek: r.remindWeek === true, remindEve: r.remindEve === true, plan,
+               remindPrice: price, priceAt: price ? r.priceAt : null, priceBody: price && typeof r.priceBody === "string" ? r.priceBody.slice(0, 240).trim() || null : null,
                going, goingAt: goingTime(r, now) });
   }
   return out.length > MAX_RACES ? null : out;
@@ -890,7 +910,7 @@ export function goingSwitches(list, now = Date.now()) {
 
 const rowToRace = (r) => ({ id: r.race_id, name: r.name, date: r.date, url: r.url ?? null, remindWeek: !!r.remind_week, remindEve: !!r.remind_eve,
   plan: r.plan ? JSON.parse(r.plan) : null, weekSentAt: r.week_sent_at ?? null, eveSentAt: r.eve_sent_at ?? null, going: r.visibility === "friends",
-  goingAt: r.going_at ?? null });
+  goingAt: r.going_at ?? null, remindPrice: !!r.remind_price, priceAt: r.price_at ?? null, priceSentAt: r.price_sent_at ?? null });
 
 /** `PUT /me/races` (replace the set) and `DELETE /me/races/<id>`. */
 async function racesRoute(request, env, raceId) {
@@ -918,17 +938,18 @@ async function racesRoute(request, env, raceId) {
   signIn(u, auth);
   await saveUser(env, u);
   // A reminder already sent stays sent while the race keeps its day.
-  const { results: before } = await DB.prepare("SELECT race_id, date, week_sent_at, eve_sent_at, source, visibility, going_at FROM user_races WHERE user_id = ?")
-    .bind(auth.userId).all();
+  const { results: before } = await DB.prepare(`SELECT race_id, date, week_sent_at, eve_sent_at, source, visibility, going_at, price_at, price_sent_at
+      FROM user_races WHERE user_id = ?`).bind(auth.userId).all();
   // Other devices' races stay; all devices together keep at most twice the cap.
   const others = before.filter((b) => b.source !== source && !races.some((r) => r.id === b.race_id)).length;
   if (races.length + others > 2 * MAX_RACES) return json({ error: `at most ${2 * MAX_RACES} races on all devices` }, 409);
   const at = new Date().toISOString();
   const upsert = DB.prepare(`INSERT INTO user_races (user_id, race_id, name, date, url, remind_week, remind_eve, plan, week_sent_at, eve_sent_at, source, updated_at,
-        visibility, going_at)
-      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
+        visibility, going_at, remind_price, price_at, price_body, price_sent_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)
       ON CONFLICT(user_id, race_id) DO UPDATE SET name = ?3, date = ?4, url = ?5, remind_week = ?6, remind_eve = ?7, plan = ?8,
-        week_sent_at = ?9, eve_sent_at = ?10, source = ?11, updated_at = ?12, visibility = ?13, going_at = ?14`);
+        week_sent_at = ?9, eve_sent_at = ?10, source = ?11, updated_at = ?12, visibility = ?13, going_at = ?14,
+        remind_price = ?15, price_at = ?16, price_body = ?17, price_sent_at = ?18`);
   // Going: kept from the row as it was, then each switch in the body applies when it is at least as recent as the
   // row's (last flip wins, on whichever device it happened). Switching off also reaches a row another device sent.
   const flip = DB.prepare(`UPDATE user_races SET visibility = ?1, going_at = ?2 WHERE user_id = ?3 AND race_id = ?4
@@ -938,15 +959,18 @@ async function racesRoute(request, env, raceId) {
     ...races.map((r) => {
       const old = before.find((b) => b.race_id === r.id);
       const sent = old && old.date === r.date ? old : null;
+      // The price reminder stays sent while the step keeps its day; a new day reminds again.
+      const priceSent = old && r.priceAt && old.price_at === r.priceAt ? old.price_sent_at ?? null : null;
       return upsert.bind(auth.userId, r.id, r.name, r.date, r.url, r.remindWeek ? 1 : 0, r.remindEve ? 1 : 0, r.plan ? JSON.stringify(r.plan) : null,
-                         sent?.week_sent_at ?? null, sent?.eve_sent_at ?? null, source, at, old?.visibility ?? "private", old?.going_at ?? null);
+                         sent?.week_sent_at ?? null, sent?.eve_sent_at ?? null, source, at, old?.visibility ?? "private", old?.going_at ?? null,
+                         r.remindPrice ? 1 : 0, r.priceAt, r.priceBody, priceSent);
     }),
     ...switches.map((g) => flip.bind(g.going ? "friends" : "private", g.goingAt, auth.userId, g.id)),
   ]);
   await keepOrDelete(env, u);
   const { results: shared } = await DB.prepare("SELECT race_id FROM user_races WHERE user_id = ? AND visibility = 'friends' ORDER BY race_id").bind(auth.userId).all();
-  // `ids`: the races whose race-day reminders the server sends (the device leaves those out); `going`: shared races.
-  return json({ ok: true, races: races.length, ids: races.filter((r) => r.remindWeek || r.remindEve).map((r) => r.id), going: shared.map((r) => r.race_id),
+  // `ids`: the races whose reminders the server sends (the device leaves those out); `going`: shared races.
+  return json({ ok: true, races: races.length, ids: races.filter((r) => r.remindWeek || r.remindEve || r.remindPrice).map((r) => r.id), going: shared.map((r) => r.race_id),
                 push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
 }
 

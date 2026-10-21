@@ -255,12 +255,15 @@ struct RacePlanSettings: Codable, Hashable {
     var goals = false
     /// Goal categories ("13") the member deleted from those goals: not made again.
     var goalsSkip: [String] = []
+    /// Taper: from the week before race week, weekly bookings of hard classes are paused by the plan itself (what
+    /// `raceWeekRules` otherwise offers), until race day is over. Off by default.
+    var autoTaper = false
 
     init(startedOn: String, weeks: Int = RacePlanSettings.defaultWeeks, perWeek: Int = RacePlanSettings.defaultPerWeek) {
         self.startedOn = startedOn; self.weeks = weeks; self.perWeek = perWeek
     }
 
-    enum CodingKeys: String, CodingKey { case startedOn, weeks, perWeek, edits, paused, goals, goalsSkip }
+    enum CodingKeys: String, CodingKey { case startedOn, weeks, perWeek, edits, paused, goals, goalsSkip, autoTaper }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         startedOn = try c.decode(String.self, forKey: .startedOn)
@@ -270,6 +273,13 @@ struct RacePlanSettings: Codable, Hashable {
         paused = (try? c.decodeIfPresent([AutoBookRule].self, forKey: .paused)) ?? []
         goals = (try? c.decodeIfPresent(Bool.self, forKey: .goals)) ?? false
         goalsSkip = (try? c.decodeIfPresent([String].self, forKey: .goalsSkip)) ?? []
+        autoTaper = (try? c.decodeIfPresent(Bool.self, forKey: .autoTaper)) ?? false
+    }
+
+    /// The taper window: from the Monday of the week before race week to race day (inclusive).
+    static func taperWindow(raceDay: String) -> ClosedRange<String> {
+        let monday = RacePlanner.monday(of: raceDay)
+        return (RaceDay.adding(-7, to: monday) ?? monday)...raceDay
     }
 
     static func editKey(_ monday: String, _ c: PlanCategory) -> String { "\(monday)|\(c.rawValue)" }
@@ -782,6 +792,23 @@ extension AppModel {
         updatePlan(key) { p in if !p.paused.contains(where: { $0.id == rule.id }) { p.paused.append(rule) } }
         removeAutoBook(rule)
         flash(Copy.planPaused(rule.title, rule.label), icon: "pause.circle")
+    }
+
+    /// Taper (`RacePlanSettings.autoTaper`): inside the taper window the plan pauses the hard classes' weekly rules
+    /// itself, once each; `restorePausedRules` puts them back after race day. Nothing already booked is cancelled.
+    func applyAutoTaper(now: Date = Date()) {
+        for e in myRaceEntries {
+            guard let plan = racePlan(for: e), plan.settings.autoTaper, !e.isPast(now: now) else { continue }
+            let rules = raceWeekRules(plan, now: now).filter { r in !plan.settings.paused.contains { $0.id == r.id } }
+            guard !rules.isEmpty else { continue }
+            updatePlan(e.mine.key) { $0.paused += rules }
+            rules.forEach { removeAutoBook($0) }
+            flash(Copy.planTaperPaused(rules.count), icon: "pause.circle")
+        }
+    }
+    func setPlanTaper(_ key: String, _ on: Bool) {
+        updatePlan(key) { $0.autoTaper = on }
+        if on { applyAutoTaper() }
     }
 
     /// Puts back the rules paused for a race whose race day is over (and those of a plan that was stopped).

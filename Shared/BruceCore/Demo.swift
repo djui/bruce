@@ -209,6 +209,10 @@ extension AppModel {
         case "race": tab = .explore; demoExploreTab = 2; push(.race("vasaloppet-2027"))
         case "myraces", "thisweek": tab = .myClasses; showRacesInMyClasses = true
         case "myrace": tab = .myClasses; showRacesInMyClasses = true; push(.race("hyrox-stockholm-2026"))
+        // Race day (RaceViews.swift RaceDayCard): the demo's HYROX day moved to today, so My classes shows the ticket.
+        case "raceday":
+            tab = .myClasses
+            if let i = myRaces.firstIndex(where: { $0.raceId == "hyrox-stockholm-2026" }) { myRaces[i].day = RaceDay.today() }
         // Train for it (RacePlanner.swift): a race without a plan yet, the plan sheet before starting and in week 3 of 10.
         case "trainforit": tab = .myClasses; showRacesInMyClasses = true; push(.race("tough-viking-stadion-2027"))
         case "planstart": tab = .myClasses; showRacesInMyClasses = true; push(.race("tough-viking-stadion-2027")); present(.racePlan("tough-viking-stadion-2027"))

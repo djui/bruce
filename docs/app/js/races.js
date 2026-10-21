@@ -379,6 +379,32 @@ export const whenLine = (e) => [shortDay(e.day, true), startText(e)].filter(Bool
 export const entryArriveBy = (e) => arriveBy(e.mine.wave, arriveMinutes(e.race));
 /** Race day is today (the member's day of the event). */
 export const isRaceDay = (e, today) => daysToGo(e.race, today, e.mine.day) === 0;
+/** My classes' race-day card (mockup 5): today's race, else tomorrow's from 18:00 the evening before; null otherwise.
+ *  `hour` is the local hour now. */
+export function raceDayTicket(entries, today, hour) {
+  const t = entries.find((e) => daysToGo(e.race, today, e.mine.day) === 0);
+  if (t) return { entry: t, tomorrow: false, title: 'Race day · today' };
+  const n = (hour ?? 0) >= 18 && entries.find((e) => daysToGo(e.race, today, e.mine.day) === 1);
+  return n ? { entry: n, tomorrow: true, title: 'Race day · tomorrow' } : null;
+}
+/** "Strawberry Arena, Solna" in Apple Maps, when the race names a place. */
+export function mapsURL(r) {
+  const q = [r.venue, r.city].filter(Boolean).join(', ');
+  return q ? 'https://maps.apple.com/?q=' + encodeURIComponent(q) : null;
+}
+/** "Price goes up tomorrow", 09:00 the day before the next price step: the day it changes and the words (the same as
+ *  the apps' notification; the server sends them while it is on). Null when no step is ahead. */
+export function priceReminder(r, today) {
+  if (isCustom(r) || r.status !== 'open' || isPast(r, today)) return null;
+  const changeOn = nextPriceChange(r, today);
+  if (!changeOn) return null;
+  const site = host(r.signupUrl) || "the race's page";
+  const current = currentStep(r, today), next = steps(r).find((s) => s.from === changeOn);
+  const body = current && next ? r.name + ': ' + priceText(current) + ' until today, ' + priceText(next) + ' from tomorrow. Sign up on ' + site + '.'
+    : current ? r.name + ': today is the last day for ' + priceText(current) + '. Sign up on ' + site + '.'
+    : r.name + ': the entry fee changes tomorrow. Check ' + site + '.';
+  return { changeOn, remindOn: addDay(changeOn, -1), title: 'Price goes up tomorrow', body };
+}
 /** What happens next for a race in My races: "Sign-up opens 1 Nov", "775 SEK from 1 Nov", "Sold out". */
 export function hint(e, today) {
   const r = e.race;

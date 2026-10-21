@@ -141,6 +141,51 @@ test("cron: the race-week push and email at 08:00 on the Monday, the day-before 
   assert.ok(DB.rows("user_races")[0].week_sent_at && DB.rows("user_races")[0].eve_sent_at);
 });
 
+test("cron: the price step push and email at 09:00 the day before the fee changes, once per step day", async () => {
+  const DB = d1([{ user_id: 42, access_token: "t", rules: "[]", devices: JSON.stringify([device]), state: JSON.stringify({ email: "a@b.se" }) }]);
+  const env = await apnsEnv(DB);
+  const sent = fakeWorld();
+  const tv = { id: "tough-viking-stadion-2027", name: "Tough Viking Stockholms Stadion", date: "2027-05-15", url: "https://www.toughviking.se/", remindPrice: true,
+    priceAt: "2026-11-01", priceBody: "Tough Viking Stockholms Stadion: 750 SEK until today, 775 SEK from tomorrow. Sign up on toughviking.se." };
+  // A race with only the price reminder is stored (catalog races only); custom races and a missing day are not.
+  assert.deepEqual(cleanRaces([tv, { ...tv, id: "custom-1" }, { ...tv, id: "no-day", priceAt: null }]).map((r) => r.id), ["tough-viking-stadion-2027"]);
+  assert.equal(cleanRaces([{ ...tv, priceBody: "x".repeat(300) }])[0].priceBody.length, 240);
+  const put = await call(env, "PUT", "/me/races", { races: [tv] });
+  assert.deepEqual(put.body.ids, ["tough-viking-stadion-2027"], "the device leaves its own notification out");
+  assert.equal(DB.rows("user_races")[0].remind_price, 1);
+  assert.equal(DB.rows("user_races")[0].price_at, "2026-11-01");
+  const me = await call(env, "GET", "/me");
+  assert.equal(me.body.races[0].remindPrice, true);
+  assert.equal(me.body.races[0].priceAt, "2026-11-01");
+  const at = (s) => Date.parse(s);
+  await sendRaceReminders(env, at("2026-10-31T07:59:00Z"));          // Saturday 08:59 CET
+  assert.equal(sent.pushes.length, 0);
+  await sendRaceReminders(env, at("2026-10-31T08:00:10Z"));          // 09:00
+  assert.equal(sent.pushes.length, 1);
+  assert.deepEqual(sent.pushes[0].aps.alert, { title: "Price goes up tomorrow", body: tv.priceBody });
+  assert.equal(sent.pushes[0].raceId, "tough-viking-stadion-2027");
+  assert.equal(sent.emails.length, 1, "web users get it by email");
+  assert.equal(sent.emails[0].subject, "Price goes up tomorrow");
+  await sendRaceReminders(env, at("2026-10-31T08:01:00Z"));
+  assert.equal(sent.pushes.length, 1, "once");
+  // Sent again with the same step day: stays sent. A later step (the catalog moved on): reminded again.
+  await call(env, "PUT", "/me/races", { races: [tv] });
+  assert.ok(DB.rows("user_races")[0].price_sent_at);
+  await call(env, "PUT", "/me/races", { races: [{ ...tv, priceAt: "2027-01-10", priceBody: null }] });
+  assert.equal(DB.rows("user_races")[0].price_sent_at, null);
+  await sendRaceReminders(env, at("2027-01-09T08:00:10Z"));
+  assert.equal(sent.pushes.length, 2);
+  assert.equal(sent.pushes[1].aps.alert.body, "Tough Viking Stockholms Stadion: the entry fee changes tomorrow. Check toughviking.se.");
+  // Over 12 hours late: only marked.
+  await call(env, "PUT", "/me/races", { races: [{ ...tv, priceAt: "2027-02-01" }] });
+  await sendRaceReminders(env, at("2027-01-31T21:00:00Z"));
+  assert.equal(sent.pushes.length, 2);
+  assert.ok(DB.rows("user_races")[0].price_sent_at);
+  // Switched off: the race goes with the next PUT.
+  await call(env, "PUT", "/me/races", { races: [{ ...tv, remindPrice: false }] });
+  assert.equal(DB.rows("user_races").length, 0);
+});
+
 test("cron: late reminders are dropped (12 hours, or race day's midnight for the evening before)", async () => {
   const DB = d1([{ user_id: 42, access_token: "t", rules: "[]", devices: JSON.stringify([device]), state: JSON.stringify({ email: "a@b.se" }) }]);
   const env = await apnsEnv(DB);

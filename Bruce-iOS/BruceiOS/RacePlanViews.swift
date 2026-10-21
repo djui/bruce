@@ -255,6 +255,13 @@ struct RacePlanSheet: View {
                 Label(Copy.planRemindEve, systemImage: "moon").bruceFont(15)
             }
             Text(Copy.planRemindHint).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            if let p = e.mine.plan {
+                Divider()
+                Toggle(isOn: Binding(get: { p.autoTaper }, set: { m.setPlanTaper(key, $0) })) {
+                    Label(Copy.planAutoTaper, systemImage: "pause.circle").bruceFont(15)
+                }
+                Text(Copy.planAutoTaperHint).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            }
         }
         .padding(16)
         .glassEffect(.regular, in: .rect(cornerRadius: 24))

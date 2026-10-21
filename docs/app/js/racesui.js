@@ -21,6 +21,7 @@ const GOING_SERVER = 'Going is shared through our server, which is off in Settin
 const GOING_SHARE = 'Friends who share their races show up here once you share one too.';
 const GOING_CONSENT = "Our server stores your Bruce user id, this race and that your Bruce friends may see it. Only friends who share a race themselves see it, nobody else. It's deleted when you switch this off, remove the race, after race day, or with your data on the server.";
 const RECOVERY_HINT = 'An easy week after the race, from the Train for it mix. Brüce books nothing for you.';
+const RACE_DAY_HINT = "Start times, the bib and what to bring are the organiser's; check their page or your email.";
 
 /** Explore › Races chips (for this visit). */
 export const rf = { types: [], countries: [], past: false };
@@ -161,6 +162,23 @@ export function upcomingRacesHTML(hrefOf) {
     }).join('') + '</div>';
 }
 
+/** My classes on race day (mockup 5): the race as a ticket in the app's lime with the bib, the start wave, when to be
+ *  there, friends going, the place in Apple Maps and the race's page. Empty on other days. */
+export function raceDayCardHTML(hrefOf) {
+  const t = R.raceDayTicket(R.upcoming(myEntries(), todayKey()), todayKey(), new Date().getHours());
+  if (!t) return '';
+  const e = t.entry, r = e.race;
+  const by = R.entryArriveBy(e), maps = R.mapsURL(r), start = R.startText(e), going = St.friendsGoing(r.id);
+  const cell = (label, value) => '<span class="race-ticket-cell"><small>' + esc(label) + '</small><b>' + esc(value) + '</b></span>';
+  return '<div class="ticket race-ticket"><div class="ticket-head"><span class="glass-pill">' + esc(t.title) + '</span>' + (start ? '<span class="glass-pill">' + esc(start) + '</span>' : '') + '</div>' +
+    '<h2>' + esc(r.name) + '</h2>' +
+    '<div class="race-ticket-cells">' + cell('Bib', e.mine.bib || '—') + cell('Start wave', (R.clockNormalized(e.mine.wave) || e.mine.wave) || '—') + cell('Be there by', by || '—') + '</div>' +
+    (going.length ? goingHTML(going, 24) : '') +
+    '<div class="row2">' + (maps ? '<a class="btn glass sm" href="' + esc(maps) + '" target="_blank" rel="noopener noreferrer">' + icon('map') + ' ' + esc(R.placeLine(r).replace(' | ', ', ') || 'Map') + '</a>' : '') +
+      (hrefOf ? '<a class="btn glass sm" href="' + hrefOf(r.id) + '">' + icon('flag') + ' Race page</a>' : '') + '</div>' +
+    '<p class="small muted">' + esc(RACE_DAY_HINT) + '</p></div>';
+}
+
 /** My classes › Races: the next race big, then later and past races. */
 export function myRacesHTML(hrefOf, selectedId) {
   const today = todayKey();
@@ -180,7 +198,7 @@ export function myRacesHTML(hrefOf, selectedId) {
       goingHTML(going, 20) + '</span>' + (right ? '<b class="muted">' + esc(right) + '</b>' : '') + '</a>' +
       (results ? '<a class="btn glass sm race-results" href="' + esc(results) + '" target="_blank" rel="noopener noreferrer">See results</a>' : '') + '</div>';
   };
-  let html = '';
+  let html = raceDayCardHTML(null);
   const jr = done.map((e) => ({ e, rec: recovery(e, today) })).find((x) => x.rec && !planOf(x.e));
   if (jr) html += afterHTML(jr.e.race, jr.rec, 'After ' + jr.e.race.name);
   const next = up[0];
@@ -284,7 +302,10 @@ export function renderRace(el, id, ctx) {
         '<div class="' + (s === cur ? 'on' : '') + '"><b>' + esc(R.grouped(s.amount)) + '</b><i style="height:' + Math.round(22 + 34 * (s.amount - lo) / Math.max(hi - lo, 1)) + 'px"></i><small>' + esc(label(s)) + '</small></div>').join('') + '</div>' : '') +
       (r.priceNote ? '<p class="muted small">' + esc(r.priceNote) + '</p>' : '') +
       (r.changeRule ? '<p class="small race-rule">' + icon('info') + esc(r.changeRule) + '</p>' : '') +
-      (nextLine ? '<p class="small race-next-step">' + icon('bell') + esc(nextLine) + '</p>' : '') + '</div>';
+      // The price step reminder: our server pushes and emails it the day before (the iPhone app also as a notification).
+      (nextLine ? '<label class="toggle race-next-step"><span>' + icon('bell') + '<b>' + esc(nextLine) + '</b><small class="muted">Remind me the day before. ' +
+        esc(St.serverOn() ? 'Our server sends a push to the Brüce iPhone app and an email.' : 'Needs our server, which is off in Settings.') + '</small></span>' +
+        '<input type="checkbox" data-rprice' + (mineFor(id) && mineFor(id).remindPrice ? ' checked' : '') + (St.serverOn() ? '' : ' disabled') + '><i></i></label>' : '') + '</div>';
   }
 
   function yourRace(r, mine) {
@@ -345,6 +366,13 @@ export function renderRace(el, id, ctx) {
     else if (e.target.matches('[data-rnote]')) updateMine(id, { note: e.target.value.trim() || null });
     else if (e.target.matches('[data-rwave]')) { updateMine(id, { wave: R.clockNormalized(e.target.value) || e.target.value.trim() || null }); draw(); }
     else if (e.target.matches('[data-rbib]')) updateMine(id, { bib: e.target.value.trim() || null });
+    else if (e.target.matches('[data-rprice]')) {
+      // Switching it on adds the race to My races, as on the iPhone.
+      const r = raceById(id);
+      if (r && !mineFor(id)) addRace(r);
+      updateMine(id, { remindPrice: e.target.checked });
+      draw();
+    }
     else if (e.target.matches('[data-rremind]')) updateMine(id, { [e.target.dataset.rremind]: e.target.checked });
     else if (e.target.matches('[data-rgoing]')) {
       const r = raceById(id), want = e.target.checked;

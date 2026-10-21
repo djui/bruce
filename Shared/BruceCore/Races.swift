@@ -609,6 +609,36 @@ struct MyRaceEntry: Identifiable, Hashable {
     var arriveBy: String? { RaceClock.arriveBy(wave: mine.wave, minutesBefore: race.arriveMinutes) }
     /// Race day is today (the member's day of the event).
     func isRaceDay(now: Date = Date()) -> Bool { daysToGo(now: now) == 0 }
+}
+
+/// My classes on race day (mockup 5): the member's race as a ticket in the app's lime, with the bib, the start wave
+/// and when to be there. From 18:00 the evening before it says "tomorrow".
+struct RaceDayTicket: Hashable {
+    let entry: MyRaceEntry
+    let tomorrow: Bool
+    var title: String { tomorrow ? "Race day · tomorrow" : "Race day · today" }
+    var bib: String? { entry.mine.bib?.nilIfEmpty }
+    /// The wave as typed, tidied when it is a time.
+    var wave: String? { entry.wave ?? entry.mine.wave?.nilIfEmpty }
+    var arriveBy: String? { entry.arriveBy }
+    /// "Strawberry Arena, Solna" in Apple Maps, when the race names a place.
+    var mapsURL: URL? {
+        let q = [entry.race.venue, entry.race.city.nilIfEmpty].compactMap { $0 }.joined(separator: ", ")
+        guard !q.isEmpty, let e = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else { return nil }
+        return URL(string: "https://maps.apple.com/?q=\(e)")
+    }
+}
+
+extension MyRaces {
+    /// The ticket to show: a race today, else one tomorrow from 18:00 (the evening before, when the wave tends to be in).
+    static func ticket(_ entries: [MyRaceEntry], now: Date = Date()) -> RaceDayTicket? {
+        if let e = entries.first(where: { $0.daysToGo(now: now) == 0 }) { return RaceDayTicket(entry: e, tomorrow: false) }
+        guard BruceDate.calendar.component(.hour, from: now) >= 18, let e = entries.first(where: { $0.daysToGo(now: now) == 1 }) else { return nil }
+        return RaceDayTicket(entry: e, tomorrow: true)
+    }
+}
+
+extension MyRaceEntry {
     /// What happens next for this race: "Sign-up opens 1 Nov · reminder on", "775 SEK from 1 Nov", or the status.
     func hint(now: Date = Date()) -> String? {
         let r = race
@@ -776,6 +806,31 @@ enum RaceReminders {
         let body: String
     }
 
+    /// "Price goes up tomorrow", 09:00 the day before the next price step; nil when no step is ahead.
+    struct PriceReminder: Hashable {
+        /// The day the price changes.
+        let changeOn: String
+        let fire: Date
+        let title = "Price goes up tomorrow"
+        let body: String
+    }
+    static func priceReminder(_ r: Race, now: Date = Date()) -> PriceReminder? {
+        guard !r.isCustom, r.status == .open, !r.isPast(now: now), let change = r.nextPriceChange(now: now),
+              let eve = RaceDay.adding(-1, to: change), let fire = RaceDay.morning(eve) else { return nil }
+        let site = r.host ?? "the race's page"
+        let current = r.currentStep(now: now)
+        let next = r.steps.first { $0.from == change }
+        let body: String
+        if let current, let next {
+            body = "\(r.name): \(current.priceText) until today, \(next.priceText) from tomorrow. Sign up on \(site)."
+        } else if let current {
+            body = "\(r.name): today is the last day for \(current.priceText). Sign up on \(site)."
+        } else {
+            body = "\(r.name): the entry fee changes tomorrow. Check \(site)."
+        }
+        return PriceReminder(changeOn: change, fire: fire, body: body)
+    }
+
     /// The reminders the member asked for that are still ahead, soonest first.
     /// `serverIds`: races whose race-week and day-before reminders the server sends instead.
     static func plan(_ mine: [MyRace], catalog: [Race], now: Date = Date(), serverIds: Set<String> = []) -> [Planned] {
@@ -806,19 +861,9 @@ enum RaceReminders {
                 out.append(Planned(id: "\(idPrefix)signup-\(r.id)", raceId: r.id, fire: fire, title: "Sign-up opens today",
                                    body: "\(r.name): sign-up opens today on \(site). Brüce only reminds you; places can go fast."))
             }
-            if m.remindPrice, r.status == .open, let change = r.nextPriceChange(now: now),
-               let eve = RaceDay.adding(-1, to: change), let fire = RaceDay.morning(eve), fire > now {
-                let current = r.currentStep(now: now)
-                let next = r.steps.first { $0.from == change }
-                let body: String
-                if let current, let next {
-                    body = "\(r.name): \(current.priceText) until today, \(next.priceText) from tomorrow. Sign up on \(site)."
-                } else if let current {
-                    body = "\(r.name): today is the last day for \(current.priceText). Sign up on \(site)."
-                } else {
-                    body = "\(r.name): the entry fee changes tomorrow. Check \(site)."
-                }
-                out.append(Planned(id: "\(idPrefix)price-\(r.id)", raceId: r.id, fire: fire, title: "Price goes up tomorrow", body: body))
+            // The server sends this one too (push and email) for races it has; then the device leaves it out.
+            if local, m.remindPrice, let p = priceReminder(r, now: now), p.fire > now {
+                out.append(Planned(id: "\(idPrefix)price-\(r.id)", raceId: r.id, fire: p.fire, title: p.title, body: p.body))
             }
         }
         return out.sorted { $0.fire < $1.fire }
@@ -853,8 +898,10 @@ extension AppModel {
         if races.isEmpty, let cached = await Task.detached(priority: .userInitiated, operation: { RaceCatalog.loadCached() }).value {
             races = cached.races; racesFetchedAt = cached.at
         }
-        // Train for it (RacePlanner.swift): rules paused for a race that is over come back; plan goals follow the month.
+        // Train for it (RacePlanner.swift): rules paused for a race that is over come back, the taper pauses its own,
+        // and plan goals follow the month.
         restorePausedRules()
+        applyAutoTaper()
         refreshPlanGoals()
         if !force, let at = racesFetchedAt, Date().timeIntervalSince(at) < RaceCatalog.refreshAfter { return }
         guard !racesLoading else { return }
@@ -882,6 +929,8 @@ extension AppModel {
     var pastMyRaces: [MyRaceEntry] { MyRaces.past(myRaceEntries) }
     /// Home's "Next race".
     var nextMyRace: MyRaceEntry? { upcomingMyRaces.first }
+    /// My classes' race-day card (mockup 5): today's race, or tomorrow's from the evening before.
+    var raceDayTicket: RaceDayTicket? { MyRaces.ticket(upcomingMyRaces) }
 
     /// A catalog race, or a race added by hand by its "custom-<uuid>" key.
     func race(_ id: String) -> Race? {
@@ -975,13 +1024,16 @@ extension AppModel {
         Task { await syncRaceServer() }
     }
 
-    /// The races `PUT /me/races` sends: race-day reminders or going on, and going switched off here (so the server
-    /// hears it even without a reminder). Going carries the moment it was flipped.
-    static func raceSyncBody(_ upcoming: [MyRaceEntry], plan: (MyRaceEntry) -> RacePlan?) -> [[String: Any]] {
+    /// The races `PUT /me/races` sends: race-day or price-step reminders or going on, and going switched off here (so
+    /// the server hears it even without a reminder). Going carries the moment it was flipped; a price reminder the day
+    /// it is due and its words (the server has no catalog).
+    static func raceSyncBody(_ upcoming: [MyRaceEntry], now: Date = Date(), plan: (MyRaceEntry) -> RacePlan?) -> [[String: Any]] {
         let switched = { (e: MyRaceEntry) in e.mine.goingAt != nil && e.mine.raceId != nil && !e.race.isCustom }
-        let list = upcoming.filter { $0.mine.remindWeek || $0.mine.remindEve || $0.sharesGoing || switched($0) }.prefix(20)
+        let price = { (e: MyRaceEntry) in e.mine.remindPrice ? RaceReminders.priceReminder(e.race, now: now) : nil }
+        let list = upcoming.filter { $0.mine.remindWeek || $0.mine.remindEve || price($0) != nil || $0.sharesGoing || switched($0) }.prefix(20)
         return list.map { e in
             var o: [String: Any] = ["id": e.mine.key, "name": e.race.name, "date": e.day, "remindWeek": e.mine.remindWeek, "remindEve": e.mine.remindEve]
+            if let p = price(e) { o["remindPrice"] = true; o["priceAt"] = p.changeOn; o["priceBody"] = p.body }
             if switched(e), let at = e.mine.goingAt { o["going"] = e.mine.going; o["goingAt"] = Int(at.timeIntervalSince1970 * 1000) }
             if let u = e.race.url { o["url"] = u.absoluteString }
             if let p = plan(e) {

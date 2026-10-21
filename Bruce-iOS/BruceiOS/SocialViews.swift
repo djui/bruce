@@ -129,6 +129,8 @@ struct MyClassesView: View {
                     if segment.wrappedValue == 1 {
                         MyRacesSection()
                     } else {
+                        // Race day (RaceViews.swift): the race as a ticket above the bookings.
+                        if tab == 0, let t = m.raceDayTicket { RaceDayCard(ticket: t) }
                         if m.isLoggedIn { GoalsCompactCard().padding(.bottom, 6) }
                         switch tab {
                         case 0:

@@ -143,6 +143,9 @@ struct RacePlanSheet: View {
                      weeks: Binding(get: { plan.settings.weeks }, set: { v in m.updatePlan(key) { $0.weeks = v } }))
             Toggle(Copy.planRemindWeek, isOn: Binding(get: { e.mine.remindWeek }, set: { m.setRaceReminder(r, week: $0) })).toggleStyle(.switch).tint(Theme.lime)
             Toggle(Copy.planRemindEve, isOn: Binding(get: { e.mine.remindEve }, set: { m.setRaceReminder(r, eve: $0) })).toggleStyle(.switch).tint(Theme.lime)
+            if let p = e.mine.plan {
+                Toggle("\(Copy.planAutoTaper) · \(Copy.planAutoTaperHint)", isOn: Binding(get: { p.autoTaper }, set: { m.setPlanTaper(key, $0) })).toggleStyle(.switch).tint(Theme.lime)
+            }
             Text(Copy.planNotCoaching).font(.system(size: 13, weight: .light)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             Button("Stop plan") { m.stopPlan(key); m.dismissSheets() }.foregroundStyle(.red).buttonStyle(.plain).font(.system(size: 15, weight: .semibold))
         }

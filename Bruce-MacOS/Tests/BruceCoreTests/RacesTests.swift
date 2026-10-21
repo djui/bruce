@@ -317,6 +317,50 @@ final class RacesTests: XCTestCase {
         XCTAssertEqual(RaceReminders.plan([m], catalog: catalog, now: now, serverIds: [m.key]).count, 1)
     }
 
+    func testRaceDayTicket() throws {
+        var m = MyRace(race: race("hyrox-stockholm-2026"), day: "2026-12-12", note: "Open")
+        m.format = "doubles"; m.wave = "14:20"; m.bib = "1427"
+        var r = race("hyrox-stockholm-2026"); r.arriveMinutesBefore = 90
+        r.formats = [RaceFormat(code: "doubles", title: "Doubles")]
+        let entries = MyRaces.entries([m, MyRace(race: race("tough-viking-stadion-2027"))], catalog: [r, race("tough-viking-stadion-2027")])
+        // Race day, from midnight; the evening before from 18:00; nothing earlier.
+        let t = try XCTUnwrap(MyRaces.ticket(entries, now: at("2026-12-12T07:00:00Z")))
+        XCTAssertEqual(t.title, "Race day · today")
+        XCTAssertEqual(t.bib, "1427"); XCTAssertEqual(t.wave, "14:20"); XCTAssertEqual(t.arriveBy, "12:50")
+        XCTAssertEqual(t.entry.startText, "Doubles · Open")
+        XCTAssertEqual(t.mapsURL?.absoluteString, "https://maps.apple.com/?q=Strawberry%20Arena,%20Solna")
+        XCTAssertEqual(MyRaces.ticket(entries, now: at("2026-12-11T17:30:00Z"))?.title, "Race day · tomorrow")   // 18:30 CET
+        XCTAssertNil(MyRaces.ticket(entries, now: at("2026-12-11T12:00:00Z")))
+        XCTAssertNil(MyRaces.ticket(entries, now: now))
+        // Without a wave the cells say so, and the card still shows.
+        m.wave = nil; m.bib = nil
+        let bare = try XCTUnwrap(MyRaces.ticket(MyRaces.entries([m], catalog: [r]), now: at("2026-12-12T07:00:00Z")))
+        XCTAssertNil(bare.wave); XCTAssertNil(bare.arriveBy); XCTAssertNil(bare.bib)
+        XCTAssertNil(RaceDayTicket(entry: MyRaces.entries([MyRace(name: "Own", date: "2027-01-01")], catalog: [])[0], tomorrow: false).mapsURL)
+    }
+
+    @MainActor func testPriceReminderGoesToTheServer() throws {
+        // The device sends the day the price changes and the words; the server has no catalog.
+        let tv = race("tough-viking-stadion-2027")
+        let p = try XCTUnwrap(RaceReminders.priceReminder(tv, now: now))
+        XCTAssertEqual(p.changeOn, "2026-11-01")
+        XCTAssertEqual(p.fire, at("2026-10-31T08:00:00Z"))
+        XCTAssertEqual(p.body, "Tough Viking Stockholms Stadion: 750 SEK until today, 775 SEK from tomorrow. Sign up on toughviking.se.")
+        XCTAssertNil(RaceReminders.priceReminder(race("stockholm-marathon-2027"), now: now), "no steps known")
+        XCTAssertNil(RaceReminders.priceReminder(race("vatternrundan-2027"), now: now), "not open yet")
+        let entries = MyRaces.entries([MyRace(race: tv, remindPrice: true), MyRace(race: race("vasaloppet-2027"))], catalog: catalog)
+        let body = AppModel.raceSyncBody(MyRaces.upcoming(entries, now: now), now: now) { _ in nil }
+        XCTAssertEqual(body.map { $0["id"] as? String }, ["tough-viking-stadion-2027"])
+        XCTAssertEqual(body[0]["remindPrice"] as? Bool, true)
+        XCTAssertEqual(body[0]["priceAt"] as? String, "2026-11-01")
+        XCTAssertEqual(body[0]["priceBody"] as? String, p.body)
+        XCTAssertEqual(body[0]["remindWeek"] as? Bool, false)
+        // Once the server has the race, the device leaves its own price notification out.
+        let mine = [MyRace(race: tv, remindPrice: true)]
+        XCTAssertEqual(RaceReminders.plan(mine, catalog: catalog, now: now).count, 1)
+        XCTAssertEqual(RaceReminders.plan(mine, catalog: catalog, now: now, serverIds: ["tough-viking-stadion-2027"]).count, 0)
+    }
+
     func testRaceCalendarEvent() throws {
         let hyrox = race("hyrox-stockholm-2026")
         let one = try XCTUnwrap(CalendarEvent(race: hyrox, day: "2026-12-12"))
