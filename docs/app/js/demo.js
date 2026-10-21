@@ -94,7 +94,7 @@ const categories = [
   { id: 19, title: 'Pilates', photo: 'xdz9eqgslqobguwuiqn8' }, { id: 25, title: 'Spa' }, { id: 26, title: 'Strength' }, { id: 30, title: 'Swimming' },
 ];
 const users = {
-  1: { id: 1, first_name: 'Demo', last_name: 'User', email: 'demo@example.com', social: true },
+  1: { id: 1, first_name: 'Demo', last_name: 'User', email: 'demo@example.com', social: true, secret: 'demo' },
   21: { id: 21, first_name: 'Friend', last_name: 'One', social: true },
   22: { id: 22, first_name: 'Friend', last_name: 'Two', social: true },
   23: { id: 23, first_name: 'Friend', last_name: 'Three', social: true },

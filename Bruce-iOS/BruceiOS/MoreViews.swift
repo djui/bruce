@@ -155,6 +155,7 @@ struct ResetPasswordView: View {
 
 struct SettingsView: View {
     @Environment(AppModel.self) var m
+    @Environment(\.openURL) var openURL
     var body: some View {
         Form {
             Section {
@@ -166,7 +167,8 @@ struct SettingsView: View {
                 NavigationLink(value: SheetRoute.places) {
                     InfoRow(title: "Places & commute", subtitle: m.recSettings.places.isEmpty ? "For you picks by travel time" : m.recSettings.places.map(\.name).joined(separator: ", "), chevron: false)
                 }
-                Button { copyCalendarURL() } label: { InfoRow(title: "Calendar subscription", subtitle: "Subscribe to your bookings in Calendar") }
+                Button { subscribeCalendar() } label: { InfoRow(title: "Calendar subscription", subtitle: "Subscribe to your bookings in Calendar") }
+                    .contextMenu { Button("Copy link", systemImage: "doc.on.doc") { copyCalendarURL() } }
                 NavigationLink(value: SheetRoute.push) {
                     InfoRow(title: "Push notifications", subtitle: "Reminders and studio news", chevron: false)
                 }
@@ -202,10 +204,14 @@ struct SettingsView: View {
         Binding(get: { m.notificationSetting?[keyPath: kp] ?? true }, set: { m.setMarketing(field, $0) })
     }
 
-    /// The calendar feed URL contains the user's secret; it is only copied, never shown or logged.
+    /// The calendar feed URL contains the user's secret; it is only opened or copied, never shown or logged.
+    func subscribeCalendar() {
+        guard let url = m.calendarFeedURL else { m.flash("Calendar link not available"); return }
+        openURL(url)
+    }
     func copyCalendarURL() {
-        guard let uid = m.userId, let secret = m.user?.secret, !secret.isEmpty else { m.flash("Calendar link not available"); return }
-        UIPasteboard.general.string = "webcal://api.bruce.app/v52/user/\(uid)/calendar/\(secret).ics"
+        guard let url = m.calendarFeedURL else { m.flash("Calendar link not available"); return }
+        UIPasteboard.general.string = url.absoluteString
         m.flash("Calendar link copied. Add it in Settings › Calendar › Accounts › Add Subscribed Calendar")
     }
 }

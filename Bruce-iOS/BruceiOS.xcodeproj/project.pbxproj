@@ -193,6 +193,7 @@
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "Add to Calendar puts a booked class into your calendar.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera is used to scan the QR code at the studio door to check in.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Your weight is used to estimate the calories of a class, and existing workouts are checked so a class recorded on your watch is not added twice.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Classes and gym visits you attended are saved as workouts with type, time and estimated calories.";
@@ -224,6 +225,7 @@
 				INFOPLIST_FILE = Config/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME)";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.healthcare-fitness";
+				INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription = "Add to Calendar puts a booked class into your calendar.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera is used to scan the QR code at the studio door to check in.";
 				INFOPLIST_KEY_NSHealthShareUsageDescription = "Your weight is used to estimate the calories of a class, and existing workouts are checked so a class recorded on your watch is not added twice.";
 				INFOPLIST_KEY_NSHealthUpdateUsageDescription = "Classes and gym visits you attended are saved as workouts with type, time and estimated calories.";

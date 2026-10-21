@@ -72,6 +72,16 @@ enum Copy {
                                                   ("No-show", ": booked but never checked in, 3 strikes")]
     static let noShow = "Booked, but never checked in."
 
+    // MARK: Calendar
+
+    /// Under "Add to Calendar": a one-off event is a copy, the feed follows changes.
+    static let calendarOneOff = "A single event won't follow changes to the class. Subscribe keeps every booking in sync."
+    static let calendarAlert = "Alert \(CalendarEvent.alertMinutes / 60) h before · editable"
+    static let calendarSubscribe = "Subscribe to all bookings"
+    static let calendarSubscribeHint = "Opens Calendar with Bruce's feed of your bookings. The link is personal; copy it only into a calendar app."
+    static let calendarAdded = "Added to Calendar"
+    static let calendarEventFooter = "Added with Brüce, an unofficial Bruce Studios client. This event is a copy and doesn't follow changes to the class; the calendar subscription in Settings stays in sync."
+
     // MARK: Check-in
 
     /// Badge on a My classes row the user already checked in to.

@@ -5,6 +5,7 @@ import * as St from './store.js';
 import { S } from './store.js';
 import { hero, classRow, glassBtn, underlineTabs, chip, empty, loading, avatar, stars, toast, run, confirmSheet, makeMap } from './ui.js';
 import { openRules, openSimilar, openInvite, openVisitLimit, openTicket, openReview, checkInFlow } from './sheets.js';
+import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 
 let token = 0;
 const closeBtn = (ctx) => glassBtn(ctx.wide ? 'close' : 'back', 'data-dact="back"', ctx.wide ? 'Close' : 'Back');
@@ -77,7 +78,7 @@ export async function renderClass(el, id, ctx) {
         (S.reviewable.find((x) => x.class_id === c.id) ? '<button class="btn glass" data-dact="rate">' + icon('star') + ' Rate the class</button>' : '');
     } else if (booking) {
       actions = (window ? '<button class="btn lime" data-dact="checkin">' + icon('checkSeal') + ' Check in</button>' : '') +
-        (started ? '' : '<button class="btn red" data-dact="cancel">Cancel booking</button>');
+        (started ? '' : '<button class="btn glass" data-dact="calendar">' + icon('calendar') + ' Add to Calendar</button><button class="btn red" data-dact="cancel">Cancel booking</button>');
     } else if (started) {
       actions = '<button class="btn glass" disabled>' + (r.end && r.end < now ? 'This class has ended' : 'This class has started') + '</button>';
     } else if (standby) {
@@ -171,6 +172,7 @@ export async function renderClass(el, id, ctx) {
         await St.loadMine(); draw(S.classDetails.get(c.id) || c);
       });
       else if (a === 'book') openRules(c, 'book', async () => { await Bruce.book(c.id); toast('Booked ' + c.title); await after(); });
+      else if (a === 'calendar') { const f = St.calendarFile(c); addToCalendar(f.text, f.fileName); toast('Event file ready. ' + ONE_OFF_NOTE); }
       else if (a === 'cancel') openRules(c, 'cancel', async () => { await Bruce.cancel(booking.id); toast('Booking cancelled'); await after(); });
       else if (a === 'join') run(b, async () => { await Bruce.joinWaitlist(c.id); toast("You're on the waitlist. You'll get a notification if a spot opens up."); await after(); });
       else if (a === 'leave') confirmSheet('Leave the waitlist?', 'You will lose your place in the queue for ' + c.title + '.', 'Leave waitlist')

@@ -176,7 +176,7 @@ struct SheetContainer: View {
 
     var detents: Set<PresentationDetent> {
         switch root {
-        case .menu, .similarClasses: return [.medium, .large]
+        case .menu, .similarClasses, .addToCalendar: return [.medium, .large]
         case .bookingRules: return [.fraction(0.82), .large]
         default: return [.large]
         }
@@ -258,6 +258,7 @@ struct SheetScreen: View {
         case .similarClasses(let id): SimilarClassesSheet(classId: id)
         case .area(let id): AreaMapSheet(areaId: id)
         case .review(let id): ReviewSheet(bookingId: id)
+        case .addToCalendar(let id): AddToCalendarSheet(classId: id)
         case .autoBook: AutoBookView()
         case .places: PlacesView()
         case .editPlace(let id): EditPlaceView(placeId: id)

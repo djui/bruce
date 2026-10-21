@@ -6,6 +6,8 @@
   <key>CFBundleName</key><string>Bruce Studios</string>
   <key>NSLocationUsageDescription</key><string>Used to suggest the gym you're at for check-in and to show nearby studios.</string>
   <key>NSLocationWhenInUseUsageDescription</key><string>Used to suggest the gym you're at for check-in and to show nearby studios.</string>
+  <key>NSCalendarsWriteOnlyAccessUsageDescription</key><string>Add to Calendar puts a booked class into your calendar.</string>
+  <key>NSCalendarsUsageDescription</key><string>Add to Calendar puts a booked class into your calendar.</string>
   <key>NSCameraUsageDescription</key><string>The camera is used to scan the QR code at the studio door to check in.</string>
 </dict>
 </plist>

@@ -105,7 +105,7 @@ extension AppModel {
         friends = dec([BruceAPI.Friend].self, """
         [{"id":1,"friend_user":{"id":1,"first_name":"Friend","last_name":"One"}},{"id":2,"friend_user":{"id":2,"first_name":"Friend","last_name":"Two"}}]
         """)
-        user = dec(BruceAPI.UserLite.self, #"{"id":0,"first_name":"Demo","last_name":"Member","email":"demo@example.com","email_confirmed":true,"national_identity":"199001011234","photo_valid":true,"social":true,"parakey_email":"demo@example.com"}"#)
+        user = dec(BruceAPI.UserLite.self, #"{"id":0,"first_name":"Demo","last_name":"Member","email":"demo@example.com","email_confirmed":true,"national_identity":"199001011234","photo_valid":true,"social":true,"parakey_email":"demo@example.com","secret":"demo"}"#)
         social = true
         // Fictional spa: paid ticket (admission_access=false, price 28000 öre), slot ending within 2 h.
         let spa = dec(BruceAPI.Studio.self, """
@@ -290,6 +290,8 @@ extension AppModel {
             if AppModel.setting("BRUCE_SCREEN") == "review" { present(.review(2)) } else { tab = .myClasses }
         case "booked": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001))
         case "cancelsheet": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001)); present(.bookingRules(9001))
+        case "booked": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001))
+        case "addtocalendar": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001)); present(.addToCalendar(9001))
         case "detailmap": push(.classDetail(9001)); demoScrollBottom = true
         case "invite": present(.invite)
         case "howitworks": sheets = [.invite, .howItWorks]
