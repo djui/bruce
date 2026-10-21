@@ -195,6 +195,7 @@ extension AppModel {
         """)
 
         loadDemoInsights()
+        loadDemoRaces()
         visitHistory = Self.demoVisits
         Task { await refreshRecommendations() }
 
@@ -213,6 +214,11 @@ extension AppModel {
         case "wrapped": wrappedOpen = true
         case "wrappedshare": wrappedOpen = true; demoWrappedCard = 99
         case "explore": tab = .explore
+        case "races": tab = .explore; demoExploreTab = 2
+        case "race": tab = .explore; demoExploreTab = 2; push(.race("vasaloppet-2027"))
+        case "myraces": tab = .myClasses; showRacesInMyClasses = true
+        case "myrace": tab = .myClasses; showRacesInMyClasses = true; push(.race("hyrox-stockholm-2026"))
+        case "addrace": tab = .myClasses; showRacesInMyClasses = true; present(.editRace(nil))
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
         case "detail": push(.classDetail(9001))

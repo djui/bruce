@@ -23,6 +23,10 @@ struct ExploreView: View {
     @State private var fromHour: Double = 0
     @State private var toHour: Double = 24
     @Namespace private var glass
+    // Races segment (RaceViews.swift): type chips, country and past races.
+    @State private var raceTypes: Set<RaceType> = []
+    @State private var raceCountries: Set<String> = []
+    @State private var racePast = false
 
     var selectedDay: Date {
         BruceDate.calendar.date(byAdding: .day, value: dayOffset, to: BruceDate.calendar.startOfDay(for: Date()))!
@@ -72,6 +76,11 @@ struct ExploreView: View {
         return ClassFilters.sorted(c, f, distance: m.studioDistance, travel: m.studioTravelMinutes)
     }
 
+    /// Explore › Races after the chips and the search text.
+    var raceResults: [Race] {
+        Races.filter(m.races, types: raceTypes, countries: raceCountries, query: ui.searchActive ? ui.query : "", includePast: racePast)
+    }
+
     /// What the list and the Classes badge show: for today only classes that haven't started yet, as in the original.
     var upcomingClasses: [BruceAPI.BruceClass] {
         dayOffset == 0 ? classes.filter { ($0.start ?? .distantFuture) > Date() } : classes
@@ -85,12 +94,13 @@ struct ExploreView: View {
                 StudiosMap(studios: studios).ignoresSafeArea(edges: .bottom)
             } else {
                 ScrollView {
-                    if tabIndex == 0 { studioList } else { classList }
+                    if tabIndex == 0 { studioList } else if tabIndex == 1 { classList } else { RaceList(races: raceResults) }
                 }
                 // Header bar below: content scrolling under it is blurred/dimmed (hard edge), never shows through sharply.
                 .scrollEdgeEffectStyle(.hard, for: .top)
                 .refreshable {
-                    if tabIndex == 1 { m.classesByDay[BruceDate.calendar.startOfDay(for: selectedDay)] = nil; await m.loadClasses(day: selectedDay) }
+                    if tabIndex == 2 { await m.loadRaces(force: true) }
+                    else if tabIndex == 1 { m.classesByDay[BruceDate.calendar.startOfDay(for: selectedDay)] = nil; await m.loadClasses(day: selectedDay) }
                     else { await m.loadStudios(force: true) }
                 }
             }
@@ -112,9 +122,16 @@ struct ExploreView: View {
         }
         // Results cover the page only while searching with a non-empty query; the page underneath (tab, filters,
         // scroll position, map/list) stays mounted, so cancelling returns to exactly where the search started.
-        .overlay { ExploreSearchOverlay() }
+        .overlay { ExploreSearchOverlay(enabled: tabIndex != 2) }
         .sheet(isPresented: Binding(get: { m.filterOpen }, set: { m.filterOpen = $0 })) { FilterSheet() }
-        .onAppear { if m.demoExploreTab != 0 { tabIndex = m.demoExploreTab; m.demoExploreTab = 0 } }
+        .onAppear {
+            if m.demoExploreTab != 0 { tabIndex = m.demoExploreTab; m.demoExploreTab = 0 }
+            if let t = m.exploreTabRequest { tabIndex = t; m.exploreTabRequest = nil }
+            ui.racesSearch = tabIndex == 2
+        }
+        .onChange(of: m.exploreTabRequest) { _, t in if let t { tabIndex = t; m.exploreTabRequest = nil } }
+        .onChange(of: tabIndex) { _, t in ui.racesSearch = t == 2 }
+        .task { await m.loadRaces() }
         .task(id: "\(tabIndex)-\(dayOffset)") {
             // Load the selected day even on the Studios tab so the Classes count badge is real, not stale.
             await m.loadClasses(day: selectedDay)
@@ -126,11 +143,12 @@ struct ExploreView: View {
 
     var controls: some View {
         VStack(spacing: 10) {
-            UnderlineTabs(titles: ["Studios", "Classes"],
+            UnderlineTabs(titles: ["Studios", "Classes", "Races"],
                           badges: [m.studios.isEmpty ? "…" : String(studios.count),
-                                   m.classesByDay[BruceDate.calendar.startOfDay(for: selectedDay)] == nil ? "…" : String(upcomingClasses.count)],
+                                   m.classesByDay[BruceDate.calendar.startOfDay(for: selectedDay)] == nil ? "…" : String(upcomingClasses.count),
+                                   m.races.isEmpty ? (m.racesError == nil ? "…" : "–") : String(raceResults.count)],
                           selection: $tabIndex)
-            chips
+            if tabIndex == 2 { RaceFilterChips(types: $raceTypes, countries: $raceCountries, includePast: $racePast) } else { chips }
             if tabIndex == 1 {
                 // Original order: time range directly under the chips, then the day tabs.
                 TimeRangeSlider(from: $fromHour, to: $toHour).padding(.horizontal, Theme.gutter + 4)
@@ -242,8 +260,10 @@ struct ExploreView: View {
 /// The page underneath stays mounted (tab, filters, scroll position, map/list), so cancelling restores it.
 struct ExploreSearchOverlay: View {
     @EnvironmentObject var ui: UIState
+    /// Off on the Races segment, where the search text filters the race list instead.
+    var enabled = true
     var body: some View {
-        if ui.searchActive && !ui.query.isEmpty {
+        if enabled && ui.searchActive && !ui.query.isEmpty {
             SearchResults(query: $ui.query).background(Theme.background)
         }
     }

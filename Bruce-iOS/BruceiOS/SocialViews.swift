@@ -116,31 +116,44 @@ struct MyClassesView: View {
     @Environment(AppModel.self) var m
     @State private var tab = 0
 
+    /// Classes or Races (RaceViews.swift), in the model so Home's "My races" and a race reminder can open Races.
+    var segment: Binding<Int> {
+        Binding(get: { m.showRacesInMyClasses ? 1 : 0 }, set: { v in withAnimation(.snappy(duration: 0.25)) { m.showRacesInMyClasses = v == 1 } })
+    }
+
     var body: some View {
         ScrollView {
-            if m.isLoggedIn { GoalsCompactCard() }
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
-                    switch tab {
-                    case 0:
-                        if m.bookings.isEmpty { EmptyState(system: "calendar.badge.checkmark", text: "You have no bookings.") }
-                        // Checked-in classes stay listed with a "Checked in" badge, as in the original [c8:404].
-                        else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } },
-                                    badge: { c in m.booking(forClass: c.id)?.isCheckedIn == true ? Copy.checkedIn : nil }) }
-                    case 1:
-                        if m.waitlistRows.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
-                        // A standby that got a spot shows "Booked" (and can be cancelled), as in the original.
-                        else { list(m.waitlistRows.compactMap { s in s.class.map { (s.id, $0, m.booking(forClass: $0.id)) } },
-                                    badge: { m.waitlistBadge($0.id) }) }
-                    default:
-                        if m.bookmarkedClasses.isEmpty { EmptyState(system: "bookmark", text: "No bookmarked classes yet.") }
-                        else { list(m.bookmarkedClasses.map { ($0.id, $0, nil) }) }
+                    if segment.wrappedValue == 1 {
+                        MyRacesSection()
+                    } else {
+                        if m.isLoggedIn { GoalsCompactCard().padding(.bottom, 6) }
+                        switch tab {
+                        case 0:
+                            if m.bookings.isEmpty { EmptyState(system: "calendar.badge.checkmark", text: "You have no bookings.") }
+                            // Checked-in classes stay listed with a "Checked in" badge, as in the original [c8:404].
+                            else { list(m.bookings.compactMap { b in b.class.map { (b.id, $0, b) } },
+                                        badge: { c in m.booking(forClass: c.id)?.isCheckedIn == true ? Copy.checkedIn : nil }) }
+                        case 1:
+                            if m.waitlistRows.isEmpty { EmptyState(system: "bell", text: "You're not on any waitlists.") }
+                            // A standby that got a spot shows "Booked" (and can be cancelled), as in the original.
+                            else { list(m.waitlistRows.compactMap { s in s.class.map { (s.id, $0, m.booking(forClass: $0.id)) } },
+                                        badge: { m.waitlistBadge($0.id) }) }
+                        default:
+                            if m.bookmarkedClasses.isEmpty { EmptyState(system: "bookmark", text: "No bookmarked classes yet.") }
+                            else { list(m.bookmarkedClasses.map { ($0.id, $0, nil) }) }
+                        }
                     }
                 } header: {
-                    UnderlineTabs(titles: ["Bookings", "Waitlist", "Bookmarks"],
-                                  badges: [m.bookings.isEmpty ? nil : String(m.bookings.count), m.waitlistRows.isEmpty ? nil : String(m.waitlistRows.count), nil],
-                                  selection: $tab)
-                    .padding(.top, 8)
+                    VStack(spacing: 6) {
+                        UnderlineTabs(titles: ["Classes", "Races"],
+                                      badges: [m.bookings.isEmpty ? nil : String(m.bookings.count),
+                                               m.upcomingMyRaces.isEmpty ? nil : String(m.upcomingMyRaces.count)],
+                                      selection: segment)
+                        if segment.wrappedValue == 0 { classChips }
+                    }
+                    .padding(.top, 8).padding(.bottom, 6)
                     .background(Theme.background)
                 }
             }
@@ -148,16 +161,46 @@ struct MyClassesView: View {
         .scrollEdgeEffectStyle(.soft, for: .top)
         .bruceTitle("My classes")
         .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Text(m.simultaneousLimit.map { "\(m.upcomingBookings.count) / \($0)" } ?? "\(m.upcomingBookings.count)").bruceFont(15, weight: .semibold).monospacedDigit()
-                    .padding(.horizontal, 6)
+            if segment.wrappedValue == 1 {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { m.present(.editRace(nil)) } label: { Image(systemName: "plus") }.accessibilityLabel("Add a race")
+                }
+            } else {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Text(m.simultaneousLimit.map { "\(m.upcomingBookings.count) / \($0)" } ?? "\(m.upcomingBookings.count)").bruceFont(15, weight: .semibold).monospacedDigit()
+                        .padding(.horizontal, 6)
+                }
             }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
             MainToolbarButtons()
         }
         .task { await m.loadMine() }
-        .refreshable { await m.loadMine() }
-        .onAppear { if m.demoMyClassesTab != 0 { tab = m.demoMyClassesTab; m.demoMyClassesTab = 0 } }
+        .refreshable { if segment.wrappedValue == 1 { await m.loadRaces(force: true) } else { await m.loadMine() } }
+        .onAppear {
+            if m.demoMyClassesTab != 0 { tab = m.demoMyClassesTab; m.demoMyClassesTab = 0 }
+        }
+    }
+
+    /// Bookings, Waitlist and Bookmarks under the Classes segment.
+    var classChips: some View {
+        let counts = [m.bookings.count, m.waitlistRows.count, 0]
+        return ScrollView(.horizontal, showsIndicators: false) {
+            GlassEffectContainer(spacing: 8) {
+                HStack(spacing: 8) {
+                    ForEach(Array(["Bookings", "Waitlist", "Bookmarks"].enumerated()), id: \.offset) { i, t in
+                        GlassChip(selected: tab == i, action: { withAnimation(.snappy(duration: 0.25)) { tab = i } }) {
+                            HStack(spacing: 6) {
+                                Text(t)
+                                if counts[i] > 0 { Text("\(counts[i])").monospacedDigit().opacity(0.7) }
+                            }
+                        }
+                        .accessibilityAddTraits(tab == i ? .isSelected : [])
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+            .padding(.horizontal, Theme.gutter)
+        }
     }
 
     func list(_ items: [(Int, BruceAPI.BruceClass, BruceAPI.Booking?)],

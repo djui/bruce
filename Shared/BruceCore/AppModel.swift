@@ -23,6 +23,8 @@ enum Route: Hashable {
     case goals
     /// A challenge with friends by server id (Challenges.swift).
     case challenge(String)
+    /// A race page by catalog id, or "custom-<uuid>" for a race added by hand (Races.swift).
+    case race(String)
 }
 
 enum SheetRoute: Hashable {
@@ -48,6 +50,8 @@ enum SheetRoute: Hashable {
     case goals, editGoal(UUID?)
     /// New challenge with friends (Challenges.swift).
     case newChallenge
+    /// Add a race by hand, or edit one (nil = new; Races.swift).
+    case editRace(UUID?)
 }
 
 @MainActor
@@ -225,6 +229,18 @@ final class AppModel {
     @ObservationIgnored var travelOverrides: [String: Int] = [:]
     /// Monthly goals (Goals.swift), device only.
     var goals: [MonthlyGoal] = AppModel.demo ? MonthlyGoal.demo : MonthlyGoal.load()
+    /// Race catalog (Races.swift): the published races.json, its last good copy on disk, demo races in demo mode.
+    var races: [Race] = []
+    var racesLoading = false
+    var racesError: String?
+    @ObservationIgnored var racesFetchedAt: Date?
+    @ObservationIgnored var raceReminderTask: Task<Void, Never>?
+    /// My races (Races.swift), device only; demo mode keeps them in memory.
+    var myRaces: [MyRace] = AppModel.demo ? [] : MyRaces.load()
+    /// My classes shows its Races segment (Home's "My races", a race reminder).
+    var showRacesInMyClasses = false
+    /// Explore switches to this segment when set (0 Studios, 1 Classes, 2 Races), then clears it.
+    var exploreTabRequest: Int?
     /// Challenges with friends (Challenges.swift), from the auto-book server.
     var challenges: [ChallengeSummary] = []
     var challengeDetails: [String: ChallengeDetail] = [:]
@@ -707,6 +723,7 @@ final class AppModel {
     func bootstrap() async {
         await loadAreas()   // local store: no network
         if AppModel.demo { loadDemo(); return }
+        Task { await loadRaces() }   // public catalog file (Races.swift), also logged out
         guard tokenUsable else { return }   // logged out: welcome screen; sneak peek loads public data
         if let c = try? await BruceAPI.fetchCities(token: token), !c.isEmpty { cities = c }
         async let a: Void = loadStudios()

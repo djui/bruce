@@ -178,6 +178,9 @@ const P = {
   pencil: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="m13.5 6.5 4 4"/>',
   trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
   location: '<path d="m4 11 16-7-7 16-2-7z"/>',
+  flag: '<path d="M5.5 21V4M5.5 4.5h11l-2.2 4 2.2 4h-11"/>',
+  ski: '<circle cx="15.5" cy="4.5" r="1.8"/><path d="m3.5 19.5 17-4M9 18l2.5-5.5 3 1.5 1.5-4.5-4-1.5-3 2.5"/>',
+  external: '<path d="M13.5 4.5h6v6M19.5 4.5 11 13"/><path d="M17.5 13.5v5a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-11a1 1 0 0 1 1-1h5"/>',
 };
 export const icon = (name, cls) => '<svg class="i' + (cls ? ' ' + cls : '') + '" viewBox="0 0 24 24" aria-hidden="true">' + (P[name] || '') + '</svg>';
 
