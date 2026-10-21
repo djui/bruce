@@ -8,6 +8,7 @@ import { DEFAULT_PREFS } from './recommend.js';
 import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRaces, keyOf as raceKey } from './races.js';
 import { makePlan, count as planCount, category as planCategory } from './raceplan.js';
 import { DEMO_RACES, DEMO_MY_RACES } from './demo.js';
+import { sharesGoing } from './crews.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
 const RACES_CACHE_MS = 6 * 3600 * 1000;
@@ -38,6 +39,7 @@ export const S = {
   skippedReviews: new Set(ls.get('bruce.skippedReviews', [])),
   learnedDoors: ls.get('bruce.doors', {}),
   races: null, racesError: null, racesLoading: null,   // the race catalog (races.js), null until read
+  raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0, raceGoingLoading: null,   // friends going (crews.js)
 };
 
 export const emit = () => S.listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
@@ -65,6 +67,7 @@ export function setAuth(a) {
 }
 export function clearData() {
   ['studios', 'studioDetails', 'classDetails', 'bookings', 'standbys', 'watches', 'openings', 'bookmarks', 'favorites', 'classCache'].forEach((k) => S[k].clear());
+  Object.assign(S, { raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0 });
   Object.assign(S, { history: null, historyLoading: null, challenges: null, friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null, limits: [], user: null, membership: null, block: null, home: null, studiosLoading: null });
 }
 
@@ -402,8 +405,11 @@ export function saveMyRaces(list) { ls.set('bruce.myRaces' + suffix(), list); em
 /** The body of PUT /me/races: upcoming races with a race-week or day-before reminder (at most 20), with the plan's
  *  race-week mix for the push text (server/README.md). */
 export function racesPayload(list, catalog, today) {
-  return upcomingRaces(raceEntries(list, catalog), today).filter((e) => e.mine.remindWeek || e.mine.remindEve).slice(0, 20).map((e) => {
+  // Going switched here (on or off) goes with the moment it was flipped: the last flip wins on every device.
+  const switched = (m) => !!(m.raceId && m.goingAt);
+  return upcomingRaces(raceEntries(list, catalog), today).filter((e) => e.mine.remindWeek || e.mine.remindEve || sharesGoing(e.mine) || switched(e.mine)).slice(0, 20).map((e) => {
     const o = { id: raceKey(e.mine), name: e.race.name, date: e.day, remindWeek: !!e.mine.remindWeek, remindEve: !!e.mine.remindEve };
+    if (switched(e.mine)) { o.going = !!e.mine.going; o.goingAt = e.mine.goingAt; }
     if (e.race.signupUrl) o.url = e.race.signupUrl;
     const p = e.mine.plan && makePlan(e.day, e.race.type, e.race.sport, e.mine.plan);
     if (p) {
@@ -413,16 +419,65 @@ export function racesPayload(list, catalog, today) {
     return o;
   });
 }
-/** Race-week and day-before reminders: our server sends them (push and email) while it is on. Only sends a change. */
-export function syncRaces(list) {
-  if (!serverOn() || !loggedIn()) return;
-  const body = racesPayload(list || myRaces(), S.races || [], todayKey());
+/** Race-week and day-before reminders (our server sends them, push and email) and going (friends see it), while the
+ *  server is on. Only sends a change; then reads friends going again (sharing a race changes what it shows). */
+export function syncRaces() {
+  if (!serverOn() || !loggedIn()) return Promise.resolve();
+  // One after the other, each reading My races when it runs, so a quick on and off reaches the server in order.
+  S.raceSync = (S.raceSync || Promise.resolve()).then(sendRaces, sendRaces);
+  return S.raceSync;
+}
+function sendRaces() {
+  if (!serverOn() || !loggedIn()) return null;
+  const body = racesPayload(myRaces(), S.races || [], todayKey());
   const sig = JSON.stringify(body);
   // Per login: another account in this browser sends its own races.
   const key = 'bruce.racesSynced.' + (S.auth && S.auth.userId) + suffix();
   const last = ls.get(key, null);
-  if (last === sig || (last == null && !body.length)) return;
-  Server.putRaces(body, raceDevice()).then(() => ls.set(key, sig)).catch(() => {});
+  if (last === sig || (last == null && !body.length)) return null;
+  return Server.putRaces(body, raceDevice()).then(() => { ls.set(key, sig); ls.set(key + '.at', Date.now()); return loadGoing(true); }).catch(() => {});
+}
+/** Going is the member's on every device: a switch flipped elsewhere (the server's `mine`) is taken over here, unless it
+ *  was flipped here after the last confirmed sync (then this browser's switch is still on its way). */
+function adoptGoing(g) {
+  if (isDemo()) return;
+  const syncedAt = ls.get('bruce.racesSynced.' + (S.auth && S.auth.userId) + suffix() + '.at', 0);
+  const server = new Set(g.mine || []);
+  const today = todayKey();
+  let changed = false;
+  const list = myRaces().map((m) => {
+    if (!m.raceId || !!m.going === server.has(m.raceId) || (m.goingAt || 0) > syncedAt) return m;
+    const e = raceEntries([m], S.races || [])[0];
+    if (!upcomingRaces([e], today).length) return m;
+    changed = true;
+    return Object.assign({}, m, { going: server.has(m.raceId) });
+  });
+  if (changed) saveMyRaces(list);
+}
+
+// ---------------------------------------------------------------- friends going (crews.js, racesui.js)
+
+/** Going needs our server on (it stores who may see a race) and a login; the demo answers in the browser. */
+export const canShareGoing = () => isDemo() || (serverOn() && loggedIn());
+/** GET /races/going: the Bruce friends who share an upcoming race, by race id (only while you share one too). At most
+ *  every 10 minutes unless `force`; a failure keeps what is shown. */
+export function loadGoing(force) {
+  if (!canShareGoing()) return Promise.resolve(S.raceGoing);
+  // A read that started before a change must not stand in for a fresh one.
+  if (S.raceGoingLoading) return force ? S.raceGoingLoading.then(() => loadGoing(true)) : S.raceGoingLoading;
+  if (!force && Date.now() - S.raceGoingAt < 600000) return Promise.resolve(S.raceGoing);
+  S.raceGoingLoading = Server.going().then((g) => {
+    S.raceGoing = Object.assign({ going: {}, sharing: false, mine: [] }, g); S.raceGoingAt = Date.now();
+    adoptGoing(S.raceGoing);
+    emit();
+  }).catch(() => {}).then(() => { S.raceGoingLoading = null; return S.raceGoing; });
+  return S.raceGoingLoading;
+}
+/** Friends going to a race, as users (photo from the Friends list when Bruce has it). */
+export function friendsGoing(raceId) {
+  if (!canShareGoing()) return [];   // with the server off nothing is shared any more, so nothing is shown either
+  return ((S.raceGoing.going || {})[raceId] || []).filter((f) => !S.auth || f.userId !== S.auth.userId)
+    .map((f) => friendUser(f.userId) || { id: f.userId, first_name: f.name || '' });
 }
 /** This browser in PUT /me/races: each device's My races replace only the races it sent. */
 function raceDevice() {

@@ -1,12 +1,17 @@
 // Challenges with friends (our server, CONTRACT.md): the Challenges segment in Friends, the challenge page with its
 // leaderboard (in the right-hand pane on wide screens), participant details, the New challenge sheet, invites and the
 // share link #challenge/<id> (preview + Join for someone who is not in it yet).
-import { $, esc, icon, fmt, time, ls } from './util.js';
+import { $, esc, icon, fmt, time, ls, todayKey } from './util.js';
 import { Server } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import { sheet, toast, run, empty, loading, avatar, confirmSheet, glassBtn, chip } from './ui.js';
 import { challengeShareUrl, challengeRoute } from './links.js';
+import { fromRace, keyOf, countdownShort, shortDay } from './races.js';
+import { isCrew, weeklyText, thisWeekText, lastWeekText, doneThisWeekText, crewName, defaultWeekly, WEEKLY } from './crews.js';
+
+const CREW_PRIVACY = 'Friends in this crew see your visits: sessions each week, class types and studios. Each friend accepts separately. Leave anytime; your numbers are deleted.';
+const CREW_INTRO = 'A crew trains for the race together: a challenge until race day where everyone aims for the same sessions a week. On Sundays the Brüce iPhone app tells you how the crew did.';
 
 const METRICS = { classes: ['Most classes', 'classes'], visits: ['Most visits', 'visits'], minutes: ['Most minutes', 'minutes'], target: ['Everyone hits', 'visits'] };
 const me = () => S.auth && S.auth.userId;
@@ -40,6 +45,12 @@ export function loadIfAllowed() {
 /** Gradient summary card (list and page header). */
 function headCard(c, big) {
   const p = c.period || {};
+  if (isCrew(c)) {
+    const n = (c.participants || []).filter((x) => x.status === 'accepted').length || c.participantCount || 0;
+    return '<div class="ch-card crew' + (big ? ' big' : '') + '"><div class="row-between"><span class="ch-month">' + icon('run') + 'Crew</span>' +
+      '<span class="ch-left">' + (p.daysLeft != null ? (p.daysLeft === 0 ? 'Race day' : p.daysLeft + ' days to race day') : '') + '</span></div>' +
+      '<h3>' + esc(c.title || 'Race crew') + '</h3><p>' + esc([n + (n === 1 ? ' person' : ' people'), weeklyText(c.weekly)].join(' · ')) + '</p></div>';
+  }
   const n = (c.participants || []).filter((x) => x.status === 'accepted').length || c.participantCount || 0;
   const started = p.start && p.day > 0 ? 'started ' + shortDate(c.repeatMonthly ? p.start : c.start || p.start) : 'starts ' + shortDate(p.start);
   const metricTitle = c.metric === 'target' ? 'Everyone hits ' + c.target : c.title || METRICS[c.metric][0];
@@ -62,7 +73,7 @@ export function challengesHTML(sel) {
   return list.map((c) => {
     const invited = c.myStatus === 'invited';
     return '<div class="ch-item' + (sel && sel.id === c.id ? ' selected' : '') + '"><a href="' + challengeRoute(c.id) + '">' + headCard(c) + '</a>' +
-      (invited ? '<div class="ch-invite"><span class="grow"><b>' + esc(c.ownerName) + '</b> invited you</span><button class="btn glass sm" data-ch="decline" data-id="' + esc(c.id) + '">Decline</button><button class="btn lime sm" data-ch="accept" data-id="' + esc(c.id) + '">Accept</button></div>' : '') + '</div>';
+      (invited ? '<div class="ch-invite"><span class="grow"><b>' + esc(c.ownerName) + '</b> invited you' + (isCrew(c) ? ' to a crew' : '') + '</span><button class="btn glass sm" data-ch="decline" data-id="' + esc(c.id) + '">Decline</button><button class="btn lime sm" data-ch="accept" data-id="' + esc(c.id) + '">Accept</button></div>' : '') + '</div>';
   }).join('') + start;
 }
 
@@ -80,11 +91,13 @@ export function challengesClick(e, rerender) {
 }
 async function respond(btn, id, yes) {
   if (yes && !(await serverConsent())) return;
-  if (!yes && !(await confirmSheet('Decline the challenge?', 'You can join again later with the share link.', 'Decline'))) return;
+  const crew = isCrew(((S.challenges && S.challenges.challenges) || []).find((c) => c.id === id));
+  const what = crew ? 'crew' : 'challenge';
+  if (!yes && !(await confirmSheet('Decline the ' + what + '?', 'You can join again later with the share link.', 'Decline'))) return;
   await run(btn, async () => {
     if (yes) await Server.accept(id); else await Server.leave(id);
     await St.loadChallenges();
-    toast(yes ? "You're in. Your visits count from today's refresh." : 'Challenge declined');
+    toast(yes ? "You're in. Your visits count from today's refresh." : (crew ? 'Crew declined' : 'Challenge declined'));
     if (yes) location.hash = challengeRoute(id);
   });
 }
@@ -114,10 +127,10 @@ export async function renderChallenge(el, id, ctx) {
   function preview(d) {
     const c = d.challenge;
     el.innerHTML = '<div class="pane-pad"><div class="pane-bar">' + close + '</div>' + headCard(Object.assign({ participants: [] }, c), true) +
-      '<div class="card ch-preview"><p><b>' + esc(c.ownerName || 'A friend') + '</b> started this challenge' + (c.participantCount ? ' with ' + (c.participantCount - 1) + (c.participantCount === 2 ? ' friend' : ' friends') : '') + '.</p>' +
-      '<p class="muted small">' + esc(METRICS[c.metric] ? (c.metric === 'target' ? 'Everyone tries to reach ' + c.target + ' visits.' : 'Whoever has the most ' + METRICS[c.metric][1] + ' wins.') : '') + '</p></div>' +
-      (d.joinable ? '<button class="btn lime" data-cact="join">Join challenge</button>' : '<p class="notice">' + icon('info') + '<span>Only friends of ' + esc(c.ownerName || 'the owner') + ' on Bruce can join. Add each other as friends in the Bruce app first.</span></p>') +
-      '<p class="muted small foot">' + icon('lock') + ' Friends in this challenge see your visits: totals, class types and studios. Leave anytime; your numbers are deleted.</p></div>';
+      '<div class="card ch-preview"><p><b>' + esc(c.ownerName || 'A friend') + '</b> started this ' + (isCrew(c) ? 'crew' : 'challenge') + (c.participantCount ? ' with ' + (c.participantCount - 1) + (c.participantCount === 2 ? ' friend' : ' friends') : '') + '.</p>' +
+      '<p class="muted small">' + esc(isCrew(c) ? 'Everyone aims for ' + weeklyText(c.weekly) + ' until race day.' : METRICS[c.metric] ? (c.metric === 'target' ? 'Everyone tries to reach ' + c.target + ' visits.' : 'Whoever has the most ' + METRICS[c.metric][1] + ' wins.') : '') + '</p></div>' +
+      (d.joinable ? '<button class="btn lime" data-cact="join">' + (isCrew(c) ? 'Join crew' : 'Join challenge') + '</button>' : '<p class="notice">' + icon('info') + '<span>Only friends of ' + esc(c.ownerName || 'the owner') + ' on Bruce can join. Add each other as friends in the Bruce app first.</span></p>') +
+      '<p class="muted small foot">' + icon('lock') + ' ' + esc(isCrew(c) ? CREW_PRIVACY : 'Friends in this challenge see your visits: totals, class types and studios. Leave anytime; your numbers are deleted.') + '</p></div>';
     const j = el.querySelector('[data-cact="join"]');
     if (j) j.addEventListener('click', async () => {
       if (!(await serverConsent())) return;
@@ -125,8 +138,26 @@ export async function renderChallenge(el, id, ctx) {
     });
   }
 
+  function drawCrew(d) {
+    const c = d.challenge;
+    el.innerHTML = crewPageHTML(d, close);
+    el.querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => openParticipant((d.leaderboard || []).find((r) => r.userId === +b.dataset.p), c)));
+    el.onclick = (e) => {
+      const b = e.target.closest('[data-cact]');
+      if (!b) return;
+      const a = b.dataset.cact;
+      if (a === 'back') ctx.close();
+      else if (a === 'share') shareLink(c);
+      else if (a === 'accept' || a === 'decline') respond(b, c.id, a === 'accept').then(() => renderChallenge(el, id, ctx));
+      else if (a === 'leave') confirmSheet('Leave ' + (c.title || 'the crew') + '?', 'Your numbers in this crew are deleted from our server.', 'Leave crew').then((yes) => yes && run(b, async () => {
+        await Server.leave(c.id); await St.loadChallenges().catch(() => {}); toast('You left the crew'); ctx.close();
+      }));
+    };
+  }
+
   function draw(d) {
     const c = d.challenge;
+    if (d.crew) { drawCrew(d); return; }
     const board = d.leaderboard || [];
     const mine = board.find((r) => r.userId === me());
     const accepted = board.filter((r) => r.status === 'accepted');
@@ -162,6 +193,106 @@ export async function renderChallenge(el, id, ctx) {
         await Server.leave(c.id); await St.loadChallenges().catch(() => {}); toast('You left the challenge'); ctx.close();
       }));
     };
+  }
+}
+
+/** A crew's page: everyone's week, last week, the race, the share link and Leave. */
+function crewPageHTML(d, close) {
+  const c = d.challenge, w = d.crew, weekly = w.weekly || 1;
+  const invited = c.myStatus === 'invited';
+  const race = (S.races || []).find((r) => r.id === c.raceId);
+  const invitedNames = (c.participants || []).filter((p) => p.status === 'invited').map((p) => p.name);
+  const bar = (n) => '<span class="crew-bar" aria-hidden="true">' + Array.from({ length: weekly }, (_, i) => '<i class="' + (i < n ? 'on' : '') + '"></i>').join('') + '</span>';
+  return '<div class="pane-pad"><div class="pane-bar">' + close + '<span class="spacer"></span>' + glassBtn('share', 'data-cact="share"', 'Share link') + '</div>' +
+    headCard(c, true) +
+    (invited ? '<div class="ch-invite card"><span class="grow"><b>' + esc(c.ownerName) + '</b> invited you to this crew. Your visits count once you accept.</span><button class="btn glass sm" data-cact="decline">Decline</button><button class="btn lime sm" data-cact="accept">Accept</button></div>' : '') +
+    '<div class="sec-row"><h2 class="sec-title">This week</h2><small class="muted">' + esc(doneThisWeekText(w)) + '</small></div>' +
+    '<div class="lb">' + w.members.map((m) => {
+      const isMe = m.userId === me();
+      return '<button class="lbrow crew-row' + (isMe ? ' me' : '') + '" data-p="' + m.userId + '">' + avatar(userFor(m.userId, m.name), 38) +
+        '<span class="nm"><b>' + esc(isMe ? 'You' : m.name) + ((m.thisWeek || 0) >= weekly ? ' ' + icon('checkSeal') : '') + '</b>' + bar(m.thisWeek || 0) + '</span>' +
+        '<span class="sc">' + (m.thisWeek || 0) + '<small>/' + weekly + '</small></span></button>';
+    }).join('') + '</div>' +
+    (lastWeekText(w) ? '<p class="crew-last">' + icon('flag') + esc(lastWeekText(w)) + '</p>' : '') +
+    (invitedNames.length ? '<p class="muted small">Invited: ' + esc(invitedNames.join(', ')) + '. They count once they accept.</p>' : '') +
+    (race ? '<a class="card crew-race" href="' + '#/mine/race/' + encodeURIComponent(race.id) + '?tab=races"><span class="grow"><b>' + esc(race.name) + '</b><small class="muted block">' +
+      esc(countdownShort(race, todayKey())) + '</small></span>' + icon('chevron') + '</a>' : '') +
+    '<p class="muted small foot">' + icon('lock') + ' ' + esc(CREW_PRIVACY) + (d.updatedAt ? ' Updated ' + esc(fmt(d.updatedAt, { day: 'numeric', month: 'short' }) + ', ' + time(d.updatedAt)) + '.' : '') + '</p>' +
+    '<div class="row2"><button class="btn glass" data-cact="share">' + icon('share') + ' Share link</button><button class="btn glass red-text" data-cact="leave">Leave crew</button></div></div>';
+}
+
+/** Race page (racesui.js): the member's crew for this race, an invite to one, or Start a crew. */
+export function crewBlockHTML(r) {
+  const list = ((S.challenges && S.challenges.challenges) || []).filter((c) => isCrew(c) && c.raceId === r.id);
+  const crew = list.find((c) => c.myStatus === 'accepted') || list[0];
+  if (crew && crew.myStatus === 'invited') {
+    return '<div class="crew-block"><p><b>' + esc(crew.ownerName || 'A friend') + '</b> invited you to a crew: ' + esc(crew.title) + ' · ' + esc(weeklyText(crew.weekly)) + '</p>' +
+      '<div class="row2"><button class="btn lime sm" data-crew="accept" data-id="' + esc(crew.id) + '">Accept</button><button class="btn glass sm" data-crew="decline" data-id="' + esc(crew.id) + '">Decline</button></div>' +
+      '<p class="muted small">' + esc(CREW_PRIVACY) + '</p></div>';
+  }
+  if (crew) {
+    const n = (crew.participants || []).filter((x) => x.status === 'accepted').length;
+    return '<a class="crew-block crew-link" href="' + challengeRoute(crew.id) + '"><span class="grow"><b>' + icon('run') + esc(crew.title) + '</b><small class="muted block">' +
+      esc(n + (n === 1 ? ' person' : ' people') + ' · ' + weeklyText(crew.weekly)) + '</small></span>' + icon('chevron') + '</a>';
+  }
+  return '<div class="crew-block"><p><b>Train with friends</b><br><span class="muted small">' + esc(CREW_INTRO) + '</span></p>' +
+    '<button class="btn glass sm" data-crew="new" data-race="' + esc(r.id) + '">' + icon('plus') + ' Start a crew</button></div>';
+}
+
+/** Clicks in a race page's crew block; true when it was one. */
+export function crewClick(e, rerender) {
+  const b = e.target.closest('[data-crew]');
+  if (!b) return false;
+  const a = b.dataset.crew;
+  if (a === 'new') {
+    const r = (S.races || []).find((x) => x.id === b.dataset.race);
+    if (r) openNewCrew(r);
+  } else if (a === 'accept' || a === 'decline') respond(b, b.dataset.id, a === 'accept').then(() => rerender && rerender());
+  return true;
+}
+
+/** Start a crew: name, sessions a week (from the Train for it plan) and friends; ends on your race day. */
+export async function openNewCrew(r) {
+  if (!(await serverConsent())) return;
+  const mine = St.myRaces().find((m) => keyOf(m) === r.id);
+  const f = { name: crewName(r), weekly: defaultWeekly(mine && mine.plan), invite: new Set() };
+  const s = sheet('Start a crew', loading(), { cls: 'tall' });
+  if (!S.challenges) await St.loadChallenges().catch(() => {});
+  if (!S.friends.length) await St.loadSocial().catch(() => {});
+  const uses = new Set((S.challenges && S.challenges.usesBruce) || []);
+  const going = new Set(St.friendsGoing(r.id).map((u) => u.id));
+  const friends = S.friends.map((x) => x.friend_user).filter(Boolean).sort((a, b) => (uses.has(b.id) - uses.has(a.id)) || (a.first_name || '').localeCompare(b.first_name || ''));
+  const day = (mine && mine.day) || r.date;
+  draw();
+
+  function draw() {
+    s.body.innerHTML = '<p class="sheet-text">' + esc(CREW_INTRO) + '</p>' +
+      '<div class="card form-rows"><label class="frow"><span class="grow">Crew name</span><input type="text" id="nc-name" maxlength="80" value="' + esc(f.name) + '"></label>' +
+      '<div class="frow"><span class="grow">' + esc(weeklyText(f.weekly)) + '<small class="muted block">From your Train for it plan. Everything counts, Monday to Sunday.</small></span>' +
+      '<span class="stepper"><button data-step="-1" aria-label="Fewer">−</button><b>' + f.weekly + '</b><button data-step="1" aria-label="More">+</button></span></div>' +
+      '<div class="frow"><span class="grow">Until race day</span><span class="muted">' + esc(shortDay(day, true, true)) + '</span></div></div>' +
+      '<h3 class="section-head">Invite friends</h3>' + (friends.length ? '<div class="card menu">' + friends.map((u) => {
+        const on = f.invite.has(u.id);
+        return '<button class="mrow pick-row' + (on ? ' on' : '') + '" data-u="' + u.id + '" aria-pressed="' + on + '">' + avatar(u, 34) + '<span class="grow"><b>' + esc(u.first_name || '') + ' ' + esc(u.last_name || '') + '</b><small class="muted block">' +
+          (uses.has(u.id) ? (going.has(u.id) ? 'Going · uses Brüce' : 'Uses Brüce') : 'Not on Brüce yet · send link') + '</small></span><span class="check">' + icon(uses.has(u.id) || on ? 'check' : 'share') + '</span></button>';
+      }).join('') + '</div>' : '<p class="muted">Add friends in the Bruce app to invite them.</p>') +
+      '<p class="muted small foot">' + icon('lock') + ' ' + esc(CREW_PRIVACY) + '</p>' +
+      '<button class="btn lime" data-go>Start crew · ' + (f.invite.size + 1) + (f.invite.size ? ' people' : ' person') + '</button>';
+    s.body.querySelectorAll('[data-step]').forEach((b) => b.addEventListener('click', () => { f.weekly = Math.max(WEEKLY.min, Math.min(WEEKLY.max, f.weekly + +b.dataset.step)); draw(); }));
+    s.body.querySelectorAll('[data-u]').forEach((b) => b.addEventListener('click', () => { const id = +b.dataset.u; if (f.invite.has(id)) f.invite.delete(id); else f.invite.add(id); draw(); }));
+    $('#nc-name', s.body).addEventListener('input', (e) => { f.name = e.target.value; });
+    const go = s.body.querySelector('[data-go]');
+    go.addEventListener('click', () => run(go, async () => {
+      const title = f.name.trim() || crewName(r);
+      const created = await Server.createChallenge({ title, raceId: r.id, weekly: f.weekly, metric: 'visits', start: todayKey(), end: day, repeatMonthly: false, invite: [...f.invite] });
+      if (!St.myRaces().some((m) => keyOf(m) === r.id)) St.saveMyRaces(St.myRaces().concat(fromRace(r)));
+      await St.loadChallenges().catch(() => {});
+      s.close();
+      toast('Crew started');
+      const outside = friends.filter((u) => f.invite.has(u.id) && !uses.has(u.id));
+      location.hash = challengeRoute(created.id);
+      if (outside.length) sendLinkSheet(created, outside);
+    }));
   }
 }
 

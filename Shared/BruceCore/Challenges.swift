@@ -43,8 +43,12 @@ struct ChallengeSummary: Codable, Identifiable, Hashable {
     var createdAt: String? = nil
     /// Preview only.
     var participantCount: Int? = nil
+    /// A race crew (RaceSocial.swift): the catalog race it trains for and the sessions a week; nil for a challenge.
+    var raceId: String? = nil
+    var weekly: Int? = nil
 
     var isInvite: Bool { myStatus == "invited" }
+    var isCrew: Bool { raceId != nil && weekly != nil }
     var accepted: [ChallengeParticipant] { (participants ?? []).filter { $0.status == "accepted" } }
     var displayTitle: String { title?.isEmpty == false ? title! : Challenge.metricTitle(metric, target: target) }
     /// "everything counts" / "Yoga counts".
@@ -104,10 +108,33 @@ struct ChallengeMonth: Decodable, Hashable, Identifiable {
     var id: String { month }
 }
 
+/// A crew's weeks (`GET /challenges/<id>` `crew`): each accepted member's visits this week and last week.
+struct CrewWeeks: Decodable, Hashable {
+    struct Range: Decodable, Hashable { var start: String? = nil; var end: String? = nil; var hit: Int? = nil }
+    struct Member: Decodable, Hashable, Identifiable {
+        let userId: Int
+        var name: String? = nil
+        var thisWeek: Int? = nil
+        /// nil in the crew's first week.
+        var lastWeek: Int? = nil
+        var id: Int { userId }
+    }
+    var raceId: String? = nil
+    var weekly: Int? = nil
+    var size: Int? = nil
+    var week: Range? = nil
+    /// nil in the crew's first week; `hit`: members who reached `weekly`.
+    var lastWeek: Range? = nil
+    var weeksLeft: Int? = nil
+    var members: [Member] = []
+}
+
 struct ChallengeDetail: Decodable, Hashable {
     let challenge: ChallengeSummary
     var leaderboard: [ChallengeEntry]? = nil
     var months: [ChallengeMonth]? = nil
+    /// Crews only.
+    var crew: CrewWeeks? = nil
     var updatedAt: String? = nil
     /// Preview of a challenge the caller is not in (share link): whether they may join.
     var joinable: Bool? = nil
@@ -125,9 +152,17 @@ struct ChallengeDraft: Hashable {
     var end: Date
     var repeatMonthly = true
     var invite: [Int] = []
+    /// A crew: the catalog race, the sessions a week and its name (the challenge ends on race day, `end`).
+    var raceId: String? = nil
+    var weekly: Int? = nil
+    var name: String? = nil
 
-    var title: String { Challenge.metricTitle(metric, target: metric == "target" ? target : nil) }
+    var title: String { name ?? Challenge.metricTitle(metric, target: metric == "target" ? target : nil) }
     var body: [String: Any] {
+        if let raceId, let weekly {
+            return ["title": title, "raceId": raceId, "weekly": weekly, "start": Challenge.dayString(start), "end": Challenge.dayString(end),
+                    "metric": "visits", "repeatMonthly": false, "invite": invite]
+        }
         var b: [String: Any] = ["title": title, "metric": metric, "start": Challenge.dayString(start), "end": Challenge.dayString(end),
                                 "repeatMonthly": repeatMonthly, "invite": invite]
         if metric == "target" { b["target"] = target }
@@ -240,6 +275,22 @@ extension AppModel {
 
     /// `POST /challenges`; returns the new challenge's id.
     func createChallenge(_ d: ChallengeDraft) async -> String? {
+        if AppModel.demo, let raceId = d.raceId, let weekly = d.weekly {
+            var (c, detail) = demoCrewChallenge()
+            let id = "demoCrew\(challenges.count + 1)"
+            let people = [ChallengeParticipant(userId: 0, name: "Demo", status: "accepted")] + d.invite.map { ChallengeParticipant(userId: $0, name: friendName($0), status: "invited") }
+            c = ChallengeSummary(id: id, title: d.title, metric: "visits", start: Challenge.dayString(d.start), end: Challenge.dayString(d.end), repeatMonthly: false,
+                                 ownerId: 0, ownerName: "Demo", myStatus: "accepted", participants: people, period: c.period, shareUrl: Challenge.shareURL(id).absoluteString,
+                                 raceId: raceId, weekly: weekly)
+            detail = ChallengeDetail(challenge: c, leaderboard: [ChallengeEntry(userId: 0, name: "Demo", status: "accepted", rank: 1, score: 0, daily: [])]
+                                     + d.invite.map { ChallengeEntry(userId: $0, name: friendName($0), status: "invited") }, months: [],
+                                     crew: CrewWeeks(raceId: raceId, weekly: weekly, size: 1, week: detail.crew?.week, lastWeek: nil, weeksLeft: detail.crew?.weeksLeft,
+                                                     members: [CrewWeeks.Member(userId: 0, name: "Demo", thisWeek: 2, lastWeek: nil)]))
+            challenges.insert(c, at: 0)
+            challengeDetails[id] = detail
+            flash("Demo: crew started (offline, nothing sent)")
+            return id
+        }
         if AppModel.demo {
             let c = demoChallenge(id: "demo\(challenges.count + 1)", title: d.title, metric: d.metric, target: d.metric == "target" ? d.target : nil,
                                   owner: (0, "Demo"), mine: "accepted", people: [(0, "Demo", "accepted")] + d.invite.map { ($0, friendName($0), "invited") })
@@ -254,7 +305,7 @@ extension AppModel {
             let c = try await ChallengeServer.create(d, session: s)
             challenges.insert(c, at: 0)
             await loadChallenge(c.id)
-            flash("Challenge started")
+            flash(d.raceId == nil ? "Challenge started" : "Crew started")
             return c.id
         } catch { flash(Challenge.message(error)); return nil }
     }
@@ -297,12 +348,14 @@ extension AppModel {
 
     func loadDemoChallenges() {
         challengesLoaded = true
-        usesBruce = [7, 11, 12]
+        usesBruce = [7, 9, 11, 12]
         let a = demoChallenge(id: "demoOct", title: "Most classes", metric: "classes", target: nil, owner: (7, "Robin"), mine: "accepted",
                               people: [(7, "Robin", "accepted"), (0, "Demo", "accepted"), (12, "Sam", "accepted"), (11, "Alex", "accepted")])
         let b = demoChallenge(id: "demoHits", title: "Everyone hits 12", metric: "target", target: 12, owner: (12, "Sam"), mine: "invited",
                               people: [(12, "Sam", "accepted"), (11, "Alex", "accepted"), (0, "Demo", "invited")])
-        challenges = [b, a]
+        let (crew, crewDetail) = demoCrewChallenge()
+        challenges = [b, crew, a]
+        challengeDetails[crew.id] = crewDetail
         let day = a.period?.day ?? 14
         func daily(_ pattern: [Int]) -> [Int] { (0..<day).map { pattern[$0 % pattern.count] } }
         let iso = ISO8601DateFormatter()
@@ -366,5 +419,6 @@ extension AppModel {
 
 enum ChallengeCopy {
     static let privacy = "Friends in this challenge see your visits: totals, class types and studios. Each friend accepts separately. Leave anytime; your numbers are deleted."
+    static let crewPrivacy = "Friends in this crew see your visits: sessions each week, class types and studios. Each friend accepts separately. Leave anytime; your numbers are deleted."
     static let serverConsent = "Challenges run on our server (the one that can auto-book for you). Joining stores your Bruce login there so it can read your visits once a day for the leaderboard. Leaving a challenge deletes your numbers."
 }

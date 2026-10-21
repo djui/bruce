@@ -54,6 +54,8 @@ enum SheetRoute: Hashable {
     case editRace(UUID?)
     /// Train for it: a race's plan by its My races key (RacePlanner.swift).
     case racePlan(String)
+    /// Start a crew for a race by its My races key (RaceSocial.swift).
+    case newCrew(String)
 }
 
 @MainActor
@@ -237,12 +239,18 @@ final class AppModel {
     var racesError: String?
     @ObservationIgnored var racesFetchedAt: Date?
     @ObservationIgnored var raceReminderTask: Task<Void, Never>?
+    /// `PUT /me/races` one after the other (Races.swift `syncRaceServer`), so a quick on and off reaches the server in order.
+    @ObservationIgnored var raceSyncTask: Task<Void, Never>?
     /// Train for it (RacePlanner.swift): this week's slots per race key, kept while the data they come from is the same.
     @ObservationIgnored var planWeekCache: [String: (sig: String, value: PlanWeekStatus)] = [:]
     /// My races (Races.swift), device only; demo mode keeps them in memory.
     var myRaces: [MyRace] = AppModel.demo ? [] : MyRaces.load()
     /// My classes shows its Races segment (Home's "My races", a race reminder).
     var showRacesInMyClasses = false
+    /// Friends going (RaceSocial.swift): the caller's Bruce friends who share a race, by race id, from our server.
+    var raceGoing = RaceGoing()
+    @ObservationIgnored var raceGoingAt: Date?
+    @ObservationIgnored var raceGoingTask: Task<Void, Never>?
     /// Explore switches to this segment when set (0 Studios, 1 Classes, 2 Races), then clears it.
     var exploreTabRequest: Int?
     /// Challenges with friends (Challenges.swift), from the auto-book server.
@@ -683,6 +691,7 @@ final class AppModel {
         bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
         visitHistory = nil; recommendations = []; challenges = []; challengeDetails = [:]; usesBruce = []; challengesLoaded = false
+        raceGoing = RaceGoing(); raceGoingAt = nil
         Task { await refreshAutoBook() }   // logged out: stops the booker and clears its notifications
         dismissSheets()
     }
@@ -706,6 +715,7 @@ final class AppModel {
         bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []
         user = nil; membership = nil; visitLimits = []; blockInfo = nil; paymentMethods = []
         visitHistory = nil; recommendations = []; challenges = []; challengeDetails = [:]; usesBruce = []; challengesLoaded = false
+        raceGoing = RaceGoing(); raceGoingAt = nil
         Task { await refreshAutoBook() }   // logged out: stops the booker and clears its notifications
         resetLoadedData()
         status = "Your session expired. Please log in again."

@@ -121,6 +121,8 @@ export const Server = {
   putGoals: (goals) => server('PUT', '/me/goals', { goals }),
   /** This device's races with race-week or day-before reminders (raceplan.js); `[]` clears them. */
   putRaces: (races, device) => server('PUT', '/me/races', { device, races }),
+  /** Friends going: {going: {raceId: [{userId, name}]}, sharing, mine} (crews.js). */
+  going: () => server('GET', '/races/going'),
 };
 
 const yyyymmdd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');

@@ -119,6 +119,11 @@ struct Race: Codable, Identifiable, Hashable {
         guard let h = url?.host?.lowercased() else { return nil }
         return h.hasPrefix("www.") ? String(h.dropFirst(4)) : h
     }
+    /// The race's own results page (https only), linked after the race.
+    var results: URL? {
+        guard let s = resultsUrl, let u = URL(string: s), u.scheme?.lowercased() == "https", u.host != nil else { return nil }
+        return u
+    }
     var symbol: String { sport?.symbol ?? type.symbol }
     /// "HYROX · Solna", "Ski · Klassiker", "Running · Gothenburg".
     var kindLabel: String {
@@ -414,6 +419,11 @@ struct MyRace: Codable, Identifiable, Hashable {
     var remindEve = false
     /// Train for it (RacePlanner.swift); nil without a plan.
     var plan: RacePlanSettings?
+    /// "Show friends I'm going" (RaceSocial.swift): shared with Bruce friends who share a race too, through our server.
+    /// Catalog races only; off by default.
+    var going = false
+    /// When going was last switched on or off here: the switch flipped last wins on every device (server/README.md).
+    var goingAt: Date?
     var addedAt = Date()
 
     init(race: Race, day: String? = nil, note: String? = nil, remindSignup: Bool = false, remindPrice: Bool = false) {
@@ -426,7 +436,7 @@ struct MyRace: Codable, Identifiable, Hashable {
     }
 
     enum CodingKeys: String, CodingKey {
-        case id, raceId, name, date, endDate, city, url, type, sport, day, note, remindSignup, remindPrice, remindWeek, remindEve, plan, addedAt
+        case id, raceId, name, date, endDate, city, url, type, sport, day, note, remindSignup, remindPrice, remindWeek, remindEve, plan, going, goingAt, addedAt
     }
     /// Missing fields get their defaults, so files written by older and newer versions both load.
     init(from decoder: Decoder) throws {
@@ -448,6 +458,8 @@ struct MyRace: Codable, Identifiable, Hashable {
         remindEve = (try? c.decodeIfPresent(Bool.self, forKey: .remindEve)) ?? false
         // A plan this version can't read is dropped, not the race.
         plan = try? c.decodeIfPresent(RacePlanSettings.self, forKey: .plan)
+        going = (try? c.decodeIfPresent(Bool.self, forKey: .going)) ?? false
+        goingAt = try? c.decodeIfPresent(Date.self, forKey: .goingAt)
         addedAt = try c.decodeIfPresent(Date.self, forKey: .addedAt) ?? Date()
     }
 
@@ -806,16 +818,16 @@ extension AppModel {
         Task { await syncRaceServer() }
     }
 
-    /// `PUT /me/races` with this device's races that have race-week or day-before reminders (at most 20), only while the
-    /// server is on: the server sends them by push and email (server/README.md), and the device leaves out the ones the
-    /// server confirmed. Skipped when nothing changed; failures are silent and the device keeps its notifications.
-    func syncRaceServer() async {
-        guard !AppModel.demo, tokenUsable, let s = session, AutoBookServer.isConfigured, AutoBookServer.booksForMe else { return }
-        let list = upcomingMyRaces.filter { $0.mine.remindWeek || $0.mine.remindEve }.prefix(20)
-        let races: [[String: Any]] = list.map { e in
+    /// The races `PUT /me/races` sends: race-day reminders or going on, and going switched off here (so the server
+    /// hears it even without a reminder). Going carries the moment it was flipped.
+    static func raceSyncBody(_ upcoming: [MyRaceEntry], plan: (MyRaceEntry) -> RacePlan?) -> [[String: Any]] {
+        let switched = { (e: MyRaceEntry) in e.mine.goingAt != nil && e.mine.raceId != nil && !e.race.isCustom }
+        let list = upcoming.filter { $0.mine.remindWeek || $0.mine.remindEve || $0.sharesGoing || switched($0) }.prefix(20)
+        return list.map { e in
             var o: [String: Any] = ["id": e.mine.key, "name": e.race.name, "date": e.day, "remindWeek": e.mine.remindWeek, "remindEve": e.mine.remindEve]
+            if switched(e), let at = e.mine.goingAt { o["going"] = e.mine.going; o["goingAt"] = Int(at.timeIntervalSince1970 * 1000) }
             if let u = e.race.url { o["url"] = u.absoluteString }
-            if let p = racePlan(for: e) {
+            if let p = plan(e) {
                 var plan: [String: Any] = ["perWeek": p.settings.perWeek, "weeks": p.blockWeeks, "startedOn": p.settings.startedOn]
                 if let w = p.raceWeek {
                     plan["raceWeek"] = p.rows.compactMap { c in w.count(c) > 0 ? ["key": c.rawValue, "title": c.short, "count": w.count(c)] : nil }
@@ -824,6 +836,23 @@ extension AppModel {
             }
             return o
         }
+    }
+
+    /// `PUT /me/races` with this device's races that have race-week or day-before reminders or are shared as going (at
+    /// most 20), only while the server is on: the server sends the reminders by push and email (server/README.md), and
+    /// the device leaves out the ones the server confirmed; going races are shown to friends (RaceSocial.swift). Skipped
+    /// when nothing changed; failures are silent and the device keeps its notifications.
+    func syncRaceServer() async {
+        // One after the other: each one reads My races when it runs, so the last change is the one sent last.
+        let previous = raceSyncTask
+        let t = Task { await previous?.value; await self.sendRaceServer() }
+        raceSyncTask = t
+        await t.value
+    }
+
+    private func sendRaceServer() async {
+        guard !AppModel.demo, tokenUsable, let s = session, AutoBookServer.isConfigured, AutoBookServer.booksForMe else { return }
+        let races = AppModel.raceSyncBody(upcomingMyRaces) { self.racePlan(for: $0) }
         let body: [String: Any] = ["device": RaceReminders.deviceId, "races": races]
         let signature = (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) }
         let last = UserDefaults.standard.string(forKey: "raceReminderSync")
@@ -833,8 +862,11 @@ extension AppModel {
         guard let data = try? await BruceAPI.send(AutoBookServer.request("PUT", "me/races", session: s, body: body)) else { return }
         let r = try? JSONDecoder().decode(R.self, from: data)
         UserDefaults.standard.set(signature, forKey: "raceReminderSync")
+        UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "raceSyncAt")
         UserDefaults.standard.set(r?.push == true ? (r?.ids ?? []) : [], forKey: "raceServerIds")
         syncRaceReminders()
+        // Sharing a race (or not any more) changes what the server shows of friends going.
+        await loadRaceGoing(force: true)
     }
 
     /// Re-plans the race reminders, one sync after the other. Not before the catalog is there: without it no reminder

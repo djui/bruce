@@ -102,6 +102,25 @@ enum Copy {
     static let raceEventFooter = "Added with Brüce, an unofficial Bruce Studios client. Not affiliated with the race or its organiser; check the race's own page for changes."
     static let raceCatalogFooter = "Races are picked by hand from each race's own page, with the day they were checked. Brüce links to those pages and is not affiliated with any race or organiser."
 
+    // MARK: Friends going, crews, after the race (RaceSocial.swift)
+
+    static let goingToggle = "Show friends I'm going"
+    static let goingHint = "Your Bruce friends who share their races in Brüce see that you're going, and you see theirs. Off by default, per race."
+    static let goingNeedsServer = "Going is shared through our server: switch it on in Menu › Auto-book › Let the server book for me."
+    static let goingShareToSee = "Friends who share their races show up here once you share one too."
+    static let goingConsentTitle = "Show friends you're going?"
+    static let goingConsent = "Our server stores your Bruce user id, this race and that your Bruce friends may see it. Only friends who share a race themselves see it, nobody else. It's deleted when you switch this off, remove the race, after race day, or with your data on the server."
+    static let goingOn = "Friends can see you're going"
+    static let goingOnAdded = "Added to My races. Friends can see you're going"
+    static let goingOff = "Not shared any more"
+    static let crewIntro = "A crew trains for the race together: a challenge until race day where everyone aims for the same sessions a week. On Sundays you hear how the crew did."
+    static let crewWeeklyHint = "From your Train for it plan. Everything counts: classes, check-ins and drop-ins, Monday to Sunday."
+    static let crewUpdatesHint = "Sundays at 19:00: how many in your crew hit their sessions that week. Nobody is named."
+    static let raceResults = "See results"
+    static let raceRecoveryTitle = "Recovery week"
+    static let raceRecoveryHint = "An easy week after the race, from the Train for it mix. Brüce books nothing for you."
+    static func raceOver(_ r: Race) -> String { r.results == nil ? "The race is over." : "The race is over. Results are on the race's own site." }
+
     // MARK: Train for it (RacePlanner.swift)
 
     static let planTrainForIt = "Train for it"

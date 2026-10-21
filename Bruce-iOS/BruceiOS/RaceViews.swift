@@ -30,10 +30,12 @@ struct BibDate: View {
     var hole: some View { Circle().fill(Color.black.opacity(0.2)).frame(width: 4 * scale, height: 4 * scale) }
 }
 
-/// Explore › Races card: bib date, type and city, name, venue and countdown, the price or status pill.
+/// Explore › Races card: bib date, type and city, name, venue and countdown, the price or status pill, friends going.
 struct RaceCard: View {
     let race: Race
     var mine = false
+    /// Friends going (RaceSocial.swift).
+    var going: [BruceAPI.UserLite] = []
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             BibDate(race: race)
@@ -42,11 +44,12 @@ struct RaceCard: View {
                 Text(race.name).bruceFont(19, weight: .heavy, width: .expanded).lineLimit(2).minimumScaleFactor(0.75)
                 Text(subtitle).bruceFont(14, weight: .medium).opacity(0.9).lineLimit(2)
                 let pill = race.pillText()
-                if !pill.isEmpty {
-                    Text(pill).bruceFont(13, weight: .semibold)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .background(.white.opacity(0.22), in: Capsule())
-                        .padding(.top, 5)
+                if !pill.isEmpty || !going.isEmpty {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 10) { pillView(pill); faces }
+                        VStack(alignment: .leading, spacing: 6) { pillView(pill); faces }
+                    }
+                    .padding(.top, 5)
                 }
             }
             .foregroundStyle(.white)
@@ -72,6 +75,17 @@ struct RaceCard: View {
     var subtitle: String {
         [race.venue ?? race.format, race.distanceText, race.countdownShort()].compactMap { $0?.isEmpty == false ? $0 : nil }
             .joined(separator: " · ")
+    }
+
+    @ViewBuilder func pillView(_ pill: String) -> some View {
+        if !pill.isEmpty {
+            Text(pill).bruceFont(13, weight: .semibold)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(.white.opacity(0.22), in: Capsule())
+        }
+    }
+    @ViewBuilder var faces: some View {
+        if !going.isEmpty { GoingFaces(users: going, size: 24, onDark: true) }
     }
 }
 
@@ -147,7 +161,7 @@ struct RaceList: View {
                 Text(g.title.uppercased()).bruceFont(13, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
                     .padding(.top, 10).accessibilityAddTraits(.isHeader)
                 ForEach(g.races) { r in
-                    NavigationLink(value: Route.race(r.id)) { RaceCard(race: r, mine: m.isMyRace(r.id)) }
+                    NavigationLink(value: Route.race(r.id)) { RaceCard(race: r, mine: m.isMyRace(r.id), going: m.friendsGoing(r.id)) }
                         .buttonStyle(.plain)
                 }
             }
@@ -156,6 +170,7 @@ struct RaceList: View {
             }
         }
         .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
+        .task { await m.loadRaceGoing() }
     }
 }
 
@@ -196,29 +211,42 @@ struct RaceDetailView: View {
                 .ignoresSafeArea()
             }
         }
-        .task { await m.loadRaces() }
+        .task { await m.loadRaces(); await m.loadRaceGoing(); await m.loadChallenges() }
         .onAppear { noteDraft = mine?.note ?? "" }
         .onDisappear { saveNote() }
     }
 
     func content(_ r: Race) -> some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                hero(r)
-                VStack(alignment: .leading, spacing: 16) {
-                    facts(r)
-                    if let u = r.url { signupButton(r, u) }
-                    if !r.isCustom && !r.checkedOn.isEmpty { feeCard(r) }
-                    if r.opensLater() { signupCard(r) }
-                    if let e = m.myRaceEntries.first(where: { $0.mine.key == raceId }), let plan = m.racePlan(for: e) { planCard(e, plan) }
-                    if let mine { yourRace(r, mine) }
-                    footnotes(r)
+        let past = r.isPast(day: mine?.day)
+        let entry = m.myRaceEntries.first { $0.mine.key == raceId }
+        let going = m.friendsGoing(r.id)
+        return ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    hero(r)
+                    VStack(alignment: .leading, spacing: 16) {
+                        facts(r, past: past)
+                        if past { RaceAfterCard(race: r, entry: entry) }
+                        // Mockup 2: the friends going right above the sign-up link.
+                        if !past, !going.isEmpty { GoingFaces(users: going, size: 30) }
+                        if let u = r.url { signupButton(r, u, past: past) }
+                        if !past, !r.isCustom && !r.checkedOn.isEmpty { feeCard(r) }
+                        if !past, r.opensLater() { signupCard(r) }
+                        if let e = entry, let plan = m.racePlan(for: e) { planCard(e, plan) }
+                        if !past, !r.isCustom { RaceFriendsCard(race: r).id("friends") }
+                        if let mine { yourRace(r, mine) }
+                        footnotes(r)
+                    }
+                    .padding(Theme.gutter)
                 }
-                .padding(Theme.gutter)
+            }
+            .ignoresSafeArea(edges: .top)
+            .safeAreaInset(edge: .bottom) { actionBar(r) }
+            .onAppear {
+                if m.demoScrollBottom { m.demoScrollBottom = false
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { proxy.scrollTo("friends", anchor: UnitPoint(x: 0.5, y: 0.2)) } }
             }
         }
-        .ignoresSafeArea(edges: .top)
-        .safeAreaInset(edge: .bottom) { actionBar(r) }
     }
 
     func hero(_ r: Race) -> some View {
@@ -241,13 +269,13 @@ struct RaceDetailView: View {
         .accessibilityElement(children: .combine)
     }
 
-    func facts(_ r: Race) -> some View {
+    func facts(_ r: Race, past: Bool) -> some View {
         VStack(alignment: .leading, spacing: 9) {
             Text(r.longDateText(day: mine?.day)).bruceFont(20, weight: .bold).fixedSize(horizontal: false, vertical: true)
             if let f = r.factsLine { line("point.topleft.down.to.point.bottomright.curvepath", f) }
             line("clock", r.countdownText(day: mine?.day))
-            if let s = r.signupLine() { line("ticket", s) }
-            if r.status != .open, !r.opensLater(), let s = r.statusText() { line(RaceStyle.statusSymbol(r.status), s) }
+            if !past, let s = r.signupLine() { line("ticket", s) }
+            if !past, r.status != .open, !r.opensLater(), let s = r.statusText() { line(RaceStyle.statusSymbol(r.status), s) }
             if r.klassiker == true { line("rosette", "A leg of En Svensk Klassiker") }
         }
     }
@@ -302,9 +330,9 @@ struct RaceDetailView: View {
         .glassEffect(.regular.tint(Theme.lime.opacity(0.12)), in: .rect(cornerRadius: 24))
     }
 
-    func signupButton(_ r: Race, _ u: URL) -> some View {
+    func signupButton(_ r: Race, _ u: URL, past: Bool) -> some View {
         let host = r.host ?? "the race page"
-        let title = r.isCustom ? "Open \(host)" : (r.status == .open || r.status == .opensSoon ? "Sign up on \(host)" : "Open \(host)")
+        let title = r.isCustom || past ? "Open \(host)" : (r.status == .open || r.status == .opensSoon ? "Sign up on \(host)" : "Open \(host)")
         return Button { openURL(u) } label: {
             Label(title, systemImage: "arrow.up.right.square").bruceFont(17, weight: .semibold)
                 .foregroundStyle(Theme.ink)
@@ -469,6 +497,7 @@ struct PriceLadder: View {
 
 struct MyRacesSection: View {
     @Environment(AppModel.self) var m
+    @Environment(\.openURL) private var openURL
     var body: some View {
         let up = m.upcomingMyRaces, past = m.pastMyRaces
         VStack(alignment: .leading, spacing: 12) {
@@ -485,8 +514,12 @@ struct MyRacesSection: View {
                     .buttonStyle(.glass)
                 }
             }
+            if let jr = m.justRaced { JustRacedCard(entry: jr.entry, recovery: jr.recovery) }
             if let next = up.first {
-                NavigationLink(value: Route.race(next.race.id)) { NextRaceBanner(entry: next, plan: m.racePlan(for: next)) }.buttonStyle(.plain)
+                NavigationLink(value: Route.race(next.race.id)) {
+                    NextRaceBanner(entry: next, plan: m.racePlan(for: next), going: m.friendsGoing(next.race.id))
+                }
+                .buttonStyle(.plain)
                 if m.racePlan(for: next) == nil, (next.daysToGo() ?? 0) > 0 { TrainForItPrompt(entry: next) }
             }
             // This week of the running plan (the next race's, or a race just done in its recovery week).
@@ -496,7 +529,7 @@ struct MyRacesSection: View {
                 rows(Array(up.dropFirst()))
             }
             if !past.isEmpty {
-                header("Done", past.count == 1 ? "1 race" : "\(past.count) races")
+                header("Past", past.count == 1 ? "1 race" : "\(past.count) races").id("racesPast")
                 rows(past)
             }
             if !(up.isEmpty && past.isEmpty) {
@@ -504,7 +537,7 @@ struct MyRacesSection: View {
             }
         }
         .padding(.horizontal, Theme.gutter).padding(.vertical, 10)
-        .task { await m.loadRaces() }
+        .task { await m.loadRaces(); await m.loadRaceGoing() }
     }
 
     func header(_ t: String, _ trailing: String) -> some View {
@@ -520,7 +553,15 @@ struct MyRacesSection: View {
     func rows(_ list: [MyRaceEntry]) -> some View {
         VStack(spacing: 0) {
             ForEach(list) { e in
-                NavigationLink(value: Route.race(e.race.id)) { MyRaceRow(entry: e) }.buttonStyle(.plain)
+                HStack(spacing: 0) {
+                    NavigationLink(value: Route.race(e.race.id)) { MyRaceRow(entry: e, going: e.isPast() ? [] : m.friendsGoing(e.race.id)) }.buttonStyle(.plain)
+                    // After the race: the results on the race's own site.
+                    if e.isPast(), let u = e.race.results {
+                        Button { openURL(u) } label: { Text(Copy.raceResults).bruceFont(14, weight: .semibold).padding(.horizontal, 10).frame(height: 32) }
+                            .buttonStyle(.glass).padding(.trailing, 12)
+                            .accessibilityHint("Opens \(e.race.name) results in Safari")
+                    }
+                }
                 if e.id != list.last?.id { Divider().padding(.leading, 84) }
             }
         }
@@ -532,6 +573,7 @@ struct MyRacesSection: View {
 struct NextRaceBanner: View {
     let entry: MyRaceEntry
     var plan: RacePlan? = nil
+    var going: [BruceAPI.UserLite] = []
     var body: some View {
         let r = entry.race
         VStack(alignment: .leading, spacing: 6) {
@@ -554,6 +596,7 @@ struct NextRaceBanner: View {
                 PlanPhaseStrip(plan: plan).padding(.top, 10)
                 Text(plan.headline()).bruceFont(14, weight: .semibold)
             }
+            if !going.isEmpty { GoingFaces(users: going, size: 24, onDark: true).padding(.top, 6) }
         }
         .foregroundStyle(.white)
         .padding(16)
@@ -571,6 +614,7 @@ struct NextRaceBanner: View {
 
 struct MyRaceRow: View {
     let entry: MyRaceEntry
+    var going: [BruceAPI.UserLite] = []
     var body: some View {
         let r = entry.race
         HStack(spacing: 14) {
@@ -580,6 +624,7 @@ struct MyRaceRow: View {
                 Text(r.name).bruceFont(16, weight: .semibold).lineLimit(2)
                 Text(entry.hint() ?? [r.venue ?? (r.city.isEmpty ? nil : r.city), r.distanceText].compactMap { $0 }.joined(separator: " · "))
                     .bruceFont(14).foregroundStyle(Theme.secondary).lineLimit(2)
+                if !going.isEmpty { GoingFaces(users: going, size: 20).padding(.top, 2) }
             }
             .foregroundStyle(Theme.ink)
             Spacer(minLength: 4)
@@ -590,7 +635,8 @@ struct MyRaceRow: View {
         .accessibilityElement(children: .combine)
     }
     var countdown: String {
-        guard let d = entry.daysToGo(), !entry.isPast() else { return entry.isPast() ? "Done" : "" }
+        // A past race with results has its See results button there instead.
+        guard let d = entry.daysToGo(), !entry.isPast() else { return entry.isPast() && entry.race.results == nil ? "Done" : "" }
         return d <= 0 ? "Today" : "\(d) d"
     }
 }

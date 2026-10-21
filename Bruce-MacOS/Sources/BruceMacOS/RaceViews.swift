@@ -34,6 +34,8 @@ struct BibDate: View {
 struct RaceCard: View {
     let race: Race
     var mine = false
+    /// Friends going (RaceSocial.swift).
+    var going: [BruceAPI.UserLite] = []
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
             BibDate(race: race)
@@ -49,6 +51,7 @@ struct RaceCard: View {
                         .background(Capsule().fill(.white.opacity(0.22)))
                         .padding(.top, 5)
                 }
+                if !going.isEmpty { GoingFaces(users: going, onDark: true).padding(.top, 4) }
             }
             .foregroundStyle(.white)
             Spacer(minLength: 0)
@@ -100,7 +103,7 @@ struct RaceExploreList: View {
                     ForEach(Races.byMonth(races)) { g in
                         Text(g.title.uppercased()).font(.system(size: 13, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary).padding(.top, 10)
                         ForEach(g.races) { r in
-                            Button { m.push(.race(r.id)) } label: { RaceCard(race: r, mine: m.isMyRace(r.id)) }.buttonStyle(.plain)
+                            Button { m.push(.race(r.id)) } label: { RaceCard(race: r, mine: m.isMyRace(r.id), going: m.friendsGoing(r.id)) }.buttonStyle(.plain)
                         }
                     }
                     if !races.isEmpty { Text(Copy.raceCatalogFooter).font(.system(size: 13, weight: .light)).foregroundStyle(Theme.secondary).padding(.top, 12) }
@@ -108,7 +111,7 @@ struct RaceExploreList: View {
                 .padding(.horizontal, Theme.gutter).padding(.bottom, 20)
             }
         }
-        .task { await m.loadRaces() }
+        .task { await m.loadRaces(); await m.loadRaceGoing() }
     }
 }
 
@@ -135,13 +138,14 @@ struct RaceDetailView: View {
             else if m.races.isEmpty && m.racesError == nil { Spacer(); ProgressView(); Spacer() }
             else { EmptyState(system: "flag.checkered", text: Copy.raceGone) }
         }
-        .task { await m.loadRaces() }
+        .task { await m.loadRaces(); await m.loadRaceGoing(); await m.loadChallenges() }
         .onAppear { noteDraft = mine?.note ?? "" }
         .onDisappear { saveNote() }
     }
 
     func content(_ r: Race) -> some View {
-        VStack(spacing: 0) {
+        let past = r.isPast(day: mine?.day)
+        return VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
                     hero(r)
@@ -149,13 +153,13 @@ struct RaceDetailView: View {
                         Text(r.longDateText(day: mine?.day)).font(.system(size: 20, weight: .bold))
                         if let f = r.factsLine { line("point.topleft.down.to.point.bottomright.curvepath", f) }
                         line("clock", r.countdownText(day: mine?.day))
-                        if let s = r.signupLine() { line("ticket", s) }
-                        if let s = r.statusText(), r.status != .open, !r.opensLater() { line(RaceStyle.statusSymbol(r.status), s) }
+                        if !past, let s = r.signupLine() { line("ticket", s) }
+                        if !past, let s = r.statusText(), r.status != .open, !r.opensLater() { line(RaceStyle.statusSymbol(r.status), s) }
                         if r.klassiker == true { line("rosette", "A leg of En Svensk Klassiker") }
                     }
                     if let u = r.url {
                         Button { NSWorkspace.shared.open(u) } label: {
-                            Label((r.status == .open || r.status == .opensSoon) && !r.isCustom ? "Sign up on \(r.host ?? "the race page")" : "Open \(r.host ?? "the link")",
+                            Label((r.status == .open || r.status == .opensSoon) && !r.isCustom && !past ? "Sign up on \(r.host ?? "the race page")" : "Open \(r.host ?? "the link")",
                                   systemImage: "arrow.up.right.square")
                                 .font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
                                 .frame(maxWidth: .infinity).frame(height: 50)
@@ -163,7 +167,10 @@ struct RaceDetailView: View {
                         }
                         .buttonStyle(.plain)
                     }
-                    if !r.isCustom && !r.checkedOn.isEmpty { fees(r) }
+                    if past { RaceAfterCard(race: r, entry: m.myRaceEntries.first { $0.mine.key == raceId }) }
+                    if !past, !r.isCustom { RaceGoingCard(race: r) }
+                    if !past, !r.isCustom, AutoBookServer.isConfigured || AppModel.demo { RaceCrewCard(race: r) }
+                    if !past, !r.isCustom && !r.checkedOn.isEmpty { fees(r) }
                     if r.opensLater() {
                         Toggle(isOn: Binding(get: { mine?.remindSignup ?? false }, set: { m.setRaceReminder(r, signup: $0) })) {
                             Text("\(r.statusText() ?? "") · \(Copy.raceRemindSignup.lowercased())").font(.system(size: 15))
@@ -333,8 +340,20 @@ struct MyRacesList: View {
                     }
                 }
                 if let ap = m.activePlan { PlanWeekList(entry: ap.entry, plan: ap.plan).padding(.top, 6) }
-                ForEach(up.dropFirst() + past) { e in
+                if let jr = m.justRaced { RaceAfterCard(race: jr.entry.race, entry: jr.entry) }
+                ForEach(Array(up.dropFirst())) { e in
                     Button { m.push(.race(e.race.id)) } label: { row(e) }.buttonStyle(.plain)
+                }
+                if !past.isEmpty {
+                    Text("Past").font(.system(size: 17, weight: .bold)).padding(.top, 10)
+                    ForEach(past) { e in
+                        HStack {
+                            Button { m.push(.race(e.race.id)) } label: { row(e) }.buttonStyle(.plain)
+                            if let u = e.race.results {
+                                Button(Copy.raceResults) { NSWorkspace.shared.open(u) }.font(.system(size: 13, weight: .semibold))
+                            }
+                        }
+                    }
                 }
                 if !(up.isEmpty && past.isEmpty) {
                     Text(Copy.myRacesDevice).font(.system(size: 13, weight: .light)).foregroundStyle(Theme.secondary)
@@ -342,7 +361,7 @@ struct MyRacesList: View {
             }
             .padding(.horizontal, Theme.gutter).padding(.bottom, 20)
         }
-        .task { await m.loadRaces() }
+        .task { await m.loadRaces(); await m.loadRaceGoing() }
     }
 
     func row(_ e: MyRaceEntry) -> some View {
@@ -352,6 +371,7 @@ struct MyRacesList: View {
                 Text(e.race.name).font(.system(size: 16, weight: .semibold))
                 Text(e.hint() ?? [e.race.venue ?? e.race.city, e.race.distanceText].compactMap { $0 }.joined(separator: " · "))
                     .font(.system(size: 14, weight: .light)).foregroundStyle(Theme.secondary)
+                if !e.isPast(), case let going = m.friendsGoing(e.race.id), !going.isEmpty { GoingFaces(users: going, size: 20) }
             }
             Spacer()
             Text(e.isPast() ? "Done" : e.race.countdownShort(day: e.mine.day)).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.secondary)

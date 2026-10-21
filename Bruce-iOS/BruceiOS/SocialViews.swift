@@ -122,6 +122,7 @@ struct MyClassesView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             LazyVStack(spacing: 0, pinnedViews: [.sectionHeaders]) {
                 Section {
@@ -157,6 +158,12 @@ struct MyClassesView: View {
                     .background(Theme.background)
                 }
             }
+        }
+        .onAppear {
+            // Demo screenshots (BRUCE_SCREEN=myracespast): My races scrolled to the Past list.
+            if m.demoScrollBottom && m.showRacesInMyClasses { m.demoScrollBottom = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { proxy.scrollTo("racesPast", anchor: .top) } }
+        }
         }
         .scrollEdgeEffectStyle(.soft, for: .top)
         .bruceTitle("My classes")
