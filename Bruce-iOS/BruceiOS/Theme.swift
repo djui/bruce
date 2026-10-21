@@ -376,6 +376,9 @@ struct ClassMenu: View {
             Button(m.isBookmarked(classId) ? "Remove bookmark" : "Add bookmark",
                    systemImage: m.isBookmarked(classId) ? "bookmark.slash" : "bookmark") { m.toggleBookmark(classId) }
             Button("Invite friends", systemImage: "person.2") { m.present(.invite) }
+            if m.booking(forClass: classId) != nil {
+                Button("Add to Calendar", systemImage: "calendar.badge.plus") { m.present(.addToCalendar(classId)) }
+            }
             ShareLink(item: ShareURL.forClass(classId, title: c?.title ?? "")) { Label("Share", systemImage: "square.and.arrow.up") }
             if let sid = c?.studioId {
                 Button("Show studio", systemImage: "building.2") { (pushRoute ?? m.push)(.studio(sid)) }

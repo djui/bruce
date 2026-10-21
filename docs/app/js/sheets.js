@@ -340,11 +340,16 @@ function openSettings() {
     '<label><span>City</span><select id="set-city">' + (S.cities.length ? S.cities : [St.city()]).map((c) => '<option value="' + c.id + '"' + (c.id === S.settings.cityId ? ' selected' : '') + '>' + esc(c.name) + '</option>').join('') + '</select></label>' +
     '<label><span>Appearance</span><select id="set-theme"><option value="">System</option><option value="light">Light</option><option value="dark">Dark</option></select></label></div>' +
     '<h3 class="sec-title">RECOMMENDATIONS</h3><div class="card menu"><button class="mrow" data-places>' + icon('pin') + '<span class="grow">Places &amp; commute<small class="muted block">' + esc(placesLine()) + '</small></span>' + icon('chevron') + '</button></div>' +
+    '<h3 class="sec-title">CALENDAR</h3><div class="card menu"><button class="mrow" data-subscribe>' + icon('calendar') + '<span class="grow">Subscribe to your bookings<small class="muted block">Opens Calendar with Bruce\'s feed of all your bookings. Each class page also has Add to Calendar.</small></span>' + icon('chevron') + '</button>' +
+    '<button class="mrow" data-copy-feed>' + icon('link') + '<span class="grow">Copy the feed link<small class="muted block">For another calendar app. The link is personal: paste it only there.</small></span></button></div>' +
     '<h3 class="sec-title">OUR SERVER</h3><div class="card"><label class="toggle"><span>Use our server<small class="muted">Books a waitlisted class the moment a spot opens, sends goal reminders and runs challenges. It stores your Bruce login. Off: only challenges you join use it.</small></span><input type="checkbox" id="set-server"' + (St.serverOn() ? ' checked' : '') + '><i></i></label></div>' +
     '<h3 class="sec-title">SOCIAL</h3><div class="card"><label class="toggle"><span>Bruce Studios Social<small class="muted">Friends and classmates see your name and photo on classes you book.</small></span><input type="checkbox" id="set-social"' + (S.user && S.user.social ? ' checked' : '') + '><i></i></label></div>' +
     '<h3 class="sec-title">NOTIFICATIONS</h3><div class="card" id="set-push">' + loading() + '</div>' +
     '<details class="card"><summary>Advanced</summary><label class="form"><span>API server</span><input type="url" id="set-api" value="' + esc(S.settings.apiBase) + '"></label><p class="muted small">Only change this to route requests through your own proxy.</p></details>');
   s.el.querySelector('[data-places]').addEventListener('click', () => openPlaces());
+  const feed = async () => { if (!S.user) await St.loadAccount(); const u = St.calendarFeed(); if (!u) toast('Calendar link not available'); return u; };
+  s.el.querySelector('[data-subscribe]').addEventListener('click', () => feed().then((u) => { if (u) window.location.href = u; }));
+  s.el.querySelector('[data-copy-feed]').addEventListener('click', () => feed().then((u) => u && navigator.clipboard.writeText(u).then(() => toast('Calendar link copied'), () => toast('Could not copy the link'))));
   $('#set-server', s.el).addEventListener('change', (e) => { S.settings.serverOn = e.target.checked; St.saveSettings(); if (e.target.checked) St.syncGoals(); toast(e.target.checked ? 'Our server is on' : 'Our server is off'); });
   const th = $('#set-theme', s.el); th.value = theme;
   th.addEventListener('change', () => {

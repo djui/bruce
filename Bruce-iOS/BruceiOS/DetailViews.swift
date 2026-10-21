@@ -242,6 +242,11 @@ struct ClassDetailView: View {
                 RuleRow(icon: "calendar.badge.minus", title: "Late cancellation · 1 strike", text: "Cancel after \(BookingRules.long(r.lateCancel))")
                 RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation · 2 strikes", text: "Cancel after \(BookingRules.long(r.shortNotice))")
                 RuleRow(icon: "calendar.badge.minus", title: "Last-minute cancellation · 3 strikes", text: "Cancel after \(BookingRules.long(r.lastMinute))")
+                Button { m.present(.addToCalendar(classId)) } label: {
+                    Label("Add to Calendar", systemImage: "calendar.badge.plus").font(.system(size: 15, weight: .semibold))
+                        .frame(maxWidth: .infinity).frame(height: 34)
+                }
+                .buttonStyle(.glass).padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)

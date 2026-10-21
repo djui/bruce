@@ -31,6 +31,8 @@ enum SheetRoute: Hashable {
     case ticket(Int), checkout(Int), editProfile, pause, plans, statistics, receipts, visitLimit(Int)
     case bookingRules(Int), classInvite(Int), invite, howItWorks, voucher, support, help, push, pushInfo, quickCheckIn
     case similarClasses(Int), area(UUID), parakey(Int)
+    /// Add one booked class to the calendar (CalendarExport.swift).
+    case addToCalendar(Int)
     /// Auto-book rules and the optional server (AutoBook.swift).
     case autoBook
     /// "Rate class" dialog for a booking id (POST /v52/review [c8:467]).
@@ -296,6 +298,8 @@ final class AppModel {
     var isLoggedIn: Bool { (AppModel.demo && !demoLoggedOut) || !token.isEmpty }
     var showWelcome: Bool { !isLoggedIn && !sneakPeek }
     var userId: Int? { session?.userId }
+    /// Bruce's webcal feed of all bookings (CalendarExport.swift); nil until the user record is loaded. A credential.
+    var calendarFeedURL: URL? { CalendarFeed.url(userId: userId ?? user?.id, secret: user?.secret) }
     var unreadNotifications: Bool { notifications.contains { isNew($0) } }
     func isNew(_ n: BruceAPI.BruceNotification) -> Bool { (n.date ?? .distantPast) > notificationsSeenAt }
     func markNotificationsSeen() {

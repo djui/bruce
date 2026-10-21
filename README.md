@@ -73,6 +73,12 @@ My classes tabs, with class and studio pages and account sheets.
   stop them); the app signs in to it with your Bruce login and syncs your classes by
   itself (one switch turns that off). Menu › Auto-book lists the classes and the
   server settings.
+- **Add to Calendar** a booked class from My classes (long-press a row), its ⋯ menu or the class page: the
+  iPhone opens the system event editor (no calendar permission needed), the Mac writes the event with EventKit
+  (or opens an .ics file in Calendar), the web app downloads an .ics file. The event has the check-in window and
+  the free-cancel deadline in its notes and a 1 h alert. Settings › **Calendar subscription** opens Bruce's own
+  `webcal://` feed of all your bookings directly (long-press to copy the link instead); a one-off event does not
+  follow changes to the class, the feed does.
 - **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
   plan's limit at the studio. A class over your limit shows its drop-in price ("Buy for SEK 220").
 - **Descriptions and alerts:** studio and class descriptions are rendered as Markdown (bold, lists, links).
@@ -171,8 +177,9 @@ selected, Explore shows the city's studios on a map next to the list.
 - **Explore**: Studios and Classes with counts, search (studio, class, instructor), favourite, category and
   "Free spots" filters, 7 days of classes, and a studio map.
 - **Class page**: time, instructor, spots, notices, the booking rules (book until, check-in window, cancel until),
-  friends and classmates booked, Invite friends, facilities, and Book, Cancel booking, Join or Leave waitlist,
-  Similar classes, Check in, Show ticket and Rate the class. Booking and cancelling show the strike rules first.
+  friends and classmates booked, Invite friends, facilities, and Book, Cancel booking, Add to Calendar (an .ics
+  file), Join or Leave waitlist, Similar classes, Check in, Show ticket and Rate the class. Booking and cancelling
+  show the strike rules first.
 - **Studio page**: opening hours, notices, Parakey door note, facilities, description, map with Apple and Google
   Maps links, classes per day, a favourite toggle, the visit limit for your plan, and reviews with a rating summary.
 - **Check in**: suggests the studio whose check-in window is open, or the last visited one, then does one
@@ -181,7 +188,7 @@ selected, Explore shows the city's studios on a map next to the list.
 - **Friends** (their upcoming classes), **My classes** (bookings, waitlist, bookmarks) and **Notifications**.
 - **Account menu**: plan, visit meters and strikes, statistics (visits per month and the visits behind each bar),
   payments with PDF receipts, invite codes, and settings (city, appearance, social visibility, notification
-  types, API server).
+  types, API server, calendar subscription).
 - **Demo**: "Try the demo" on the login screen runs the whole app against an in-browser fake of the API
   ([`docs/app/js/demo.js`](docs/app/js/demo.js)) with placeholder data; nothing is sent anywhere.
 

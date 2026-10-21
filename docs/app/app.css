@@ -268,6 +268,9 @@ body.logged-out .main { display: block; }
 .crow-body h3 { font-size: 17px; font-weight: 700; line-height: 1.25; }
 .crow-body p { font-size: 14px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .crow > .avatar { margin-top: 2px; }
+.crow .row-btn { flex: none; width: 34px; height: 34px; margin-top: 2px; border-radius: 17px; background: var(--fill); color: var(--label-2); display: grid; place-items: center; }
+.crow .row-btn:hover { color: var(--label); background: var(--fill-2); }
+.crow .row-btn .i { width: 18px; height: 18px; }
 .pill {
   display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; padding: 3px 9px; border-radius: 10px;
   font-size: 12px; font-weight: 700; background: var(--fill); color: var(--label);

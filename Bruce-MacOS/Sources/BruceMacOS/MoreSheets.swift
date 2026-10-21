@@ -316,9 +316,10 @@ struct SettingsView: View {
                     toggleRow("Social", (m.social ?? true) ? "Everyone can see your profile" : "Only friends can see your profile",
                               isOn: Binding(get: { m.social ?? true }, set: { m.setSocial($0) }), help: true)
                     toggleRow("Location services", "Used for distances and check-in suggestions", isOn: m.pref("location"))
-                    Button { copyCalendarURL() } label: {
+                    Button { subscribeCalendar() } label: {
                         InfoRow(title: "Calendar Subscription", subtitle: "Subscribe to your bookings in Calendar")
                     }.buttonStyle(.plain)
+                    .contextMenu { Button("Copy link") { copyCalendarURL() } }
                     Button { m.prefs["pushSetupDone"] = true; m.pushSheet(.push) } label: {
                         InfoRow(title: "Push notifications", subtitle: m.prefs["pushSetupDone"] == true ? "On" : "Setup needed") {
                             EmptyView()
@@ -365,13 +366,15 @@ struct SettingsView: View {
         Binding(get: { m.notificationSetting?[keyPath: kp] ?? true }, set: { m.setMarketing(field, $0) })
     }
 
-    /// The calendar feed URL contains the user's secret (c3:341); it is only copied, never shown or logged.
+    /// The calendar feed URL contains the user's secret (c3:341); it is only opened or copied, never shown or logged.
+    func subscribeCalendar() {
+        guard let url = m.calendarFeedURL else { m.flash("Calendar link not available"); return }
+        NSWorkspace.shared.open(url)
+    }
     func copyCalendarURL() {
-        guard let uid = m.userId, let secret = m.user?.secret, !secret.isEmpty else {
-            m.flash("Calendar link not available"); return
-        }
+        guard let url = m.calendarFeedURL else { m.flash("Calendar link not available"); return }
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString("webcal://api.bruce.app/v52/user/\(uid)/calendar/\(secret).ics", forType: .string)
+        NSPasteboard.general.setString(url.absoluteString, forType: .string)
         m.flash("Calendar link copied. Add it in Calendar › New Calendar Subscription")
     }
 

@@ -10,6 +10,7 @@ import { openFilters } from './filtersheet.js';
 import { forYouHTML, forYouClick } from './foryou.js';
 import { challengesHTML, challengesClick, openNewChallenge, loadIfAllowed } from './challenges.js';
 import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
+import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
  *  Menu, which end every tab's header (on wide screens they live in the sidebar instead). */
@@ -370,6 +371,12 @@ export const Mine = {
     el.addEventListener('click', (e) => {
       const t = e.target.closest('[data-mtab]'); if (t) { this.tab = t.dataset.mtab; this.refresh(); return; }
       if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); }
+      const ics = e.target.closest('[data-ics]');
+      if (ics) {
+        e.preventDefault();
+        const b = S.bookings.get(+ics.dataset.ics);
+        if (b && b.class) { const f = St.calendarFile(b.class); addToCalendar(f.text, f.fileName); toast('Event file ready. ' + ONE_OFF_NOTE); }
+      }
     });
     St.loadMine().then(() => this.refresh()).catch((e) => toast(e.message));
     St.loadReviewable();
@@ -391,7 +398,8 @@ export const Mine = {
     const msg = { bookings: ['mine', 'You have no bookings.'], waitlist: ['bell', "You're not on any waitlists."], bookmarks: ['bookmark', 'No bookmarked classes yet.'] }[this.tab];
     const rv = this.tab === 'bookings' ? St.pendingReviews() : [];
     b.innerHTML = (this.tab === 'bookings' ? goalsCardHTML() : '') + rv.map((r) => '<div class="card prompt">' + icon('star') + '<div class="grow"><b>Rate ' + esc(r.class.title) + '</b><p class="muted">' + esc(dayHeader(r.class.start_time)) + '</p></div><button class="btn lime sm" data-review="' + r.id + '">Rate</button></div>').join('') +
-      (list.length ? classList(list, (c) => link('mine', 'class', c.id) + '?tab=' + this.tab, { selectedId: sel && sel.id }) : empty(msg[0], msg[1]));
+      (list.length ? classList(list, (c) => link('mine', 'class', c.id) + '?tab=' + this.tab, { selectedId: sel && sel.id,
+        trailingOf: (c) => (this.tab === 'bookings' && new Date(c.start_time) > Date.now() ? '<button class="row-btn" data-ics="' + c.id + '" aria-label="Add to Calendar" title="Add to Calendar">' + icon('calendar') + '</button>' : '') }) : empty(msg[0], msg[1]));
   },
 };
 

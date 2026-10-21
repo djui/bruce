@@ -9,6 +9,7 @@ import { wrappedStats, archetype, together, longestStreak, topPercent, cardsFor 
 import { loadState, tierOK, inPolygon, studioInArea, rectangle, studioPasses, classPasses, activeCount, clearFilters, selectedArea } from '../js/filters.js';
 import { challengeIdFromHash, challengeShareUrl, challengeRoute } from '../js/links.js';
 import { cancelStrikes, nextCancelStep, cancelCost, POLICY } from '../js/rules.js';
+import { icsFor, icsTime, icsFileName, feedUrl } from '../js/calendar.js';
 
 const Z = 'Europe/Stockholm';
 const NOW = '2026-10-14T10:00:00Z';   // Wednesday 14 October 2026, 12:00 in Stockholm
@@ -339,4 +340,32 @@ test('cancelling costs 0, 1, 2 then 3 strikes at the 12 h, 3 h and 1 h steps', (
   assert.equal(POLICY.length, 4);
   assert.match(POLICY[2], /no-show: 3 strikes/);
   assert.match(POLICY[3], /every 30 days/);
+});
+
+// ---------------------------------------------------------------- calendar (calendar.js)
+
+test('a booking becomes a valid .ics event with escaped text, location, alarm and notes', () => {
+  const start = Date.parse('2026-10-27T17:00:00Z'), H = 3600000;
+  const r = { start, end: start + H, checkInFrom: start - 30 * 60000, lateCheckIn: start - 5 * 60000, lateCancel: start - 12 * H, shortNotice: start - 3 * H, lastMinute: start - H };
+  const text = icsFor({ id: 9001, title: 'Hot Yoga; flow, 60' }, {
+    studio: { name: 'Example Yoga Studio', address: 'Götgatan 1', zip: '116 46', city: 'Stockholm' }, rules: r, instructor: 'Instructor D',
+    timeText: () => '18:00', longText: () => '06:00, Tuesday, 27 October', url: 'https://app.brucestudios.com/classes/9001/hot-yoga', now: start - 7 * 24 * H,
+  });
+  const lines = text.split('\r\n');
+  assert.equal(lines[0], 'BEGIN:VCALENDAR');
+  assert.ok(lines.includes('DTSTART:20261027T170000Z') && lines.includes('DTEND:20261027T180000Z'));
+  assert.ok(lines.includes('SUMMARY:Hot Yoga\\; flow\\, 60'));
+  assert.ok(lines.includes('LOCATION:Example Yoga Studio\\, Götgatan 1\\, 116 46 Stockholm'));
+  assert.ok(lines.includes('TRIGGER:-PT60M') && lines.includes('UID:class-9001@bruce.unofficial'));
+  assert.match(text, /DESCRIPTION:Instructor: Instructor D\\nCheck-in 18:00–18:00 in the Bruce app/);
+  assert.match(text, /unofficial Bruce Studios client/);
+  assert.equal(lines[lines.length - 2], 'END:VCALENDAR');
+  assert.equal(icsTime(start), '20261027T170000Z');
+  assert.equal(icsFileName('Hot Yoga: Flöw', '2026-10-27'), 'hot-yoga-flow-2026-10-27.ics');
+});
+
+test('the calendar feed link needs the user secret and is a webcal link', () => {
+  assert.equal(feedUrl(1, null), null);
+  assert.equal(feedUrl(1, { id: 1 }), null);
+  assert.equal(feedUrl(42, { secret: 'abc' }), 'webcal://api.bruce.app/v52/user/42/calendar/abc.ics');
 });

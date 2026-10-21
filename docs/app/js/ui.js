@@ -92,7 +92,7 @@ export function classRow(c, href, opts) {
     '<div class="crow-body"><h3>' + esc(c.title) + '</h3>' + (o.hideStudio ? '' : '<p>' + esc(st.name || '') + '</p>') +
     (line ? '<p class="muted">' + esc(line) + '</p>' : '') + state +
     (friends.length ? '<div class="faces">' + friends.slice(0, 4).map((u) => avatar(u, 22)).join('') + '</div>' : '') + '</div>' +
-    (o.trailing || '') + '</a>';
+    (o.trailing || (o.trailingOf ? o.trailingOf(c) : '')) + '</a>';
 }
 
 /** Class rows grouped under day headers. `hrefOf(c)` gives each row's link. */

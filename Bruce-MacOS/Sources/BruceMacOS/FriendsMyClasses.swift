@@ -115,6 +115,7 @@ struct MyClassesView: View {
                                     Button("\(Copy.reviewTitle)…") { m.present(.review(r.id)) }
                                 }
                             } else if item.2 != nil {
+                                Button("Add to Calendar") { m.present(.addToCalendar(c.id)) }
                                 Button("Cancel booking…") { m.present(.bookingRules(c.id)) }
                             }
                         }

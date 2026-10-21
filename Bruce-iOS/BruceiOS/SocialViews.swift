@@ -175,6 +175,7 @@ struct MyClassesView: View {
                                 Button("\(Copy.reviewTitle)…", systemImage: "star") { m.present(.review(r.id)) }
                             }
                         } else if item.2 != nil {
+                            Button("Add to Calendar", systemImage: "calendar.badge.plus") { m.present(.addToCalendar(c.id)) }
                             Button("Cancel booking…", systemImage: "xmark.circle", role: .destructive) { m.present(.bookingRules(c.id)) }
                         }
                         ShareLink(item: ShareURL.forClass(c.id, title: c.title))

@@ -1,6 +1,7 @@
 // App state and loaders, in the spirit of AppModel.swift: one shared store that views read and re-render from.
 import { Bruce, Autobook, Server, session, DEFAULT_API } from './api.js';
-import { ls, setZone, dayKey, todayKey, getZone, byStart, byInstant, onDay } from './util.js';
+import { ls, setZone, dayKey, todayKey, getZone, byStart, byInstant, onDay, time, ruleTime, instructor, slug } from './util.js';
+import { icsFor, icsFileName, feedUrl } from './calendar.js';
 import { visitsFrom } from './visits.js';
 import { remindPayload, goalTitle } from './goals.js';
 import { DEFAULT_PREFS } from './recommend.js';
@@ -188,6 +189,19 @@ export function classBadge(c) {
   if (S.standbys.has(c.id)) return (c.available_spots > 0) ? 'Spot open' : 'Waitlist';
   return null;
 }
+
+/** The .ics text and file name for a class (calendar.js), from the data already loaded. */
+export function calendarFile(c) {
+  const st = studio(c.studio_id) || c.studio || {};
+  const a = ((st.studio_addresses || []).find((x) => x.main) || (st.studio_addresses || [])[0] || {}).address || {};
+  const text = icsFor(c, {
+    studio: { name: st.name, address: a.address, zip: a.zip_code, city: a.city }, rules: rules(c), instructor: instructor(c.instructor),
+    timeText: (ms) => time(ms), longText: (ms) => ruleTime(ms), url: 'https://app.brucestudios.com/classes/' + c.id + '/' + slug(c.title),
+  });
+  return { text, fileName: icsFileName(c.title, dayKey(c.start_time)) };
+}
+/** webcal:// link to Bruce's feed of all bookings (null until the user record is loaded). Never log or show it. */
+export function calendarFeed() { return feedUrl(S.auth && S.auth.userId, S.user); }
 
 /** Booking rule times (Logic.swift `BookingRules`). */
 export function rules(c) {
