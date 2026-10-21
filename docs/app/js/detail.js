@@ -6,6 +6,7 @@ import { S } from './store.js';
 import { hero, classRow, glassBtn, underlineTabs, chip, empty, loading, avatar, stars, toast, run, confirmSheet, makeMap } from './ui.js';
 import { openRules, openSimilar, openInvite, openVisitLimit, openTicket, openReview, checkInFlow, openBookAgain } from './sheets.js';
 import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
+import { firstVisitInfo, recentRating, ratingTrend, visitedStudios, LATE_CHECK_IN, RECENT_DAYS } from './firstvisit.js';
 
 let token = 0;
 const closeBtn = (ctx) => glassBtn(ctx.wide ? 'close' : 'back', 'data-dact="back"', ctx.wide ? 'Close' : 'Back');
@@ -110,6 +111,7 @@ export async function renderClass(el, id, ctx) {
       '<div>' + icon('calendar') + 'Book until ' + esc(time(r.bookUntil)) + '</div>' +
       '<div>' + icon('checkin') + 'Check-in ' + esc(time(r.checkInFrom)) + ' – ' + esc(time(r.lateCheckIn)) + '</div>' +
       '<div>' + icon('calendar') + 'Cancel until ' + esc(time(r.lateCancel)) + ', ' + esc(fmt(r.lateCancel, { weekday: 'long', day: 'numeric', month: 'long' })) + '</div></div>' +
+      firstVisitCard(s.id ? s : lite, c, r) +
       '<div id="class-friends" class="who"></div>' +
       (facilities.length ? '<div class="card facilities">' + facilities.map((f) => '<span>' + icon(f.toLowerCase().includes('shower') ? 'spa' : f.toLowerCase().includes('lock') ? 'door' : 'person') + esc(f) + '</span>').join('') + '</div>' : '') +
       watchToggle(c, standby, started, booking) +
@@ -119,6 +121,7 @@ export async function renderClass(el, id, ctx) {
       '</div>';
     drawFriends(c);
     wire(c, booking, standby, bm);
+    if (S.auth && !S.history) St.loadHistory().then(() => { if (!S.history) return; const card = $('.first-visit', el); if (!card && !visitedStudios(S.history, []).has(c.studio_id)) draw(); }).catch(() => {});
   }
 
   /** "Book when a spot opens": on a full or waitlisted class. The auto-book server books it (see server/README.md). */
@@ -250,7 +253,7 @@ export async function renderStudio(el, id, ctx) {
     const today = todayKey();
     body.innerHTML =
       (ticket ? '<button class="btn lime" data-x="ticket">' + icon('ticket') + ' Show ticket</button>' : tg ? '<button class="btn lime" data-x="checkin">' + icon('checkSeal') + ' Check in</button>' : '') +
-      '<div id="hours"></div>' + notice(currentAlert(s.alerts)) +
+      '<div id="hours"></div>' + notice(currentAlert(s.alerts)) + firstVisitCard(s, null, null) +
       ((s.integration_door_type || '').toLowerCase() === 'parakey' ? '<div class="card parakey">' + icon('door') + '<div class="grow"><b>Doors open with Parakey</b><p class="muted">Use the Parakey app at the door. It is linked to your Bruce account at check-in.</p></div><a class="btn glass sm" href="https://parakey.co" target="_blank" rel="noopener">Parakey</a></div>' : '') +
       (facilities.length ? '<div class="card facilities">' + facilities.map((f) => '<span>' + icon(f.toLowerCase().includes('shower') ? 'spa' : f.toLowerCase().includes('lock') ? 'door' : 'person') + esc(f) + '</span>').join('') + '</div>' : '') +
       (s.description ? '<div class="rich">' + rich(s.description) + '</div>' : '') +
@@ -313,6 +316,11 @@ export async function renderStudio(el, id, ctx) {
     let list;
     try { list = await Bruce.reviews(id); } catch (e) { list = []; }
     if (t !== token || state.tab !== 'reviews') return;
+    const recent = recentRating(list, RECENT_DAYS, Date.now()), trend = ratingTrend(r.average, recent);
+    const sum = $('.rating-sum', el);
+    if (sum) sum.insertAdjacentHTML('afterbegin', '<div class="recent"><span><small>All time</small><b>' + (r.average ? rating(r) : '–') + '</b><small>' + (r.total || 0) + ' ratings</small></span>' +
+      '<span><small>Last ' + RECENT_DAYS + ' days</small><b>' + (recent ? recent.average.toFixed(1).replace('.', ',') : '–') + '</b><small>' + (recent ? recent.count + ' with comments' : 'no comments yet') + '</small></span>' +
+      (trend ? '<em class="orange">' + esc(trend) + '</em>' : '') + '</div>');
     $('#reviews', el).innerHTML = list.length ? list.map((v) => {
       const u = v.booking && v.booking.user;
       const act = v.booking && v.booking.class && v.booking.class.opening ? 'Solo training' : (v.booking && v.booking.class && v.booking.class.title) || 'Class';
@@ -322,3 +330,14 @@ export async function renderStudio(el, id, ctx) {
   }
 }
 
+
+/** "First visit here?" card until the first check-in at the studio (firstvisit.js); nothing while the history is unknown. */
+function firstVisitCard(studio, c, r) {
+  if (!studio || !studio.id || !S.auth) return '';
+  const visited = visitedStudios(S.history, [...S.bookings.values()]);
+  if (!visited || visited.has(studio.id)) return '';
+  const info = firstVisitInfo(studio, c, r, time);
+  const row = (ic, text, note) => '<div>' + icon(ic) + '<div><b>' + esc(text) + '</b>' + (note ? '<p class="muted small">' + esc(note) + '</p>' : '') + '</div></div>';
+  return '<div class="card first-visit"><div class="row-between"><b>' + icon('spark') + ' First visit here?</b>' + (c ? '<span class="muted small">' + esc(c.title) + ' ' + esc(time(c.start_time)) + '</span>' : '') + '</div>' +
+    row('checkin', info.checkIn, info.checkInNote) + (info.door ? row('door', info.door) : '') + (info.facilities.length ? row('spa', info.facilities.join(' · ')) : '') + row('strike', LATE_CHECK_IN) + '</div>';
+}

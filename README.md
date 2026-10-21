@@ -108,7 +108,11 @@ My classes tabs, with class and studio pages and account sheets.
   class that has ended and is not rated yet (stars, optional comment, optional anonymity). Skipped classes
   can be rated later from My classes or the class page.
 - **Studio pages** show opening hours ("Solo training until 22:00"), notices, facilities, reviews, photos,
-  per-studio visit limits and classes.
+  per-studio visit limits and classes. The Reviews tab shows the **last 90 days** next to the all-time rating
+  (from the comments the page loads, and labelled so) and says "Rated lower lately" when they differ.
+- **First visit here?**: until your first check-in at a studio, its page and its class pages show when to check in
+  (the class's window), how the door works (Parakey or the QR code), the facilities and that a late check-in costs
+  a strike. Built only from the fields the page already has; nothing is crawled.
 - **Class pages** show the studio's notice banner, everyone booked on the class (friends and members with a
   public profile by name, the rest as "Hidden"), and an **Invite** button that sends the class to the
   friends you pick, as in the official app.

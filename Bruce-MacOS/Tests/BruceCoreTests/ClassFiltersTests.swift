@@ -93,3 +93,40 @@ final class BookingRulesTests: XCTestCase {
         XCTAssertNil(r.cancelChip(at: start))
     }
 }
+
+final class FirstVisitTests: XCTestCase {
+    func review(_ rating: Int?, daysAgo: Int, now: Date) -> BruceAPI.Review {
+        let f = ISO8601DateFormatter()
+        let r = rating.map { "\($0)" } ?? "null"
+        let json = #"{"id":\#(daysAgo),"rating":\#(r),"comment":"c","created_at":"\#(f.string(from: now.addingTimeInterval(-Double(daysAgo) * 86400)))"}"#
+        return try! JSONDecoder().decode(BruceAPI.Review.self, from: Data(json.utf8))
+    }
+
+    func testRecentRatingAndTrend() {
+        let now = BruceDate.parse("2026-10-21T10:00:00Z")!
+        let list = [review(5, daysAgo: 1, now: now), review(3, daysAgo: 10, now: now), review(4, daysAgo: 89, now: now),
+                    review(1, daysAgo: 91, now: now), review(nil, daysAgo: 2, now: now)]
+        let r = RecentRating.recent(list, now: now)
+        XCTAssertEqual(r?.count, 3)
+        XCTAssertEqual(r?.average, 4)
+        XCTAssertEqual(r?.text, "4.0")
+        XCTAssertNil(RecentRating.recent([review(5, daysAgo: 100, now: now)], now: now))
+        XCTAssertNil(RecentRating.trend(allTime: 470, recent: r))   // fewer than 5
+        XCTAssertEqual(RecentRating.trend(allTime: 470, recent: .init(average: 4.1, count: 23, days: 90)), "Rated lower lately.")
+        XCTAssertEqual(RecentRating.trend(allTime: 410, recent: .init(average: 4.6, count: 5, days: 90)), "Rated higher lately.")
+        XCTAssertNil(RecentRating.trend(allTime: 450, recent: .init(average: 4.3, count: 9, days: 90)))
+    }
+
+    func testFirstVisitInfoUsesLiveFields() {
+        let studio = try! JSONDecoder().decode(BruceAPI.Studio.self, from: Data(#"{"id":7,"name":"Hall","status":"LIVE","integration_door_type":"parakey","qr_code_id":"abc","studio_facilities":[{"facility":{"code":"shower","title":"Shower"}},{"facility":{"code":"locker","title":"Lockers"}}]}"#.utf8))
+        let c = try! JSONDecoder().decode(BruceAPI.BruceClass.self, from: Data(#"{"id":1,"studio_id":7,"title":"Bouldering Intro","start_time":"2026-10-22T15:30:00Z","end_time":"2026-10-22T16:30:00Z","early_check_in_minutes":30,"late_check_in_minutes":5}"#.utf8))
+        let info = FirstVisitInfo(studio: studio, class: c)
+        XCTAssertEqual(info.checkIn, "Check in 17:00–17:25")   // Stockholm time
+        XCTAssertEqual(info.checkInNote, "Opens 30 min before, closes 5 min before")
+        XCTAssertTrue(info.door?.contains("Parakey") == true)
+        XCTAssertEqual(info.facilities, ["Shower", "Lockers"])
+        let plain = try! JSONDecoder().decode(BruceAPI.Studio.self, from: Data(#"{"id":8,"name":"Gym","status":"LIVE"}"#.utf8))
+        XCTAssertNil(FirstVisitInfo(studio: plain, class: nil).door)
+        XCTAssertTrue(FirstVisitInfo(studio: plain, class: nil).checkIn.contains("before the class starts"))
+    }
+}

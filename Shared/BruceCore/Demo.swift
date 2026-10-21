@@ -164,9 +164,9 @@ extension AppModel {
         studioLimits[9520] = dec([BruceAPI.VisitLimit].self, #"[{"type":"STUDIO","total":-1,"used":0},{"type":"SIMULTANEOUS","total":3,"used":0}]"#)
         studioLimits[1724] = dec([BruceAPI.VisitLimit].self, #"[{"type":"STUDIO","total":0,"used":0},{"type":"SIMULTANEOUS","total":3,"used":0}]"#)
         reviews[1724] = dec([BruceAPI.Review].self, """
-        [{"id":1,"rating":2,"comment":"Clean and quiet in the mornings.","created_at":"2026-03-05T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Alex"}}},
-         {"id":2,"rating":5,"comment":"Good machines, friendly vibe.","created_at":"2026-03-03T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Sam"}}},
-         {"id":3,"rating":4,"comment":"Busy after work, fine otherwise.","created_at":"2026-03-02T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Robin"}}},
+        [{"id":1,"rating":2,"comment":"Clean and quiet in the mornings.","created_at":"\(at(-3, 10, 0))","booking":{"class":{"opening":true},"user":{"first_name":"Alex"}}},
+         {"id":2,"rating":5,"comment":"Good machines, friendly vibe.","created_at":"\(at(-12, 10, 0))","booking":{"class":{"opening":true},"user":{"first_name":"Sam"}}},
+         {"id":3,"rating":4,"comment":"Busy after work, fine otherwise.","created_at":"\(at(-40, 10, 0))","booking":{"class":{"opening":true},"user":{"first_name":"Robin"}}},
          {"id":4,"rating":3,"comment":"Placeholder review text for the demo.","created_at":"2026-02-08T10:00:00Z","booking":{"class":{"opening":true},"user":{"first_name":"Exampleina Placeholder-Longname"}}}]
         """)
         notificationSetting = dec(BruceAPI.NotificationSetting.self, """
@@ -300,6 +300,8 @@ extension AppModel {
             if let t = BookAgainTemplate(studioId: 1489, masterId: nil, title: "Morning Flow", start: classDetails[9006]?.start.flatMap { cal.date(byAdding: .day, value: -7, to: $0) }, instructor: "Instructor D") {
                 sheets = [.statistics, .bookAgain(t)]
             }
+        case "firstvisit": push(.classDetail(9009))   // Example Salt Spa: no check-in in the demo history
+        case "firstvisitstudio": push(.studio(9800))   // Example Climbing Hall: never visited in the demo
         case "detailmap": push(.classDetail(9001)); demoScrollBottom = true
         case "invite": present(.invite)
         case "howitworks": sheets = [.invite, .howItWorks]

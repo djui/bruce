@@ -40,6 +40,7 @@ struct StudioDetailView: View {
             await m.loadStudioLimits(studioId)
             await m.loadSchedule(studioId)
             await m.loadReviews(studioId)
+            if m.isLoggedIn, m.visitHistory == nil { await m.fetchVisitHistory() }   // "First visit here?"
             if studio?.hasClasses == true { await m.loadStudioClasses(studioId) }
         }
     }
@@ -118,6 +119,7 @@ struct StudioDetailView: View {
             if let studio, studio.usesParakey {
                 ParakeyRow(studio: studio, forClass: false).padding(.horizontal, Theme.gutter).padding(.top, 16)
             }
+            if m.isFirstVisit(studioId) { FirstVisitCard(studio: studio).padding(.horizontal, Theme.gutter).padding(.top, 16) }
             VStack(alignment: .leading, spacing: 6) {
                 Text(studio?.name ?? "").font(.system(size: 17, weight: .semibold))
                 HStack(spacing: 4) {
@@ -294,12 +296,8 @@ struct StudioReviews: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Image(systemName: "star.fill").font(.system(size: 20))
-                Text(rating?.average.map { String(format: "%.1f", Double($0) / 100) } ?? "–").font(.system(size: 26, weight: .semibold))
-                Text("\(rating?.total ?? 0) reviews").font(.system(size: 14, weight: .light)).foregroundStyle(Theme.secondary)
-            }
-            .padding(.leading, 50).padding(.top, 22)
+            VStack(alignment: .leading, spacing: 8) { RecentRatingRow(rating: rating, reviews: reviews) }
+                .padding(.horizontal, Theme.gutter).padding(.top, 22)
             VStack(spacing: 8) {
                 ForEach(0..<5, id: \.self) { i in
                     let p = percent(5 - i)
