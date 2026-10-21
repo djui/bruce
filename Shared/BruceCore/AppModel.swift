@@ -165,6 +165,9 @@ final class AppModel {
     var autoBookServerNote: String?
     /// Waitlisted classes the server books as soon as a spot frees up (see AutoBook.swift).
     var watchedWaitlists: Set<Int> = AppModel.demo ? [] : AutoBook.watchedWaitlists
+    /// Milestones already shown on Home (Milestones.swift).
+    var milestonesSeen: Set<String> = AppModel.demo ? [] : Milestones.seen
+    func markMilestoneSeen(_ key: String) { milestonesSeen.insert(key); if !AppModel.demo { Milestones.seen = milestonesSeen } }
     /// One-off classes to book the moment their window opens (AutoBook.swift `OpeningWatch`).
     var openingWatches: [OpeningWatch] = AppModel.demo ? [] : AutoBook.openingWatches
     @ObservationIgnored var autoBookTask: Task<Void, Never>?

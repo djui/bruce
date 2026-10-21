@@ -257,7 +257,7 @@ struct GoalEditor: View {
         }
         var ids = counts.sorted { $0.value > $1.value }.map(\.key).filter { id in m.categories.contains { $0.id == id } }.prefix(4).map { $0 }
         for d in [27, 2, 22] where ids.count < 4 && !ids.contains(d) && m.categories.contains(where: { $0.id == d }) { ids.append(d) }
-        var keys = ["gym"] + ids.map(String.init) + ["anyClass", "any"]
+        var keys = ["gym"] + ids.map(String.init) + ["newStudios", "anyClass", "any"]
         if !keys.contains(key) { keys.insert(key, at: keys.count - 2) }
         return keys
     }
@@ -368,7 +368,7 @@ struct GoalEditor: View {
     }
 
     func chipTitle(_ k: String) -> String {
-        k == "gym" ? "Gym" : m.categoryTitle(forKey: k) ?? "Category"
+        k == "gym" ? "Gym" : k == "newStudios" ? "New studios" : m.categoryTitle(forKey: k) ?? "Category"
     }
 
     func save() {

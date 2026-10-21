@@ -7,13 +7,14 @@ import { sheet, toast, loading, confirmSheet } from './ui.js';
 import { summary, calendar, suggestions, goalTitle, monthInfo } from './goals.js';
 
 const MONTH = (today) => new Date(today + 'T12:00:00Z').toLocaleDateString('en-GB', { month: 'long', timeZone: 'UTC' });
-const isCategory = (k) => k != null && k !== '' && k !== 'anyClass' && k !== 'gym';
+const isCategory = (k) => k != null && k !== '' && k !== 'anyClass' && k !== 'gym' && k !== 'newStudios';
 const title = (g) => goalTitle(g.category, St.catTitle);
 
 function goalIcon(k) {
   if (k === 'gym') return 'dumbbell';
   if (k == null || k === '') return 'checkSeal';
   if (k === 'anyClass') return 'calendar';
+  if (k === 'newStudios') return 'spark';
   const t = (St.catTitle(k) || '').toLowerCase();
   if (/swim/.test(t)) return 'swim';
   if (/yoga|pilates|medita|stretch|barre/.test(t)) return 'yoga';
@@ -102,7 +103,7 @@ export function openGoalEditor(goal) {
   const g = Object.assign({ id: 'g' + Date.now().toString(36), category: 'gym', target: 8, studioId: null, remind: false }, goal || {});
   const today = todayKey();
   const s = sheet(editing ? 'Edit goal' : 'New goal', loading(), { trailing: '<button class="glass-btn lime-btn" data-save aria-label="Save goal">' + icon('check') + '</button>', cls: 'tall' });
-  const keys = [['gym', 'Gym', 'dumbbell']].concat(S.categories.filter((c) => !/^gym$/i.test(c.title)).map((c) => [String(c.id), c.title, goalIcon(String(c.id))]), [['anyClass', 'Any class', 'calendar'], ['', 'Any visit', 'checkSeal']]);
+  const keys = [['gym', 'Gym', 'dumbbell']].concat(S.categories.filter((c) => !/^gym$/i.test(c.title)).map((c) => [String(c.id), c.title, goalIcon(String(c.id))]), [['newStudios', 'New studios', 'spark'], ['anyClass', 'Any class', 'calendar'], ['', 'Any visit', 'checkSeal']]);
   St.loadHistory().catch(() => []).then(draw);
 
   function draw() {

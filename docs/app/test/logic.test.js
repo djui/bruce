@@ -12,6 +12,8 @@ import { cancelStrikes, nextCancelStep, cancelCost, cancelChip, POLICY } from '.
 import { icsFor, icsTime, icsFileName, feedUrl } from '../js/calendar.js';
 import { templateOf, matches, candidateDays, pick } from '../js/bookagain.js';
 import { firstVisitInfo, recentRating, ratingTrend, visitedStudios } from '../js/firstvisit.js';
+import { reached as milestonesReached, fresh as freshMilestone, newToYou, includedInPlan } from '../js/milestones.js';
+import { newStudioVisits } from '../js/goals.js';
 
 const Z = 'Europe/Stockholm';
 const NOW = '2026-10-14T10:00:00Z';   // Wednesday 14 October 2026, 12:00 in Stockholm
@@ -482,4 +484,54 @@ test('recent rating is the last 90 days of rated reviews, with an honest trend n
   assert.equal(ratingTrend(410, { average: 4.6, count: 5 }), 'Rated higher lately.');
   assert.equal(ratingTrend(450, { average: 4.3, count: 9 }), null);
   assert.equal(ratingTrend(null, { average: 4.3, count: 9 }), null);
+});
+
+// ---------------------------------------------------------------- milestones and new to you (milestones.js)
+
+test('milestones: nth class, nth studio, a new category after five classes, and the week streak', () => {
+  const v = (day, o) => Object.assign({ day, at: day + 'T10:00:00Z', month: day.slice(0, 7), kind: 'class', studioId: 1, title: 'Reformer', categories: ['19'] }, o || {});
+  const visits = [];
+  for (let i = 0; i < 12; i++) visits.push(v('2026-0' + (1 + Math.floor(i / 4)) + '-' + String(1 + (i % 4) * 7).padStart(2, '0'), { studioId: 1 + (i % 5), categories: i === 11 ? ['2'] : ['19'] }));
+  visits.push(v('2026-04-01', { kind: 'dropin', studioId: 6, title: 'Solo training', categories: [] }));
+  const list = milestonesReached(visits, '2026-10-21', (c) => ({ 19: 'Pilates', 2: 'Yoga' })[c], (s) => 'Studio ' + s);
+  const keys = list.map((m) => m.key);
+  assert.ok(keys.includes('classes-10') && !keys.includes('classes-25'));
+  assert.ok(keys.includes('studios-5'));
+  assert.ok(keys.includes('category-2') && !keys.includes('category-19'));   // Pilates was the first category ever
+  assert.match(list.find((m) => m.key === 'classes-10').detail, /^Number 10 was Reformer on /);
+  assert.match(list.find((m) => m.key === 'studios-5').detail, /Your 5th was Studio 5/);
+  assert.equal(freshMilestone(list, new Set(), '2026-10-21'), null);        // all older than 30 days
+  assert.equal(freshMilestone(list, new Set(), '2026-03-30').key, 'category-2');
+  assert.equal(freshMilestone(list, new Set(['category-2']), '2026-03-30').key, 'classes-10');   // 8 March is still fresh on 30 March
+  assert.equal(freshMilestone(list, new Set(['category-2', 'classes-10']), '2026-03-30'), null);
+  const weekly = ['2026-09-29', '2026-10-06', '2026-10-13', '2026-10-20'].map((d) => v(d, { studioId: 1 }));
+  const s = milestonesReached(weekly, '2026-10-21');
+  assert.ok(s.some((m) => m.key.startsWith('streak-4-2026-09-28')));
+  assert.equal(s.find((m) => m.kind === 'streak').title, '4-week streak');
+});
+
+test('new to you: unvisited studios in the plan, in liked categories or nearby, nearest first', () => {
+  const metres = (a, b, c, d) => Math.round(Math.hypot(a - c, b - d) * 111000);
+  const here = { lat: 59.3, lon: 18.0 };
+  const studios = [
+    { id: 1, name: 'Visited', cats: ['Yoga'], lat: 59.3, lon: 18.0, hasClasses: true, limits: [] },
+    { id: 2, name: 'Yoga far', cats: ['Yoga'], lat: 59.4, lon: 18.0, hasClasses: true, limits: [{ label: 'BASE', limit: 0 }] },
+    { id: 3, name: 'Gym near', cats: ['Gym'], lat: 59.301, lon: 18.0, openings: true, limits: [] },
+    { id: 4, name: 'Epic only', cats: ['Yoga'], lat: 59.3, lon: 18.001, hasClasses: true, limits: [{ label: 'BASE', limit: -1 }, { label: 'EPIC', limit: 0 }] },
+    { id: 5, name: 'Climb far', cats: ['Climbing'], lat: 59.5, lon: 18.0, hasClasses: true, limits: [] },
+    { id: 6, name: 'No classes', cats: ['Yoga'], lat: 59.3, lon: 18.0, limits: [] },
+  ];
+  const picks = newToYou(studios, new Set([1]), ['yoga'], 'BASE', here, metres, 8);
+  assert.deepEqual(picks.map((p) => p.studio.id), [2, 3]);
+  assert.equal(picks[0].reason, 'Yoga, which you do');
+  assert.equal(picks[1].reason, 'near you');
+  assert.equal(includedInPlan(studios[3], 'EPIC'), true);
+  assert.equal(includedInPlan(studios[3], 'BASE'), false);
+  assert.deepEqual(newToYou(studios, new Set([1]), [], 'BASE', null, metres, 8), []);
+});
+
+test('the "try new studios" goal counts first visits at studios new this month', () => {
+  const v = (day, studioId) => ({ day, at: day + 'T10:00:00Z', month: day.slice(0, 7), kind: 'class', studioId, title: 'x', categories: [] });
+  const visits = [v('2026-09-10', 1), v('2026-10-02', 1), v('2026-10-05', 2), v('2026-10-09', 2), v('2026-10-12', 3), v('2026-10-25', 4)];
+  assert.deepEqual(newStudioVisits(visits, '2026-10-21').map((x) => x.studioId).sort(), [2, 3]);
 });

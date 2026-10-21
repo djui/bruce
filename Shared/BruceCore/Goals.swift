@@ -73,6 +73,7 @@ enum GoalCategory {
         case nil: return true
         case "anyClass": return !v.isSolo
         case "gym": return v.isSolo
+        case "newStudios": return false   // needs the whole history: Goals.month handles it
         case let k?:
             guard let id = Int(k) else { return false }
             if !v.isSolo { return v.categoryIds.contains(id) }
@@ -86,6 +87,7 @@ enum GoalCategory {
         case nil: return "Visits"
         case "anyClass": return "Classes"
         case "gym": return "Gym visits"
+        case "newStudios": return "New studios"
         default:
             let t = categoryTitle ?? "Category"
             switch t.lowercased() {
@@ -104,6 +106,7 @@ enum GoalCategory {
         case nil: return "figure.walk"
         case "anyClass": return "figure.mixed.cardio"
         case "gym": return "dumbbell.fill"
+        case "newStudios": return "sparkles"
         default:
             let t = (categoryTitle ?? "").lowercased()
             if t.contains("swim") { return "figure.pool.swim" }
@@ -124,6 +127,7 @@ enum GoalCategory {
     /// Accent per goal (index into the app's goal palette): 0 = lime (any visit, gym, classes), else a colour.
     static func tone(_ key: String?, categoryTitle: String?) -> Int {
         guard let k = key, k != "gym", k != "anyClass" else { return 0 }
+        if k == "newStudios" { return 3 }
         let t = (categoryTitle ?? "").lowercased()
         if t.contains("swim") { return 1 }
         if t.contains("yoga") || t.contains("meditation") || t.contains("pilates") || t.contains("reformer") { return 2 }
@@ -200,12 +204,23 @@ enum Goals {
         let day = cal.component(.day, from: now)
         let mine = thisMonth(visits, now: now)
         let progress = goals.map { g -> GoalProgress in
-            let hits = mine.filter { v in
+            let hits = g.category == "newStudios" ? newStudioVisits(visits, now: now) : mine.filter { v in
                 GoalCategory.matches(v, key: g.category, mainCategory: mainCategory) && (g.studioId == nil || v.studioRef == g.studioId)
             }
             return GoalProgress(goal: g, done: hits.count, expected: Double(g.target) * Double(day) / Double(days), lastVisit: hits.first)
         }
         return GoalsMonth(month: interval.start, day: day, daysInMonth: days, progress: progress)
+    }
+
+    /// "Try new studios": this month's first-ever visits at studios never visited before this month, one per studio,
+    /// newest first.
+    static func newStudioVisits(_ visits: [BruceAPI.Visit], now: Date = Date()) -> [BruceAPI.Visit] {
+        let cal = BruceDate.calendar
+        guard let monthStart = cal.dateInterval(of: .month, for: now)?.start else { return [] }
+        let all = VisitDedupe.unique(visits).filter { v in v.date.map { $0 <= now } ?? false }.sorted { $0.date! < $1.date! }
+        var firstAt: [Int: BruceAPI.Visit] = [:]
+        for v in all { if let s = v.studioRef, firstAt[s] == nil { firstAt[s] = v } }
+        return firstAt.values.filter { $0.date! >= monthStart }.sorted { $0.date! > $1.date! }
     }
 
     /// This month's counted visits, newest first.

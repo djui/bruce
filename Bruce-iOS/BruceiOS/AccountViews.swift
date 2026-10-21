@@ -307,7 +307,8 @@ struct StatisticsView: View {
                         .padding(.horizontal, Theme.gutter).padding(.vertical, 12)
                 }
                 .buttonStyle(.plain)
-                VisitBarChart(months: m.monthlyVisits, selection: $month).padding(.top, 12).padding(.bottom, 28)
+                VisitBarChart(months: m.monthlyVisits, selection: $month).padding(.top, 12).padding(.bottom, 12)
+                MilestonesRow(visits: visits ?? []).padding(.bottom, 16)
                 ForEach(groupedByDay(shown, date: \.date).reversed(), id: \.0) { day, list in
                     Section {
                         ForEach(Array(list.sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }.enumerated()), id: \.1.id) { i, v in

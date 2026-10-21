@@ -306,6 +306,7 @@ extension AppModel {
         case "widgets":
             bookings = [9006, 9001].compactMap { id in classDetails[id].map { BruceAPI.Booking(id: id, classId: id, studioId: $0.studioId, checkedInAt: nil, class: $0) } }
             present(.widgets)
+        case "milestones": tab = .home   // the newest milestone card and "New to you" on Home (demo history)
         case "bookwhenopens": push(.classDetail(9011))
         case "bookwhenopenswatching": if let w = classDetails[9011].flatMap(OpeningWatch.init) { openingWatches = [w] }; push(.classDetail(9011))
         case "firstvisit": push(.classDetail(9009))   // Example Salt Spa: no check-in in the demo history

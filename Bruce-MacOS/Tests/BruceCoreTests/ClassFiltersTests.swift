@@ -130,3 +130,55 @@ final class FirstVisitTests: XCTestCase {
         XCTAssertTrue(FirstVisitInfo(studio: plain, class: nil).checkIn.contains("before the class starts"))
     }
 }
+
+final class MilestonesTests: XCTestCase {
+    func visit(_ id: Int, _ day: String, studio: Int, cat: Int? = 19, solo: Bool = false) -> BruceAPI.Visit {
+        let cls = solo ? "" : #","class":{"id":\#(id),"title":"Reformer","start_time":"\#(day)T10:00:00Z","end_time":"\#(day)T11:00:00Z","class_categories":[{"category_id":\#(cat ?? 19)}]}"#
+        let json = #"{"id":\#(id),"studio_id":\#(studio),"checked_in_at":"\#(day)T09:55:00Z"\#(cls)}"#
+        return try! JSONDecoder().decode(BruceAPI.Visit.self, from: Data(json.utf8))
+    }
+
+    func testClassStudioCategoryAndStreakMilestones() {
+        var visits: [BruceAPI.Visit] = []
+        for i in 0..<12 { visits.append(visit(i, String(format: "2026-%02d-%02d", 1 + i / 4, 1 + (i % 4) * 7), studio: 1 + i % 5, cat: i == 11 ? 2 : 19)) }
+        visits.append(visit(99, "2026-04-01", studio: 6, solo: true))
+        let now = BruceDate.parse("2026-10-21T10:00:00Z")!
+        let list = Milestones.reached(visits: visits, now: now, categoryTitle: { [19: "Pilates", 2: "Yoga"][$0] }, studioName: { "Studio \($0)" })
+        let keys = list.map(\.key)
+        XCTAssertTrue(keys.contains("classes-10")); XCTAssertFalse(keys.contains("classes-25"))
+        XCTAssertTrue(keys.contains("studios-5"))
+        XCTAssertTrue(keys.contains("category-2")); XCTAssertFalse(keys.contains("category-19"))
+        XCTAssertTrue(list.first { $0.key == "classes-10" }!.detail.hasPrefix("Number 10 was Reformer on "))
+        XCTAssertTrue(list.first { $0.key == "studios-5" }!.detail.contains("Your 5th was Studio 5"))
+        XCTAssertNil(Milestones.fresh(list, seen: [], now: now))
+        XCTAssertEqual(Milestones.fresh(list, seen: [], now: BruceDate.parse("2026-03-30T10:00:00Z")!)?.key, "category-2")
+        let weekly = ["2026-09-29", "2026-10-06", "2026-10-13", "2026-10-20"].enumerated().map { visit(100 + $0.offset, $0.element, studio: 1) }
+        let s = Milestones.reached(visits: weekly, now: now)
+        XCTAssertEqual(s.first { $0.kind == .streak }?.title, "4-week streak")
+        XCTAssertTrue(s.contains { $0.key == "streak-4-2026-09-28" })
+        XCTAssertEqual(Milestones.ordinal(22), "22nd"); XCTAssertEqual(Milestones.ordinal(12), "12th")
+        XCTAssertEqual(Goals.newStudioVisits(visits + [visit(200, "2026-10-02", studio: 1), visit(201, "2026-10-05", studio: 7)], now: now).map(\.studioRef), [7])
+    }
+
+    func testNewToYouRespectsPlanAndHistory() {
+        func studio(_ id: Int, _ name: String, cat: Int, base: Int?, lat: Double) -> BruceAPI.Studio {
+            let limits = base.map { #","visit_limit":{"items":[{"id":1,"label":"BASE","limit":\#($0),"period":"MONTHLY"},{"id":3,"label":"EPIC","limit":0,"period":"MONTHLY"}]}"# } ?? ""
+            let json = #"{"id":\#(id),"name":"\#(name)","status":"LIVE","has_classes":true,"studio_categories":[{"category_id":\#(cat),"main":true}],"studio_addresses":[{"main":true,"address":{"latitude":\#(lat),"longitude":18.0}}]\#(limits)}"#
+            return try! JSONDecoder().decode(BruceAPI.Studio.self, from: Data(json.utf8))
+        }
+        let studios = [studio(1, "Visited", cat: 2, base: 0, lat: 59.3), studio(2, "Yoga far", cat: 2, base: 0, lat: 59.4),
+                       studio(3, "Gym near", cat: 1, base: nil, lat: 59.301), studio(4, "Epic only", cat: 2, base: -1, lat: 59.3), studio(5, "Climb far", cat: 7, base: 0, lat: 59.5)]
+        var profile = VisitProfile(visits: [])
+        profile.categories = [2: 3]
+        let here = GeoPoint(lat: 59.3, lon: 18.0)
+        let dist: (BruceAPI.Studio) -> Double? = { s in
+            let a = s.studioAddresses?.first?.address
+            return a.flatMap { x in x.latitude.map { Recommender.meters(here, GeoPoint(lat: $0, lon: x.longitude ?? 18.0)) } }
+        }
+        let picks = NewToYou.picks(studios: studios, visited: [1], profile: profile, tier: "BASE", distance: dist, categoryTitle: { [2: "Yoga"][$0] })
+        XCTAssertEqual(picks.map(\.studio.id), [2, 3])
+        XCTAssertEqual(picks[0].reason, "Yoga, which you do")
+        XCTAssertEqual(picks[1].reason, "near you")
+        XCTAssertTrue(NewToYou.includedInPlan(studios[3], tier: "EPIC")); XCTAssertFalse(NewToYou.includedInPlan(studios[3], tier: "BASE"))
+    }
+}

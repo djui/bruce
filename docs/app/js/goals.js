@@ -12,7 +12,16 @@ export function counts(goal, v) {
   if (k == null || k === '') return true;
   if (k === 'anyClass') return v.kind === 'class';
   if (k === 'gym') return v.kind === 'dropin';
+  if (k === 'newStudios') return false;   // needs the whole history: see newStudioVisits
   return v.categories.includes(String(k));
+}
+
+/** "Try new studios": this month's first-ever visits at studios never visited before this month, one per studio. */
+export function newStudioVisits(visits, today) {
+  const month = today.slice(0, 7);
+  const first = {};
+  for (const v of visits.slice().sort((a, b) => a.day.localeCompare(b.day))) if (v.studioId && v.day <= today && !first[v.studioId]) first[v.studioId] = v;
+  return Object.values(first).filter((v) => v.month === month);
 }
 
 /** "Gym visits", "Yoga classes", "Classes", "Visits". `titleOf(id)` names a Bruce category. */
@@ -20,6 +29,7 @@ export function goalTitle(category, titleOf) {
   if (category == null || category === '') return 'Visits';
   if (category === 'anyClass') return 'Classes';
   if (category === 'gym') return 'Gym visits';
+  if (category === 'newStudios') return 'New studios';
   const t = (titleOf && titleOf(category)) || 'Category';
   return /class(es)?$/i.test(t) ? t : t + ' classes';
 }
@@ -41,7 +51,7 @@ const plural = (n, one, many) => n + ' ' + (n === 1 ? one : (many || one + 's'))
  */
 export function progress(goal, visits, today) {
   const m = monthInfo(today);
-  const mine = visits.filter((v) => v.month === m.month && v.day <= today && counts(goal, v));
+  const mine = goal.category === 'newStudios' ? newStudioVisits(visits, today) : visits.filter((v) => v.month === m.month && v.day <= today && counts(goal, v));
   const done = mine.length;
   const target = Math.max(1, goal.target || 1);
   const expected = target * m.day / m.days;
