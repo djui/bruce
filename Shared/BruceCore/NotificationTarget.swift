@@ -85,13 +85,14 @@ extension AppModel {
 
 /// Where a push from our server leads: a challenge invite (`CHALLENGE_INVITE`, payload `challengeId`), a goal
 /// reminder (`GOAL_REMINDER`, payload `goalId`) or skipped-habit picks (`RECOMMENDATION`, payload `recommend`:
-/// class ids, best first). Race reminders are local notifications with the same kind of payload (`raceId`).
+/// class ids, best first). Race reminders are local notifications, or with the server on its pushes (`RACE_REMINDER`),
+/// with the same kind of payload (`raceId`).
 enum PushTarget: Equatable {
     case challenge(String)
     case goals
     /// The best pick, if any.
     case recommendation(Int?)
-    /// A race reminder (local notification, Races.swift), payload `raceId`.
+    /// A race reminder (local notification, Races.swift, or the server's race-week push), payload `raceId`.
     case race(String)
 
     init?(userInfo: [AnyHashable: Any]) {

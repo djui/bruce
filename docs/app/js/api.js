@@ -119,6 +119,8 @@ export const Server = {
   /** metrics: {visits, minutes, studios, streak} -> {year, cohort, percentiles | null}. */
   percentiles: (year, metrics) => server('GET', '/wrapped/percentiles?' + qs(Object.assign({ year }, metrics))),
   putGoals: (goals) => server('PUT', '/me/goals', { goals }),
+  /** This device's races with race-week or day-before reminders (raceplan.js); `[]` clears them. */
+  putRaces: (races, device) => server('PUT', '/me/races', { device, races }),
 };
 
 const yyyymmdd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');

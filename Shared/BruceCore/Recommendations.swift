@@ -193,6 +193,8 @@ struct RecInput {
     var categoryTitles: [Int: String]
     /// Refined minutes (MapKit ETA), keyed by `Recommender.travelKey`.
     var travelOverrides: [String: Int] = [:]
+    /// How far ahead classes count; nil = `Recommender.horizon` (Train for it uses the rest of the week).
+    var horizon: TimeInterval? = nil
 }
 
 /// A travel question worth asking MapKit.
@@ -220,7 +222,7 @@ enum Recommender {
         var seen = Set<Int>()
         return input.classes.filter { c in
             guard seen.insert(c.id).inserted, c.isListed, !input.excluded.contains(c.id), let s = c.start else { return false }
-            guard s > input.now.addingTimeInterval(20 * 60), s < input.now.addingTimeInterval(horizon) else { return false }
+            guard s > input.now.addingTimeInterval(20 * 60), s < input.now.addingTimeInterval(input.horizon ?? horizon) else { return false }
             if let a = c.availableSpots, a <= 0 { return false }
             // Bookable now, or opens before the class starts (soon bookable).
             if let o = c.bookingOpens, o > s { return false }

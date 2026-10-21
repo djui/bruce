@@ -102,6 +102,29 @@ enum Copy {
     static let raceEventFooter = "Added with Brüce, an unofficial Bruce Studios client. Not affiliated with the race or its organiser; check the race's own page for changes."
     static let raceCatalogFooter = "Races are picked by hand from each race's own page, with the day they were checked. Brüce links to those pages and is not affiliated with any race or organiser."
 
+    // MARK: Train for it (RacePlanner.swift)
+
+    static let planTrainForIt = "Train for it"
+    static let planIntro = "A weekly mix of Bruce classes for the weeks up to race day: Base, Build, Peak, race week, then a week to recover. Brüce picks classes near you; it books only when you tap."
+    static let planNotCoaching = "This is a class mix, not a training programme. It doesn't plan your long runs, rides or swims, and you can change any week."
+    static let planGridHint = "Tap a number to change that week. Past weeks stay as they were."
+    static let planStarted = "Plan started"
+    static let planStartedAdded = "Added to My races, plan started"
+    static let planStopped = "Plan stopped. The race stays in My races."
+    static let planGoalsHint = "This month's planned classes as Monthly goals, with a reminder when you fall behind. The targets follow the plan each month and go when it ends; a goal you delete stays deleted."
+    static let planGoalsMade = "Monthly goals made from your plan"
+    static let planGoalsNone = "No classes planned this month"
+    static let planStrike = "Cancelling costs a strike"
+    static let planNothingNear = "Nothing near you this week"
+    static let planAutoBookHint = "Book every week: books this class each week the moment it opens."
+    static let planRaceWeekPause = "Race week is close. Weekly bookings of hard classes keep going unless you pause them; a Mobility class is in your plan instead."
+    static func planPaused(_ title: String, _ when: String) -> String { "Paused until after the race: \(title), \(when)" }
+    static func planRulesBack(_ n: Int) -> String { n == 1 ? "Book every week is back on for 1 class" : "Book every week is back on for \(n) classes" }
+    static let planRemindWeek = "Race week: Monday 08:00"
+    static let planRemindEve = "The day before: 18:00"
+    static let planRemindHint = "Notifications on this device. With the server on, they come as a push and an email instead."
+    static func planStartsHint(_ day: String) -> String { "Your \(RaceDay.format(day, "d MMMM")) start counts back from race day. Until then, Explore and For you work as usual." }
+
     /// Under "Book every week" on the Book again sheet (BookAgain.swift).
     static let bookEveryWeek = "Books this series every week the moment it opens and tells you each time (Menu › Auto-book lists it)."
 

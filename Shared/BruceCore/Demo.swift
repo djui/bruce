@@ -33,16 +33,7 @@ extension AppModel {
           "visit_limit":{"items":[{"label":"BASE","limit":2},{"label":"BLACK","limit":4},{"label":"EPIC","limit":8}]},
           "description":"A placeholder studio used for the offline demo."}]
         """)
-        categories = dec([BruceAPI.Category].self, """
-        [{"id":1,"title":"Gym","photo":"ulopoksuf88nlz90lmsz"},{"id":5,"title":"Meditation","photo":"dgl20t8p7zqpugxw9ron"},
-         {"id":3,"title":"Ball sports"},{"id":4,"title":"Breathwork"},{"id":2,"title":"Yoga","photo":"mfrnofbzeqyucdflpasg"},
-         {"id":6,"title":"Cardio"},{"id":7,"title":"Climbing"},{"id":8,"title":"CrossFit"},{"id":9,"title":"Cycling"},
-         {"id":10,"title":"Dance"},{"id":11,"title":"Family Training"},{"id":12,"title":"High-intensity","photo":"k5pxisc2ienijh72umlm"},
-         {"id":13,"title":"Hyrox"},{"id":14,"title":"Martial arts"},{"id":15,"title":"Massage & Naprapathy"},{"id":16,"title":"Mobility"},
-         {"id":17,"title":"Other"},{"id":18,"title":"Outdoor"},{"id":19,"title":"Pilates","photo":"xdz9eqgslqobguwuiqn8"},
-         {"id":20,"title":"Pregnancy & Postnatal"},{"id":21,"title":"Racket sports"},{"id":22,"title":"Reformer"},{"id":23,"title":"Running"},
-         {"id":24,"title":"Sauna"},{"id":25,"title":"Spa"},{"id":26,"title":"Strength"},{"id":27,"title":"Swimming"}]
-        """)
+        categories = BruceAPI.Category.demo
         home = dec([BruceAPI.HomeSection].self, """
         [{"title":"Spotlight","type":"SPOTLIGHT","items":[
           {"type":"CLASS","class_name":"High Intensity","class_id":9001,"studio_name":"Example Yoga Studio","studio_id":1489,"photo":"mfrnofbzeqyucdflpasg","start_time":"\(at(1, 11, 30))"},
@@ -195,8 +186,8 @@ extension AppModel {
         """)
 
         loadDemoInsights()
-        loadDemoRaces()
         visitHistory = Self.demoVisits
+        loadDemoRaces()   // after the history: Train for it adds this week's check-ins
         Task { await refreshRecommendations() }
 
         // BRUCE_SCREEN=<name> opens a screen directly (for screenshots).
@@ -216,8 +207,12 @@ extension AppModel {
         case "explore": tab = .explore
         case "races": tab = .explore; demoExploreTab = 2
         case "race": tab = .explore; demoExploreTab = 2; push(.race("vasaloppet-2027"))
-        case "myraces": tab = .myClasses; showRacesInMyClasses = true
+        case "myraces", "thisweek": tab = .myClasses; showRacesInMyClasses = true
         case "myrace": tab = .myClasses; showRacesInMyClasses = true; push(.race("hyrox-stockholm-2026"))
+        // Train for it (RacePlanner.swift): a race without a plan yet, the plan sheet before starting and in week 3 of 10.
+        case "trainforit": tab = .myClasses; showRacesInMyClasses = true; push(.race("tough-viking-stadion-2027"))
+        case "planstart": tab = .myClasses; showRacesInMyClasses = true; push(.race("tough-viking-stadion-2027")); present(.racePlan("tough-viking-stadion-2027"))
+        case "raceplan": tab = .myClasses; showRacesInMyClasses = true; push(.race("hyrox-stockholm-2026")); present(.racePlan("hyrox-stockholm-2026"))
         case "addrace": tab = .myClasses; showRacesInMyClasses = true; present(.editRace(nil))
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
@@ -351,4 +346,19 @@ extension AppModel {
         default: break
         }
     }
+}
+
+extension BruceAPI.Category {
+    /// The main categories as `GET /v52/category` lists them (demo mode, and the tests of the Train for it mapping).
+    static let demo: [BruceAPI.Category] = (try? JSONDecoder().decode([BruceAPI.Category].self, from: Data(demoJSON.utf8))) ?? []
+    private static let demoJSON = """
+        [{"id":1,"title":"Gym","photo":"ulopoksuf88nlz90lmsz"},{"id":5,"title":"Meditation","photo":"dgl20t8p7zqpugxw9ron"},
+         {"id":3,"title":"Ball sports"},{"id":4,"title":"Breathwork"},{"id":2,"title":"Yoga","photo":"mfrnofbzeqyucdflpasg"},
+         {"id":6,"title":"Cardio"},{"id":7,"title":"Climbing"},{"id":8,"title":"CrossFit"},{"id":9,"title":"Cycling"},
+         {"id":10,"title":"Dance"},{"id":11,"title":"Family Training"},{"id":12,"title":"High-intensity","photo":"k5pxisc2ienijh72umlm"},
+         {"id":13,"title":"Hyrox"},{"id":14,"title":"Martial arts"},{"id":15,"title":"Massage & Naprapathy"},{"id":16,"title":"Mobility"},
+         {"id":17,"title":"Other"},{"id":18,"title":"Outdoor"},{"id":19,"title":"Pilates","photo":"xdz9eqgslqobguwuiqn8"},
+         {"id":20,"title":"Pregnancy & Postnatal"},{"id":21,"title":"Racket sports"},{"id":22,"title":"Reformer"},{"id":23,"title":"Running"},
+         {"id":24,"title":"Sauna"},{"id":25,"title":"Spa"},{"id":26,"title":"Strength"},{"id":27,"title":"Swimming"}]
+    """
 }

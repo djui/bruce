@@ -21,6 +21,10 @@
 // Skipped habits: the same daily read spots a weekly class the user did 3+ weeks in a row and then skipped (nothing
 // visited or booked for 4 days after), picks upcoming classes from their history and pushes them at 08:00 local
 // (table `nudges`). The pure logic is in ./habits.js.
+//
+// Race reminders (Train for it): races in My races with a race-week or day-before reminder (`PUT /me/races`, table
+// `user_races`) get a push and an email at 08:00 local on the Monday of race week and a push at 18:00 the day before,
+// each once, from the minute cron.
 
 import {
   localDay, addDays, monthStart, visitsFromBookings, dailyRows, fromDetail, goalReminders, challengePeriod, challengeStats,
@@ -74,6 +78,14 @@ const CLASS_URL = "https://djui.github.io/bruce/app/#/home/class/";
 const NUDGE_HOUR = 8;
 /// Class list pages per studio when picking classes for a skipped-habit push (30 classes each).
 const NUDGE_PAGES = 4;
+/// Races with race-day reminders per user (`PUT /me/races`), and the web app's race page for the email link.
+const MAX_RACES = 20;
+const RACE_URL = "https://djui.github.io/bruce/app/#/mine/race/";
+/// Race reminders go out at these local hours; one that is due is still sent this long after (the cron missed a
+/// minute, the race was added late), later it is dropped.
+const RACE_WEEK_HOUR = 8;
+const RACE_EVE_HOUR = 18;
+const RACE_LATE_MS = 12 * 3600_000;
 
 // MARK: Time in Europe/Stockholm
 
@@ -98,6 +110,12 @@ export function localMidnight(y, m, d) {
   // Across a DST change the offset at midnight can differ from the guess's; one correction settles it.
   const q = localParts(t);
   return t - (Date.UTC(q.y, q.m - 1, q.d, q.hour, q.minute, q.second) - Date.UTC(y, m - 1, d));
+}
+
+/** UTC ms of `hour`:00 local on a local date, also on the days summer time starts or ends. */
+export function localAt(y, m, d, hour) {
+  const t = localMidnight(y, m, d) + hour * 3600_000;
+  return t + (hour - localParts(t).hour) * 3600_000;
 }
 
 // MARK: Rules
@@ -351,14 +369,15 @@ export async function unsubscribeToken(env, userId) {
 
 const escapeHtml = (t) => String(t).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
-/** Sends one booking result to the user's Bruce email (if known, not unsubscribed and Resend is set up). */
-export async function email(env, u, title, body, classId) {
+/** Sends one booking result (or race reminder, with `link`) to the user's Bruce email (if known, not unsubscribed and
+ *  Resend is set up). */
+export async function email(env, u, title, body, classId, { link: other, linkText = "Open the class" } = {}) {
   const to = u.state.email;
   if (!emailConfigured(env) || !to || u.state.emailOff) return;
   const off = `${env.PUBLIC_URL ?? DEFAULT_PUBLIC_URL}/email/off?u=${u.userId}&t=${await unsubscribeToken(env, u.userId)}`;
-  const link = classId ? CLASS_URL + classId : null;
-  const text = [body, link && `Open the class: ${link}`, "", `Sent by the Brüce auto-book server. No more emails: ${off}`].filter((l) => l != null).join("\n");
-  const html = `<p style="font-size:16px">${escapeHtml(body)}</p>${link ? `<p><a href="${link}">Open the class</a></p>` : ""}`
+  const link = other ?? (classId ? CLASS_URL + classId : null);
+  const text = [body, link && `${linkText}: ${link}`, "", `Sent by the Brüce auto-book server. No more emails: ${off}`].filter((l) => l != null).join("\n");
+  const html = `<p style="font-size:16px">${escapeHtml(body)}</p>${link ? `<p><a href="${escapeHtml(link)}">${escapeHtml(linkText)}</a></p>` : ""}`
     + `<p style="color:#888;font-size:12px">Sent by the Brüce auto-book server. <a href="${off}" style="color:#888">No more emails</a></p>`;
   try {
     const res = await fetch("https://api.resend.com/emails", {
@@ -422,7 +441,12 @@ async function saveUser(env, u) {
 
 async function deleteUser(env, userId) {
   const DB = await db(env);
-  await DB.batch([DB.prepare("DELETE FROM users WHERE user_id = ?").bind(userId), DB.prepare("DELETE FROM nudges WHERE user_id = ?").bind(userId)]);
+  await DB.batch([DB.prepare("DELETE FROM users WHERE user_id = ?").bind(userId), DB.prepare("DELETE FROM nudges WHERE user_id = ?").bind(userId),
+                  DB.prepare("DELETE FROM user_races WHERE user_id = ?").bind(userId)]);
+}
+
+async function hasRaces(env, userId) {
+  return !!(await (await db(env)).prepare("SELECT 1 AS x FROM user_races WHERE user_id = ? LIMIT 1").bind(userId).first());
 }
 
 /** Writes only the history fields of a user's state, so the daily refresh does not undo the minute cron's changes. */
@@ -439,10 +463,11 @@ async function inChallenge(env, userId) {
 
 /**
  * Keeps a user's row (and login) only while the server has something to do for them: auto-book rules, waitlist
- * watches, goal reminders, a push device or a challenge. Otherwise the row and the stored history go.
+ * watches, goal reminders, race reminders, a push device or a challenge. Otherwise the row and the stored history go.
  */
 async function keepOrDelete(env, u) {
-  if (u.rules.length || u.state.watches.length || u.state.opens?.length || u.state.goals?.length || u.devices.length || (await inChallenge(env, u.userId))) {
+  if (u.rules.length || u.state.watches.length || u.state.opens?.length || u.state.goals?.length || u.devices.length
+      || (await hasRaces(env, u.userId)) || (await inChallenge(env, u.userId))) {
     await saveUser(env, u);
     return true;
   }
@@ -590,6 +615,7 @@ export async function tick(env, now) {
     if (JSON.stringify([u.state, u.devices]) !== before) await saveUser(env, u);
   }));
   await sendNudges(env, now).catch((e) => console.log("nudges failed:", e.message));
+  await sendRaceReminders(env, now).catch((e) => console.log("race reminders failed:", e.message));
 }
 
 /** Pushes the skipped-habit recommendations planned by the daily run whose time has come. */
@@ -603,6 +629,162 @@ export async function sendNudges(env, now) {
     const gone = await push(env, u.devices, n.title, n.body, JSON.parse(n.data), "RECOMMENDATION");
     if (gone.length) { u.devices = u.devices.filter((d) => !gone.includes(d.token)); await saveUser(env, u); }
   }
+}
+
+// MARK: Race reminders (Train for it)
+
+/** When a race's reminders are due, UTC ms: 08:00 local on the Monday of race week (null for a race on a Monday: the
+ *  evening before covers it), 18:00 the day before, and race day's midnight (nothing is sent from then on). */
+export function raceReminderTimes(date) {
+  const [y, m, d] = date.split("-").map(Number);
+  const back = (localParts(localMidnight(y, m, d) + 12 * 3600_000).weekday + 5) % 7;   // days since Monday
+  return { week: back === 0 ? null : localAt(y, m, d - back, RACE_WEEK_HOUR), eve: localAt(y, m, d - 1, RACE_EVE_HOUR), day: localMidnight(y, m, d) };
+}
+
+const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return null; } };
+
+/** "Race week: HYROX Stockholm" / "Saturday is race day. Booked this week: Mobility Wed 18:00, Hyrox Thu 07:00." (or
+ *  the plan's race-week mix when nothing is booked). The same words as the apps' local notification. */
+export function raceWeekMessage(r, booked = []) {
+  const [y, m, d] = r.date.split("-").map(Number);
+  const weekday = new Date(Date.UTC(y, m - 1, d, 12)).toLocaleDateString("en-GB", { weekday: "long", timeZone: "UTC" });
+  let body = `${weekday} is race day.`;
+  const plan = r.plan ? JSON.parse(r.plan) : null;
+  const mix = (plan?.raceWeek ?? []).filter((x) => x.count > 0).map((x) => `${x.count} ${x.title}`);
+  if (booked.length) body += ` Booked this week: ${booked.map((b) => `${b.title} ${when(b.start)}`).join(", ")}.`;
+  else if (mix.length) body += ` Your class mix this week: ${mix.length > 1 ? mix.slice(0, -1).join(", ") + " and " + mix.at(-1) : mix[0]}.`;
+  return { title: `Race week: ${r.name}`, body };
+}
+export function raceEveMessage(r) {
+  const host = r.url ? hostOf(r.url) : null;
+  return { title: `Tomorrow: ${r.name}`, body: host ? `Race day tomorrow. Start times and what to bring are on ${host}.` : "Race day tomorrow." };
+}
+
+/** The user's booked classes from now until race day (the first page of `GET /v52/booking`), for the race-week push. */
+export async function raceWeekBookings(u, r, now) {
+  const [y, m, d] = r.date.split("-").map(Number);
+  const until = localMidnight(y, m, d);
+  const res = await bruce("GET", "/v52/booking", u.session.access_token, { query: [["user_id", String(u.userId)], ["limit", "30"], ["deleted", "false"],
+    ["include_class", "true"], ["class_start_time_after", new Date(now).toISOString()], ["locale", "en"]] });
+  if (!res.ok) return [];
+  return ((await res.json()).bookings ?? []).filter((b) => b?.class && !b.deleted && !b.class.canceled && !b.class.deleted)
+    .map((b) => ({ title: String(b.class.title ?? "Class").replace(/\*\*/g, "").trim(), start: Date.parse(b.class.start_time) }))
+    .filter((b) => b.start > now && b.start < until).sort((a, b) => a.start - b.start).slice(0, 4);
+}
+
+/**
+ * The minute cron's race reminders: each one whose time has come is marked sent first (so it goes out once), then
+ * pushed (category RACE_REMINDER, payload {raceId}); the race-week one is also emailed, with a link to the race page and
+ * the stop link. One that is more than RACE_LATE_MS late is only marked.
+ */
+export async function sendRaceReminders(env, now, { bookingsFn = raceWeekBookings } = {}) {
+  const DB = await db(env);
+  const today = localDay(now);
+  const { results } = await DB.prepare(`SELECT * FROM user_races WHERE date >= ? AND date <= ?
+      AND ((remind_week = 1 AND week_sent_at IS NULL) OR (remind_eve = 1 AND eve_sent_at IS NULL))`).bind(today, addDays(today, 7)).all();
+  for (const r of results) {
+    const t = raceReminderTimes(r.date);
+    for (const kind of ["week", "eve"]) {
+      const on = kind === "week" ? r.remind_week && r.week_sent_at == null : r.remind_eve && r.eve_sent_at == null;
+      // A Monday race has no race week before it: its race-week switch is the evening before (once, if both are on).
+      const due = kind === "week" && t.week == null ? (r.remind_eve ? null : t.eve) : t[kind];
+      if (!on || now < (due ?? t.week ?? t.eve)) continue;
+      // Marked first and only once (overlapping runs), so it goes out once.
+      const mine = await DB.prepare(`UPDATE user_races SET ${kind}_sent_at = ? WHERE user_id = ? AND race_id = ? AND ${kind}_sent_at IS NULL RETURNING race_id`)
+        .bind(now, r.user_id, r.race_id).first();
+      if (!mine || due == null || now >= Math.min(due + RACE_LATE_MS, t.day)) continue;
+      const u = await getUser(env, r.user_id);
+      if (!u) continue;
+      const weekly = kind === "week" && t.week != null;
+      const booked = weekly ? await bookingsFn(u, r, now).catch(() => []) : [];
+      const msg = weekly ? raceWeekMessage(r, booked) : raceEveMessage(r);
+      // Race week by push and email (web users have no device); the evening before by push.
+      const [gone] = await Promise.all([push(env, u.devices, msg.title, msg.body, { raceId: r.race_id }, "RACE_REMINDER"),
+                                        weekly && email(env, u, msg.title, msg.body, null, { link: RACE_URL + encodeURIComponent(r.race_id), linkText: "Open the race" })]);
+      if (gone.length) { u.devices = u.devices.filter((x) => !gone.includes(x.token)); await saveUser(env, u); }
+    }
+  }
+}
+
+/** The daily cron: races whose day is over leave the table, and users with nothing else to do with them. */
+export async function pruneRaces(env, now) {
+  const DB = await db(env);
+  const before = addDays(localDay(now), -1);
+  const { results } = await DB.prepare("SELECT DISTINCT user_id FROM user_races WHERE date < ?").bind(before).all();
+  if (!results.length) return 0;
+  await DB.prepare("DELETE FROM user_races WHERE date < ?").bind(before).run();
+  for (const { user_id } of results) { const u = await getUser(env, user_id); if (u) await keepOrDelete(env, u); }
+  return results.length;
+}
+
+/** The races of a `PUT /me/races` body: valid ids and days, a reminder on, at most MAX_RACES (null when over). */
+export function cleanRaces(list) {
+  const isDay = (s) => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + "T12:00:00Z"))
+    && new Date(s + "T12:00:00Z").toISOString().slice(0, 10) === s;
+  const out = [];
+  for (const r of list) {
+    if (!r || typeof r.id !== "string" || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(r.id) || r.id.length > 100 || !isDay(r.date)) continue;
+    if (r.remindWeek !== true && r.remindEve !== true) continue;
+    if (out.some((x) => x.id === r.id)) continue;
+    const url = typeof r.url === "string" && /^https:\/\/[^\s]+$/.test(r.url) && r.url.length <= 300 ? r.url : null;
+    let plan = null;
+    if (r.plan && typeof r.plan === "object") {
+      const p = r.plan;
+      plan = { perWeek: Number.isInteger(p.perWeek) ? p.perWeek : null, weeks: Number.isInteger(p.weeks) ? p.weeks : null, startedOn: isDay(p.startedOn) ? p.startedOn : null,
+               raceWeek: (Array.isArray(p.raceWeek) ? p.raceWeek : []).slice(0, 6).filter((x) => x && typeof x.title === "string" && Number.isInteger(x.count))
+                 .map((x) => ({ key: String(x.key ?? "").slice(0, 30), title: x.title.slice(0, 30), count: Math.max(0, Math.min(9, x.count)) })) };
+    }
+    out.push({ id: r.id, name: String(r.name ?? "Race").slice(0, 120) || "Race", date: r.date, url, remindWeek: r.remindWeek === true, remindEve: r.remindEve === true, plan });
+  }
+  return out.length > MAX_RACES ? null : out;
+}
+
+const rowToRace = (r) => ({ id: r.race_id, name: r.name, date: r.date, url: r.url ?? null, remindWeek: !!r.remind_week, remindEve: !!r.remind_eve,
+  plan: r.plan ? JSON.parse(r.plan) : null, weekSentAt: r.week_sent_at ?? null, eveSentAt: r.eve_sent_at ?? null });
+
+/** `PUT /me/races` (replace the set) and `DELETE /me/races/<id>`. */
+async function racesRoute(request, env, raceId) {
+  const auth = await authenticate(request, env);
+  if (!auth) return json({ error: "unauthorized" }, 401);
+  const DB = await db(env);
+  const known = await getUser(env, auth.userId);
+  if (request.method === "DELETE") {
+    // Any device may remove a race (Remove from My races, a reminder switched off).
+    await DB.prepare("DELETE FROM user_races WHERE user_id = ? AND race_id = ?").bind(auth.userId, raceId).run();
+    if (known) { signIn(known, auth); await keepOrDelete(env, known); }
+    const n = await DB.prepare("SELECT COUNT(*) AS n FROM user_races WHERE user_id = ?").bind(auth.userId).first();
+    return json({ ok: true, races: n?.n ?? 0 });
+  }
+  const body = await request.json().catch(() => ({}));
+  if (!Array.isArray(body.races)) return json({ error: "races must be an array" }, 400);
+  const races = cleanRaces(body.races);
+  if (!races) return json({ error: `at most ${MAX_RACES} races` }, 409);
+  // My races are per device: each device's PUT replaces the races it sent before, not another device's.
+  const source = typeof body.device === "string" && /^[A-Za-z0-9-]{1,64}$/.test(body.device) ? body.device : "";
+  if (!races.length && !known) return json({ ok: true, races: 0, ids: [] });
+  const u = known ?? { userId: auth.userId, rules: [], devices: [], state: emptyState() };
+  signIn(u, auth);
+  await saveUser(env, u);
+  // A reminder already sent stays sent while the race keeps its day.
+  const { results: before } = await DB.prepare("SELECT race_id, date, week_sent_at, eve_sent_at, source FROM user_races WHERE user_id = ?").bind(auth.userId).all();
+  // Other devices' races stay; all devices together keep at most twice the cap.
+  const others = before.filter((b) => b.source !== source && !races.some((r) => r.id === b.race_id)).length;
+  if (races.length + others > 2 * MAX_RACES) return json({ error: `at most ${2 * MAX_RACES} races on all devices` }, 409);
+  const at = new Date().toISOString();
+  const upsert = DB.prepare(`INSERT INTO user_races (user_id, race_id, name, date, url, remind_week, remind_eve, plan, week_sent_at, eve_sent_at, source, updated_at)
+      VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+      ON CONFLICT(user_id, race_id) DO UPDATE SET name = ?3, date = ?4, url = ?5, remind_week = ?6, remind_eve = ?7, plan = ?8,
+        week_sent_at = ?9, eve_sent_at = ?10, source = ?11, updated_at = ?12`);
+  await DB.batch([
+    DB.prepare("DELETE FROM user_races WHERE user_id = ? AND source = ?").bind(auth.userId, source),
+    ...races.map((r) => {
+      const old = before.find((b) => b.race_id === r.id && b.date === r.date);
+      return upsert.bind(auth.userId, r.id, r.name, r.date, r.url, r.remindWeek ? 1 : 0, r.remindEve ? 1 : 0, r.plan ? JSON.stringify(r.plan) : null,
+                         old?.week_sent_at ?? null, old?.eve_sent_at ?? null, source, at);
+    }),
+  ]);
+  await keepOrDelete(env, u);
+  return json({ ok: true, races: races.length, ids: races.map((r) => r.id), push: apnsConfigured(env) && u.devices.length > 0, email: emailTo(env, u) });
 }
 
 // MARK: History (daily cron): challenges, goal reminders, Wrapped percentiles
@@ -696,6 +878,7 @@ export async function planNudge(env, u, bookings, now, budget, classesFn = fetch
 
 /** The daily cron: refreshes users not yet refreshed today, least recently refreshed first, within DAILY_BUDGET. */
 export async function daily(env, now, { fetchFn = fetchBookings, classesFn = fetchClasses } = {}) {
+  await pruneRaces(env, now).catch((e) => console.log("race prune failed:", e.message));
   const { results } = await (await db(env)).prepare("SELECT * FROM users").all();
   const users = results.map(rowToUser).sort((a, b) => String(a.state.statsAt ?? "").localeCompare(String(b.state.statsAt ?? "")));
   let budget = +(env.DAILY_BUDGET ?? DAILY_BUDGET);
@@ -1044,6 +1227,9 @@ export default {
     if (watch && (request.method === "PUT" || request.method === "DELETE")) return watchRoute(request, env, +watch[1]);
     const opening = path.match(/^\/me\/opening\/(\d+)$/);
     if (opening && (request.method === "PUT" || request.method === "DELETE")) return openingRoute(request, env, +opening[1]);
+    if (route === "PUT /me/races") return racesRoute(request, env, null);
+    const race = path.match(/^\/me\/races\/([a-z0-9-]{1,100})$/);
+    if (race && request.method === "DELETE") return racesRoute(request, env, race[1]);
     if (!["PUT /me", "GET /me", "DELETE /me", "POST /me/test-push", "PUT /me/email"].includes(route)) return json({ error: "not found" }, 404);
     const auth = await authenticate(request, env);
     if (!auth) return json({ error: "unauthorized" }, 401);
@@ -1067,6 +1253,7 @@ export default {
       }
       case "GET /me": {
         const u = await getUser(env, auth.userId);
+        const { results: races } = await (await db(env)).prepare("SELECT * FROM user_races WHERE user_id = ? ORDER BY date, race_id").bind(auth.userId).all();
         const opens = (o) => ({ classId: o.classId, title: o.title, at: new Date(o.opens).toISOString(), outcome: "Opens" });
         return json({ hasSession: !!u, rules: u?.rules ?? [], lastScan: u?.state.lastScan ?? null,
                       upcoming: (u?.state.upcoming ?? []).map(opens),
@@ -1074,15 +1261,16 @@ export default {
                       opening: (u?.state.opens ?? []).map((o) => ({ classId: o.classId, title: o.title, start: new Date(o.start).toISOString(), opens: new Date(o.opens).toISOString() })),
                       maxOpening: MAX_OPENS, log: u?.state.log ?? [], devices: u?.devices.length ?? 0,
                       email: u ? emailTo(env, u) : null, nudges: u ? u.state.nudges !== false : true,
-                      nudgeDays: u?.state.nudgeDays ?? LAPSE_DAYS, lateSpots: u?.state.lateSpots ?? "ask" });
+                      nudgeDays: u?.state.nudgeDays ?? LAPSE_DAYS, lateSpots: u?.state.lateSpots ?? "ask", races: races.map(rowToRace) });
       }
       case "DELETE /me": {
-        // Auto-book off: forget rules, watches and goals. The login stays while the user is in a challenge.
+        // Auto-book off: forget rules, watches, goals and races. The login stays while the user is in a challenge.
         const u = await getUser(env, auth.userId);
         if (u && (await inChallenge(env, auth.userId))) {
           u.rules = [];
           Object.assign(u.state, { upcoming: [], watches: [], opens: [], goals: [], goalPings: {} });
           await saveUser(env, u);
+          await (await db(env)).prepare("DELETE FROM user_races WHERE user_id = ?").bind(auth.userId).run();
           return json({ ok: true, kept: "challenges" });
         }
         await deleteUser(env, auth.userId);

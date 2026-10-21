@@ -850,3 +850,52 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .race-mine { margin-top: 14px; }
 .race-mine .section-head { margin: 12px 0 2px; }
 .race-mine .frow input[type="text"] { max-width: 60%; }
+
+/* Train for it (raceplanui.js; RacePlanViews.swift) */
+.plan-strip { display: grid; gap: 4px; width: 100%; margin-top: 10px; }
+.plan-phases { display: flex; gap: 3px; }
+.plan-phases > div { min-width: 0; display: grid; gap: 5px; }
+.plan-phases > div > span { display: flex; gap: 3px; }
+.plan-phases i { flex: 1; height: 7px; border-radius: 4px; background: rgba(255, 255, 255, 0.3); }
+.plan-phases i.past { background: rgba(255, 255, 255, 0.85); }
+.plan-phases i.now { background: var(--lime); }
+.plan-phases small, .plan-ends small { font: 700 11px/1.2 var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plan-ends { display: flex; justify-content: space-between; opacity: 0.7; }
+.plan-strip.light .plan-phases i { background: var(--fill-2); }
+.plan-strip.light .plan-phases i.past { background: color-mix(in srgb, var(--label) 55%, transparent); }
+.plan-strip.light .plan-phases i.now { background: var(--lime); }
+.plan-line { font: 600 14px/1.3 var(--text); }
+.plan-grid { overflow-x: auto; margin: 12px 0 6px; }
+.plan-grid table { border-collapse: separate; border-spacing: 3px 2px; font-variant-numeric: tabular-nums; }
+.plan-grid th { font: 500 13px/1.2 var(--text); text-align: left; white-space: nowrap; padding-right: 6px; }
+.plan-grid tr:first-child th { text-align: center; font-size: 11px; color: var(--label-2); padding: 0 0 4px; }
+.plan-grid tr:first-child th small { display: block; font-weight: 800; text-align: left; height: 14px; overflow: visible; }
+.plan-grid tr:first-child th.now { color: var(--label); font-weight: 800; }
+.plan-grid td { width: 32px; height: 30px; text-align: center; padding: 0; }
+.plan-grid td button, .plan-grid td span { display: grid; place-items: center; width: 30px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--label-3); font: 600 14px/1 var(--text); cursor: default; }
+.plan-grid td button { cursor: pointer; }
+.plan-grid td.n1 > * { background: color-mix(in srgb, var(--lime) 55%, transparent); color: #000; }
+.plan-grid td.n2 > * { background: color-mix(in srgb, var(--lime) 75%, transparent); color: #000; }
+.plan-grid td.n3 > * { background: var(--lime); color: #000; }
+.plan-grid td.edited > * { box-shadow: inset 0 0 0 2px var(--label); }
+.plan-grid td.past { opacity: 0.55; }
+.plan-grid td.now { box-shadow: inset 2px 0 0 var(--lime-ink), inset -2px 0 0 var(--lime-ink); }
+.plan-grid tr.total td { font-weight: 800; color: var(--label); }
+.plan-grid tr.total td.now { box-shadow: inset 2px 0 0 var(--lime-ink), inset -2px 0 0 var(--lime-ink), inset 0 -2px 0 var(--lime-ink); border-radius: 0 0 8px 8px; }
+.plan-slot .grow p { font-size: 14px; }
+.plan-slot .warn { color: var(--orange); font-weight: 600; }
+.plan-ic { flex: none; width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; background: var(--fill); color: var(--label); }
+.plan-ic.on { background: var(--lime); color: #000; }
+.plan-home { flex-basis: 100%; display: grid; gap: 8px; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.16); font: 600 14px/1.3 var(--text); }
+.plan-dots { display: flex; gap: 4px; }
+.plan-dots i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.28); }
+.plan-dots i.done { background: var(--lime); }
+.plan-dots i.booked, .plan-dots i.autoBook { background: rgba(255, 255, 255, 0.7); }
+.card.plan-next, .card.plan-prompt, .card.plan-card { display: flex; gap: 12px; align-items: center; width: 100%; margin-top: 10px; text-align: left; color: var(--label); font: inherit; }
+.card.plan-card { display: grid; gap: 4px; cursor: pointer; }
+.card.plan-card .row-between b { display: inline-flex; gap: 6px; align-items: center; }
+.card.plan-prompt { cursor: pointer; }
+.plan-step { gap: 8px; }
+.plan-step .grow { display: grid; gap: 2px; }
+.plan-step small { font-size: 13px; }
+.sheet-title.left { text-align: left; margin-bottom: 2px; }

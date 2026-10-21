@@ -7,10 +7,11 @@ import { S } from './store.js';
 import * as R from './races.js';
 import { glassBtn, empty, loading, toast, sheet, chip } from './ui.js';
 import { addToCalendar, icsForRace, icsFileName } from './calendar.js';
+import { bannerPlanHTML, promptHTML, weekSectionHTML, homePlan, raceCardHTML, planClick, planOf, refreshPlanGoals } from './raceplanui.js';
 
 export const NOT_AFFILIATED = "Brüce is not affiliated with this race or its organiser. Sign-up, prices and rules are theirs: check the race's own page before you sign up.";
 const CATALOG_NOTE = "Races are picked by hand from each race's own page, with the day they were checked. Brüce links to those pages and is not affiliated with any race or organiser.";
-const DEVICE_NOTE = 'My races stay in this browser. Reminders for sign-up and price steps are in the Brüce iPhone app.';
+const DEVICE_NOTE = 'My races stay in this browser. Reminders for sign-up and price steps are in the Brüce iPhone app; race-week reminders come from our server while it is on.';
 const CUSTOM_NOTE = 'You added this race. It stays in this browser; Brüce has no facts or prices for it.';
 const GONE_NOTE = "This race is no longer in Brüce's list. The details are the ones you saved.";
 
@@ -37,6 +38,8 @@ export function removeRace(key) {
   const i = list.findIndex((m) => R.keyOf(m) === key);
   if (i < 0) return;
   St.saveMyRaces(list.filter((_, j) => j !== i));
+  // Monthly goals made from its Train for it plan go with it.
+  if (St.goals().some((g) => g.raceKey === key)) St.saveGoals(St.goals().filter((g) => g.raceKey !== key));
   toast('Removed from My races');
 }
 function updateMine(key, change) {
@@ -104,11 +107,13 @@ export function nextRaceHTML(hrefOf) {
   if (!e) return '';
   const r = e.race, n = R.daysToGo(r, today, e.mine.day);
   const h = R.hint(e, today);
+  const plan = homePlan(e);   // Train for it: the week line, and the next class to book under the card
   return '<div class="sec-row"><h2 class="sec-title">Next race</h2><a class="btn glass sm" href="#/mine?tab=races">My races</a></div>' +
     '<a class="race-next t-' + esc(r.type) + '" href="' + hrefOf(r.id) + '"><span class="race-count"><b>' + (n <= 0 ? 'RACE' : n) + '</b><small>' + (n === 1 || n <= 0 ? 'DAY' : 'DAYS') + '</small></span>' +
     '<span class="race-next-body"><b>' + esc(r.name) + '</b><span>' + esc(R.whenLine(e)) + '</span>' + (R.placeLine(r) ? '<span>' + esc(R.placeLine(r).replace(' | ', ', ')) + '</span>' : '') + '</span>' +
-    (h ? '<em>' + icon('info') + esc(h) + '</em>' : '') + icon(R.glyph(r), 'rcard-glyph') + '</a>';
+    (plan ? plan.line : h ? '<em>' + icon('info') + esc(h) + '</em>' : '') + icon(R.glyph(r), 'rcard-glyph') + '</a>' + (plan ? plan.after : '');
 }
+export { planClick, refreshPlanGoals };
 
 /** My classes › Races: the next race big, then later and past races. */
 export function myRacesHTML(hrefOf, selectedId) {
@@ -133,8 +138,10 @@ export function myRacesHTML(hrefOf, selectedId) {
     html += '<a class="race-banner t-' + esc(r.type) + (selectedId === r.id ? ' selected' : '') + '" href="' + hrefOf(r.id) + '">' +
       '<span class="race-banner-top"><em>' + esc([R.heroTag(r), next.mine.note].filter(Boolean).join(' · ')) + '</em><b>' + esc(R.countdownShort(r, today, next.mine.day)) + '</b></span>' +
       '<b class="race-banner-name">' + esc(r.name) + '</b><span>' + esc([R.shortDay(next.day, true), r.venue || r.city].filter(Boolean).join(' · ')) + '</span>' +
-      (h ? '<small>' + icon('info') + esc(h) + '</small>' : '') + icon(R.glyph(r), 'rcard-glyph') + '</a>';
+      (planOf(next) ? bannerPlanHTML(next) : h ? '<small>' + icon('info') + esc(h) + '</small>' : '') + icon(R.glyph(r), 'rcard-glyph') + '</a>';
+    if (!planOf(next) && R.daysToGo(r, today, next.mine.day) > 0) html += promptHTML(R.keyOf(next.mine));
   }
+  html += weekSectionHTML();
   if (up.length > 1) html += '<div class="sec-row"><h2 class="sec-title">Later</h2><small class="muted">' + (up.length - 1) + (up.length - 1 === 1 ? ' race' : ' races') + '</small></div><div class="list card flush">' + up.slice(1).map(row).join('') + '</div>';
   if (done.length) html += '<div class="sec-row"><h2 class="sec-title">Done</h2><small class="muted">' + done.length + (done.length === 1 ? ' race' : ' races') + '</small></div><div class="list card flush">' + done.map(row).join('') + '</div>';
   return html + '<p class="muted small note">' + esc(DEVICE_NOTE) + '</p>';
@@ -170,12 +177,14 @@ export function renderRace(el, id, ctx) {
       (h ? '<a class="btn glass race-link" href="' + esc(r.signupUrl) + '" target="_blank" rel="noopener noreferrer">' + esc(openLabel) + icon('external') + '</a>' : '') +
       (!custom && r.checkedOn ? feeCard(r, today) : '') +
       (R.opensLater(r, today) ? '<div class="card notice-card">' + icon('calendar') + '<p><b>' + esc(R.statusText(r, today)) + '</b><br><span class="muted small">Places can go fast. The Brüce iPhone app can remind you that morning.</span></p></div>' : '') +
+      (mine && mine.plan ? raceCardHTML(id) : '') +
       (mine ? yourRace(r, mine) : '') +
       '<p class="muted small note">' + (custom ? esc(CUSTOM_NOTE) : !r.checkedOn ? esc(GONE_NOTE)
         : "Facts as shown on the race's own page on " + esc(R.shortDay(r.checkedOn, false, true)) + '. They change; the link is always one tap away.') +
         '<br>' + esc(NOT_AFFILIATED) + '</p>' +
-      '<div class="actions sticky">' + (mine ? '<button class="btn lime" data-ract="ics">' + icon('calendar') + ' Add to Calendar</button>'
-        : '<button class="btn lime" data-ract="add">' + icon('plus') + ' Add to My races</button>') + '</div></div>';
+      '<div class="actions sticky">' + (R.isPast(r, today, day) ? (mine ? '' : '<button class="btn lime" data-ract="add">' + icon('plus') + ' Add to My races</button>')
+        : '<button class="btn lime" data-plan-open="' + esc(id) + '">' + icon('run') + (mine && mine.plan ? ' Your plan' : ' Train for it') + '</button>' +
+          (mine ? '<button class="btn glass" data-ract="ics">' + icon('calendar') + ' Add to Calendar</button>' : '<button class="btn glass" data-ract="add">' + icon('plus') + ' Add to My races</button>')) + '</div></div>';
   };
 
   function feeCard(r, today) {
@@ -199,11 +208,14 @@ export function renderRace(el, id, ctx) {
       (R.isMultiDay(r) ? '<label class="frow"><span class="grow">Your day</span><select data-rday><option value="">Every day</option>' +
         ds.map((d) => '<option value="' + d + '"' + (mine.day === d ? ' selected' : '') + '>' + esc(R.shortDay(d, true)) + '</option>').join('') + '</select></label>' : '') +
       '<label class="frow"><span class="grow">Your start</span><input type="text" data-rnote maxlength="60" placeholder="Doubles Open, 10 km…" value="' + esc(mine.note || '') + '"></label>' +
+      (R.isPast(r, todayKey(), mine.day) ? '' : '<label class="toggle"><span>Race week: Monday 08:00</span><input type="checkbox" data-rremind="remindWeek"' + (mine.remindWeek ? ' checked' : '') + '><i></i></label>' +
+        '<label class="toggle"><span>The day before: 18:00<small class="muted">' + esc(St.serverOn() ? 'Our server sends a push to the Brüce iPhone app and an email.' : 'Needs our server, which is off in Settings.') + '</small></span><input type="checkbox" data-rremind="remindEve"' + (mine.remindEve ? ' checked' : '') + '><i></i></label>') +
       '<div class="frow">' + (R.isCustom(r) ? '<button class="btn glass sm" data-ract="edit">' + icon('pencil') + ' Edit</button>' : '') +
       '<span class="spacer"></span><button class="btn glass sm red-text" data-ract="remove">Remove from My races</button></div></div>';
   }
 
   el.onclick = (e) => {
+    if (planClick(e)) return;
     const b = e.target.closest('[data-ract]');
     if (!b) return;
     const r = raceById(id);
@@ -227,9 +239,12 @@ export function renderRace(el, id, ctx) {
   el.onchange = (e) => {
     if (e.target.matches('[data-rday]')) { updateMine(id, { day: e.target.value || null }); draw(); }
     else if (e.target.matches('[data-rnote]')) updateMine(id, { note: e.target.value.trim() || null });
+    else if (e.target.matches('[data-rremind]')) updateMine(id, { [e.target.dataset.rremind]: e.target.checked });
   };
   draw();
-  St.loadRaces().then(() => { if (el.isConnected && !el.contains(document.activeElement)) draw(); });
+  // With a plan, the week's check-ins too (the Train for it card counts them).
+  Promise.all([St.loadRaces(), mineFor(id) && mineFor(id).plan ? St.loadHistory().catch(() => []) : null])
+    .then(() => { if (el.isConnected && !el.contains(document.activeElement)) draw(); });
 }
 
 // ---------------------------------------------------------------- add or edit a race by hand

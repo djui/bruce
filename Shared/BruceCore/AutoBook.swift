@@ -447,6 +447,14 @@ extension AppModel {
         rulesChanged()
     }
 
+    /// Puts back weekly rules paused for race week (RacePlanner.swift), skipping any slot that has a rule again.
+    func restoreAutoBookRules(_ rules: [AutoBookRule]) {
+        let back = rules.filter { r in !autoBookRules.contains { $0.id == r.id || ($0.studioId == r.studioId && $0.weekday == r.weekday && $0.minuteOfDay == r.minuteOfDay) } }
+        guard !back.isEmpty else { return }
+        autoBookRules += back
+        rulesChanged()
+    }
+
     private func rulesChanged() {
         if !AppModel.demo { AutoBook.saveRules(autoBookRules) }
         Task {
@@ -570,6 +578,7 @@ extension AppModel {
         do { try await AutoBookServer.sync(autoBookRules, session: s); autoBookServerNote = nil }
         catch { autoBookServerNote = "Server sync failed: \(error.localizedDescription)" }
         await syncGoalReminders()   // goals that remind when behind (Goals.swift); skipped when unchanged
+        await syncRaceServer()      // race-week and day-before reminders (Races.swift); skipped when unchanged
     }
 
     /// The "Let the server book for me" switch.
@@ -577,6 +586,8 @@ extension AppModel {
         AutoBookServer.booksForMe = on
         if on { await syncAutoBookServer(); await refreshAutoBook(); return }
         UserDefaults.standard.removeObject(forKey: "goalReminderSync")   // DELETE /me clears the server's goals too
+        RaceReminders.forgetServer()   // ... and its races: the device reminds again
+        syncRaceReminders()
         guard let s = session else { return }
         do { try await AutoBookServer.remove(session: s); autoBookServerNote = nil }
         catch { autoBookServerNote = "Server: \(error.localizedDescription)" }

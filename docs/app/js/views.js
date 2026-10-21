@@ -15,7 +15,7 @@ import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 import { cancelChip } from './rules.js';
 import { reached as milestonesReached, fresh as freshMilestone, newToYou } from './milestones.js';
 import { visitsFrom } from './visits.js';
-import { raceChipsHTML, raceChipsClick, racesListHTML, filteredRaces, nextRaceHTML, myRacesHTML, myEntries, openRaceEditor } from './racesui.js';
+import { raceChipsHTML, raceChipsClick, racesListHTML, filteredRaces, nextRaceHTML, myRacesHTML, myEntries, openRaceEditor, planClick, refreshPlanGoals } from './racesui.js';
 import { upcoming as upcomingRaces } from './races.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
@@ -58,6 +58,7 @@ export const Home = {
       const dm = e.target.closest('[data-dismiss-ms]');
       if (dm) { const seen = ls.get('bruce.milestonesSeen', []); if (!seen.includes(dm.dataset.dismissMs)) ls.set('bruce.milestonesSeen', seen.concat(dm.dataset.dismissMs)); this.refresh(); return; }
       if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); return; }
+      if (planClick(e)) return;
       forYouClick(e, (id) => link('home', 'class', id));
     });
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
@@ -440,6 +441,7 @@ export const Mine = {
       if (seg) { this.tab = seg.dataset.mseg === 'races' ? 'races' : (this.classTab || 'bookings'); this.refresh(); return; }
       const t = e.target.closest('[data-mtab]'); if (t) { this.tab = this.classTab = t.dataset.mtab; this.refresh(); return; }
       if (e.target.closest('[data-addrace]')) { openRaceEditor(null); return; }
+      if (planClick(e)) return;
       if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); }
       const ics = e.target.closest('[data-ics]');
       if (ics) {
@@ -450,7 +452,7 @@ export const Mine = {
     });
     St.loadMine().then(() => this.refresh()).catch((e) => toast(e.message));
     St.loadReviewable();
-    St.loadRaces().then(() => this.refresh());
+    St.loadRaces().then(() => { refreshPlanGoals(); this.refresh(); });   // goals made from a plan follow the month
     this.refresh();
   },
   refresh() {

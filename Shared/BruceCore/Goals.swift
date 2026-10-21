@@ -17,6 +17,9 @@ struct MonthlyGoal: Codable, Identifiable, Hashable {
     var studioId: Int? = nil
     var studioName: String? = nil
     var remind = false
+    /// Made from a race's Train for it plan (its My races key): the target follows the plan each month, and the goal
+    /// goes with the plan (RacePlanner.swift).
+    var raceKey: String? = nil
 
     static let key = "monthlyGoals"
     static func load() -> [MonthlyGoal] {
@@ -332,11 +335,15 @@ extension AppModel {
     }
 
     func deleteGoal(_ id: UUID) {
+        // A goal made from a Train for it plan stays deleted (RacePlanner.swift `refreshPlanGoals`).
+        if let g = goals.first(where: { $0.id == id }), let key = g.raceKey, let cat = g.category {
+            updatePlan(key) { if !$0.goalsSkip.contains(cat) { $0.goalsSkip.append(cat) } }
+        }
         goals.removeAll { $0.id == id }
         goalsChanged()
     }
 
-    private func goalsChanged() {
+    func goalsChanged() {
         guard !AppModel.demo else { return }
         MonthlyGoal.save(goals)
         Task { await syncGoalReminders() }

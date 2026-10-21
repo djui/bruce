@@ -1,7 +1,8 @@
 import Foundation
 
 // Demo mode's races (Races.swift): a slice of the real catalog in docs/app/races.json, as checked on 21 Oct 2026, and
-// three of them in My races (HYROX Stockholm on the Saturday in doubles, a price reminder, a sign-up reminder).
+// three of them in My races (HYROX Stockholm on the Saturday in doubles with a Train for it plan in week 3 of 10, a price
+// reminder, a sign-up reminder).
 // RacesTests checks that every demo race matches the catalog file.
 
 extension Race {
@@ -33,9 +34,74 @@ extension AppModel {
         races = Race.demo
         func pick(_ id: String) -> Race? { races.first { $0.id == id } }
         myRaces = [
-            pick("hyrox-stockholm-2026").map { MyRace(race: $0, day: "2026-12-12", note: "Doubles Open") },
+            pick("hyrox-stockholm-2026").map { r -> MyRace in
+                var m = MyRace(race: r, day: "2026-12-12", note: "Doubles Open")
+                // Train for it, started nine weeks before race week: on 21 October 2026 it is week 3 of 10, Base.
+                m.plan = RacePlanSettings(startedOn: RaceDay.adding(-63, to: RacePlanner.monday(of: "2026-12-12")) ?? "2026-10-05")
+                m.remindWeek = true; m.remindEve = true
+                return m
+            },
             pick("tough-viking-stadion-2027").map { MyRace(race: $0, remindPrice: true) },
             pick("midnattsloppet-stockholm-2027").map { MyRace(race: $0, note: "10 km", remindSignup: true) },
         ].compactMap { $0 }
+        loadDemoPlanWeek()
+    }
+
+    /// This week of the demo plan, on this week's days so the cards look alike any day: Strength on Monday and a run
+    /// on Tuesday checked in, a Hyrox class to book on Thursday (Hyrox there on the Thursdays before), and Mobility on
+    /// Sunday that a weekly rule books. Fictional studios and classes.
+    func loadDemoPlanWeek() {
+        let cal = BruceDate.calendar
+        let iso = ISO8601DateFormatter()
+        guard let monday = cal.dateInterval(of: .weekOfYear, for: Date())?.start else { return }
+        func at(_ day: Int, _ h: Int, _ m: Int) -> Date { cal.date(bySettingHour: h, minute: m, second: 0, of: cal.date(byAdding: .day, value: day, to: monday)!)! }
+        func s(_ d: Date) -> String { iso.string(from: d) }
+        func dec<T: Decodable>(_ t: T.Type, _ json: String) -> T { try! JSONDecoder().decode(T.self, from: Data(json.utf8)) }
+        studios += dec([BruceAPI.Studio].self, """
+        [{"id":9810,"name":"Example Box Hornstull","status":"LIVE","vicinity":"Hornstull","city_id":1,"has_classes":true,
+          "studio_categories":[{"category_id":13,"main":true,"order":0,"category":{"id":13,"title":"Hyrox"}},{"category_id":26,"order":1,"category":{"id":26,"title":"Strength"}}],
+          "studio_addresses":[{"main":true,"address":{"address":"Example street 40","city":"Stockholm","latitude":59.3157,"longitude":18.0335}}],
+          "visit_limit":{"items":[{"label":"BASE","limit":0},{"label":"BLACK","limit":0},{"label":"EPIC","limit":0}]}},
+         {"id":9820,"name":"Example Run Club","status":"LIVE","vicinity":"Djurgården","city_id":1,"has_classes":true,
+          "studio_categories":[{"category_id":23,"main":true,"order":0,"category":{"id":23,"title":"Running"}},{"category_id":18,"order":1,"category":{"id":18,"title":"Outdoor"}}],
+          "studio_addresses":[{"main":true,"address":{"address":"Example path 1","city":"Stockholm","latitude":59.3260,"longitude":18.1060}}],
+          "visit_limit":{"items":[{"label":"BASE","limit":0},{"label":"BLACK","limit":0},{"label":"EPIC","limit":0}]}}]
+        """)
+        // Thursday's Hyrox, or the next day of this week that is still ahead; Sunday's Mobility.
+        let thursday = (3...6).map { at($0, 18, 0) }.first { $0 > Date().addingTimeInterval(3600) }
+        var week: [BruceAPI.BruceClass] = []
+        if let t = thursday {
+            week.append(dec(BruceAPI.BruceClass.self, """
+            {"id":9811,"studio_id":9810,"title":"Hyrox","start_time":"\(s(t))","end_time":"\(s(t.addingTimeInterval(3600)))","instructor":"Instructor H","spots":20,"available_spots":7,
+             "unbookable_latest_time":"\(s(t.addingTimeInterval(-43_200)))","bookable_latest_time":"\(s(t.addingTimeInterval(-600)))","class_categories":[{"category_id":13,"main":true}]}
+            """))
+        }
+        let sunday = at(6, 17, 0)
+        week.append(dec(BruceAPI.BruceClass.self, """
+        {"id":9812,"studio_id":1489,"title":"Mobility","start_time":"\(s(sunday))","end_time":"\(s(sunday.addingTimeInterval(2700)))","instructor":"Instructor E","spots":14,"available_spots":9,
+         "unbookable_latest_time":"\(s(sunday.addingTimeInterval(-43_200)))","class_categories":[{"category_id":16,"main":true}]}
+        """))
+        for c in week where c.start! > Date() {
+            classDetails[c.id] = c
+            classesByDay[cal.startOfDay(for: c.start!), default: []].append(c)
+        }
+        for k in classesByDay.keys { classesByDay[k]?.sort { $0.startTime < $1.startTime } }
+        autoBookRules = [AutoBookRule(studioId: 1489, masterId: nil, title: "Mobility", weekday: 1, minuteOfDay: 17 * 60)]
+        friendsBookings.append(BruceAPI.FriendBooking(id: 40, userId: 7, classId: 9811, class: classDetails[9811]))
+        // Check-ins: this week's Strength and run, and Hyrox at the box on the four Thursdays before.
+        let gym = BruceAPI.StudioLite(id: 1724, name: "STC Rosenlundsparken", photo: nil, vicinity: "Södermalm", cityId: 1)
+        let run = BruceAPI.StudioLite(id: 9820, name: "Example Run Club", photo: nil, vicinity: "Djurgården", cityId: 1)
+        let box = BruceAPI.StudioLite(id: 9810, name: "Example Box Hornstull", photo: nil, vicinity: "Hornstull", cityId: 1)
+        func visit(_ id: Int, _ start: Date, _ title: String, _ studio: BruceAPI.StudioLite, _ category: Int, minutes: Int = 60) -> BruceAPI.Visit {
+            BruceAPI.Visit(id: id, studioId: studio.id, checkedInAt: s(start.addingTimeInterval(-480)), classId: 80_000 + id,
+                           visitClass: .init(id: 80_000 + id, title: title, startTime: s(start), endTime: s(start.addingTimeInterval(Double(minutes) * 60)),
+                                             instructor: "Instructor H", studio: studio, classCategories: [BruceAPI.ClassCategory(categoryId: category, main: true)]))
+        }
+        var plan = [visit(9001, at(0, 7, 30), "Full Body Strength", gym, 26, minutes: 45), visit(9002, at(1, 18, 0), "Run Club", run, 23)]
+        plan += (1...4).map { visit(9002 + $0, at(3 - 7 * $0, 18, 0), "Hyrox", box, 13) }
+        // Both studios and categories go back a few months, so Home doesn't announce them as milestones.
+        plan += [visit(9010, at(-88, 18, 0), "Hyrox", box, 13), visit(9011, at(-90, 18, 0), "Run Club", run, 23)]
+        visitHistory = ((visitHistory ?? []) + plan.filter { ($0.date ?? .distantFuture) < Date() })
+            .sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
     }
 }

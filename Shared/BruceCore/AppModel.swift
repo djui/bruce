@@ -52,6 +52,8 @@ enum SheetRoute: Hashable {
     case newChallenge
     /// Add a race by hand, or edit one (nil = new; Races.swift).
     case editRace(UUID?)
+    /// Train for it: a race's plan by its My races key (RacePlanner.swift).
+    case racePlan(String)
 }
 
 @MainActor
@@ -235,6 +237,8 @@ final class AppModel {
     var racesError: String?
     @ObservationIgnored var racesFetchedAt: Date?
     @ObservationIgnored var raceReminderTask: Task<Void, Never>?
+    /// Train for it (RacePlanner.swift): this week's slots per race key, kept while the data they come from is the same.
+    @ObservationIgnored var planWeekCache: [String: (sig: String, value: PlanWeekStatus)] = [:]
     /// My races (Races.swift), device only; demo mode keeps them in memory.
     var myRaces: [MyRace] = AppModel.demo ? [] : MyRaces.load()
     /// My classes shows its Races segment (Home's "My races", a race reminder).
@@ -618,9 +622,9 @@ final class AppModel {
     }
     var bookmarkedClasses: [BruceAPI.BruceClass] { bookmarks.compactMap(\.class).sorted { $0.startTime < $1.startTime } }
     func findClass(_ id: Int) -> BruceAPI.BruceClass? {
-        classDetails[id] ?? classesByDay.values.joined().first { $0.id == id }
-            ?? bookings.first { $0.class?.id == id }?.class ?? bookmarks.first { $0.class?.id == id }?.class
-            ?? standbys.first { $0.class?.id == id }?.class
+        if let c = classDetails[id] ?? classesByDay.values.joined().first(where: { $0.id == id }) { return c }
+        if let c = bookings.first(where: { $0.class?.id == id })?.class ?? bookmarks.first(where: { $0.class?.id == id })?.class { return c }
+        return standbys.first { $0.class?.id == id }?.class ?? studioClasses.values.joined().first { $0.id == id }
     }
 
     func toggleCategory(_ id: Int) {
@@ -655,6 +659,7 @@ final class AppModel {
                             refreshTokenExpiresAt: r.refreshTokenExpiresAt, userId: r.userId)
             TokenStore.save(s)
             session = s
+            RaceReminders.forgetServer()   // a new login sends the race reminders again (Races.swift)
             status = "Logged in."
             dismissSheets()
             await bootstrap()

@@ -5,7 +5,8 @@ import { icsFor, icsFileName, feedUrl } from './calendar.js';
 import { visitsFrom } from './visits.js';
 import { remindPayload, goalTitle } from './goals.js';
 import { DEFAULT_PREFS } from './recommend.js';
-import { decode as decodeRaces } from './races.js';
+import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRaces, keyOf as raceKey } from './races.js';
+import { makePlan, count as planCount, category as planCategory } from './raceplan.js';
 import { DEMO_RACES, DEMO_MY_RACES } from './demo.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
@@ -397,4 +398,43 @@ export function loadRaces(force) {
 }
 /** My races, stored in this browser only (like saved places and goals). */
 export function myRaces() { return ls.get('bruce.myRaces' + suffix(), isDemo() ? DEMO_MY_RACES : []); }
-export function saveMyRaces(list) { ls.set('bruce.myRaces' + suffix(), list); emit(); }
+export function saveMyRaces(list) { ls.set('bruce.myRaces' + suffix(), list); emit(); syncRaces(list); }
+/** The body of PUT /me/races: upcoming races with a race-week or day-before reminder (at most 20), with the plan's
+ *  race-week mix for the push text (server/README.md). */
+export function racesPayload(list, catalog, today) {
+  return upcomingRaces(raceEntries(list, catalog), today).filter((e) => e.mine.remindWeek || e.mine.remindEve).slice(0, 20).map((e) => {
+    const o = { id: raceKey(e.mine), name: e.race.name, date: e.day, remindWeek: !!e.mine.remindWeek, remindEve: !!e.mine.remindEve };
+    if (e.race.signupUrl) o.url = e.race.signupUrl;
+    const p = e.mine.plan && makePlan(e.day, e.race.type, e.race.sport, e.mine.plan);
+    if (p) {
+      o.plan = { perWeek: p.settings.perWeek, weeks: p.blockWeeks, startedOn: p.settings.startedOn,
+        raceWeek: p.rows.filter((k) => planCount(p.raceWeek, k) > 0).map((k) => ({ key: k, title: planCategory(k).short, count: planCount(p.raceWeek, k) })) };
+    }
+    return o;
+  });
+}
+/** Race-week and day-before reminders: our server sends them (push and email) while it is on. Only sends a change. */
+export function syncRaces(list) {
+  if (!serverOn() || !loggedIn()) return;
+  const body = racesPayload(list || myRaces(), S.races || [], todayKey());
+  const sig = JSON.stringify(body);
+  // Per login: another account in this browser sends its own races.
+  const key = 'bruce.racesSynced.' + (S.auth && S.auth.userId) + suffix();
+  const last = ls.get(key, null);
+  if (last === sig || (last == null && !body.length)) return;
+  Server.putRaces(body, raceDevice()).then(() => ls.set(key, sig)).catch(() => {});
+}
+/** This browser in PUT /me/races: each device's My races replace only the races it sent. */
+function raceDevice() {
+  let d = ls.get('bruce.raceDevice', null);
+  if (!d) { d = 'web-' + Math.random().toString(36).slice(2, 12); ls.set('bruce.raceDevice', d); }
+  return d;
+}
+/** Deletes a monthly goal; one made from a Train for it plan stays deleted (raceplan.js planGoals `skip`). */
+export function deleteGoal(g) {
+  if (g.raceKey) {
+    saveMyRaces(myRaces().map((m) => (raceKey(m) === g.raceKey && m.plan
+      ? Object.assign({}, m, { plan: Object.assign({}, m.plan, { goalsSkip: (m.plan.goalsSkip || []).filter((x) => x !== String(g.category)).concat(String(g.category)) }) }) : m)));
+  }
+  saveGoals(goals().filter((x) => x.id !== g.id));
+}

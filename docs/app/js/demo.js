@@ -41,6 +41,11 @@ const studios = [
     studio_categories: [cat(30, 'Swimming')], studio_addresses: addr('Example pool lane 2', '118 25', 59.3087, 18.0756),
     visit_limit: { items: [{ label: 'BASE', limit: 0 }, { label: 'BLACK', limit: 0 }, { label: 'EPIC', limit: 0 }] },
     description: 'A placeholder swim hall for the offline demo. Six 25 m lanes.' },
+  { id: 3003, name: 'Example Run Club', status: 'LIVE', vicinity: 'Djurgården', city_id: 1, qr_code_id: '3003',
+    photo: null, rating: { total: 58, average: 471 }, has_classes: true,
+    studio_categories: [cat(23, 'Running'), Object.assign(cat(18, 'Outdoor'), { main: false })], studio_addresses: addr('Example path 1', '115 21', 59.326, 18.106),
+    visit_limit: { items: [{ label: 'BASE', limit: 0 }, { label: 'BLACK', limit: 0 }, { label: 'EPIC', limit: 0 }] },
+    description: 'A placeholder run club for the offline demo. Meets at the park gate, rain or shine.' },
   { id: 3002, name: 'Example Reformer Loft', status: 'LIVE', vicinity: 'Norrmalm', city_id: 1, qr_code_id: '3002',
     photo: null, rating: { total: 102, average: 476 }, has_classes: true,
     studio_categories: [cat(19, 'Pilates')], studio_addresses: addr('Example street 30', '111 57', 59.3352, 18.0628),
@@ -63,6 +68,9 @@ const templates = [
   [3002, 'Reformer', 12, 5, 45, 'Instructor J', 10, [19]],
   [3001, 'Lap Swim', 12, 0, 45, null, 30, [30]],
   [1724, 'Strength Circuit', 17, 45, 45, 'Instructor B', 3, [26]],
+  // Train for it (raceplan.js): a run and Mobility every day.
+  [3003, 'Run Club', 18, 0, 60, 'Instructor K', 25, [23, 18]],
+  [1489, 'Mobility', 17, 0, 45, 'Instructor E', 14, [16]],
 ];
 const classes = {};
 for (let day = -1; day < 8; day++) {
@@ -98,7 +106,8 @@ classes[9950] = { id: 9950, studio_id: 1724, title: 'Strength Circuit', start_ti
 const categories = [
   { id: 1, title: 'Gym', photo: 'ulopoksuf88nlz90lmsz' }, { id: 2, title: 'Yoga', photo: 'mfrnofbzeqyucdflpasg' }, { id: 5, title: 'Meditation', photo: 'dgl20t8p7zqpugxw9ron' },
   { id: 7, title: 'Climbing' }, { id: 12, title: 'High-intensity', photo: 'k5pxisc2ienijh72umlm' }, { id: 13, title: 'Hyrox' },
-  { id: 19, title: 'Pilates', photo: 'xdz9eqgslqobguwuiqn8' }, { id: 25, title: 'Spa' }, { id: 26, title: 'Strength' }, { id: 30, title: 'Swimming' },
+  { id: 16, title: 'Mobility' }, { id: 18, title: 'Outdoor' }, { id: 19, title: 'Pilates', photo: 'xdz9eqgslqobguwuiqn8' }, { id: 23, title: 'Running' },
+  { id: 24, title: 'Sauna' }, { id: 25, title: 'Spa' }, { id: 26, title: 'Strength' }, { id: 30, title: 'Swimming' },
 ];
 const users = {
   1: { id: 1, first_name: 'Demo', last_name: 'User', email: 'demo@example.com', social: true, secret: 'demo' },
@@ -161,6 +170,18 @@ const pastFriendBookings = [];
       past.push({ id: id++, user_id: 1, class_id: null, studio_id: 1724, checked_in_at: at.toISOString() });
     }
   }
+}
+// Train for it: this week's Strength on Monday and a run on Tuesday, checked in (when those days are past).
+{
+  const monday = -((new Date().getDay() + 6) % 7);
+  [[monday, 1724, 'Full Body Strength', 7, 30, 45, [26]], [monday + 1, 3003, 'Run Club', 18, 0, 60, [23, 18]]].forEach(([day, sid, title, h, m, len, cats], i) => {
+    const start = new Date(at(day, h, m));
+    if (start.getTime() > Date.now() - 3600000) return;
+    const cid = 39000 + i;
+    pastClasses[cid] = { id: cid, studio_id: sid, title, start_time: start.toISOString(), end_time: new Date(start.getTime() + len * 60000).toISOString(),
+      instructor: 'Instructor K', class_categories: cats.map((c) => ({ category_id: c })) };
+    past.push({ id: 29000 + i, user_id: 1, class_id: cid, studio_id: sid, checked_in_at: new Date(start.getTime() - 8 * 60000).toISOString(), review_id: 1 });
+  });
 }
 const klass = (id) => classes[id] || pastClasses[id];
 const monthOf = (iso) => (iso || '').slice(0, 7) === new Date().toISOString().slice(0, 7);
@@ -469,6 +490,7 @@ export function handleServer(method, path, body) {
   }
   if (path.startsWith('/wrapped/percentiles')) return ok2({ year: new Date().getFullYear(), cohort: 23, percentiles: { visits: 92, minutes: 88, studios: 70, streak: 79 } });
   if (path === '/me/goals' && method === 'PUT') return ok2({ ok: true, goals: (body.goals || []).length });
+  if (path === '/me/races' && method === 'PUT') return ok2({ ok: true, races: (body.races || []).length, push: false, email: null });
   if (path === '/me' && method === 'GET') return ok2({ waitlist: [] });
   return fail(404, 'Not available in the demo: ' + path);
 }
@@ -494,9 +516,11 @@ export const DEMO_RACES = [
   {"id": "cph-half-2027", "name": "CPH Half", "type": "running", "date": "2027-09-19", "city": "Copenhagen", "country": "DK", "distancesKm": [21.1], "signupUrl": "https://cphhalf.dk/en/lottery/", "priceNote": "795 DKK. The lottery is done; about 188,000 entered the draw.", "priceSteps": [{"amount": 795, "currency": "DKK"}], "status": "lottery", "checkedOn": "2026-10-21"},
   {"id": "lidingoloppet-2027", "name": "Lidingöloppet", "type": "running", "date": "2027-09-25", "city": "Lidingö", "country": "SE", "distancesKm": [30], "format": "cross-country", "signupUrl": "https://lidingoloppet.se/en/tcs-lidingoloppet/faq/registration-fees", "priceNote": "2027 prices are not out yet. Entries cost 796–1,395 SEK in 2026.", "status": "checkSite", "klassiker": true, "checkedOn": "2026-10-21"}
 ];
-/** My races in the demo: HYROX Stockholm on the Saturday in doubles, Tough Viking at the stadium, Midnattsloppet. */
+/** My races in the demo: HYROX Stockholm on the Saturday in doubles with a Train for it plan (week 3 of 10 on 21 Oct
+ *  2026), Tough Viking at the stadium, Midnattsloppet. */
 export const DEMO_MY_RACES = [
-  {"id": "demo-hyrox-stockholm", "raceId": "hyrox-stockholm-2026", "name": "HYROX Stockholm", "date": "2026-12-10", "endDate": "2026-12-13", "city": "Solna", "url": "https://hyrox.com/find-my-race/", "type": "hyrox", "day": "2026-12-12", "note": "Doubles Open", "addedAt": "2026-10-01T08:00:00.000Z"},
+  {"id": "demo-hyrox-stockholm", "raceId": "hyrox-stockholm-2026", "name": "HYROX Stockholm", "date": "2026-12-10", "endDate": "2026-12-13", "city": "Solna", "url": "https://hyrox.com/find-my-race/", "type": "hyrox", "day": "2026-12-12", "note": "Doubles Open", "addedAt": "2026-10-01T08:00:00.000Z",
+   "remindWeek": true, "remindEve": true, "plan": {"startedOn": "2026-10-05", "weeks": 10, "perWeek": 4, "edits": {}}},
   {"id": "demo-tough-viking", "raceId": "tough-viking-stadion-2027", "name": "Tough Viking Stockholms Stadion", "date": "2027-05-15", "city": "Stockholm", "url": "https://www.toughviking.se/", "type": "obstacle", "addedAt": "2026-10-01T08:00:00.000Z"},
   {"id": "demo-midnattsloppet-stockholm", "raceId": "midnattsloppet-stockholm-2027", "name": "Midnattsloppet Stockholm", "date": "2027-08-14", "city": "Stockholm", "url": "https://midnattsloppet.com/en/start-fee/", "type": "running", "note": "10 km", "addedAt": "2026-10-01T08:00:00.000Z"}
 ];
