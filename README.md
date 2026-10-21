@@ -135,6 +135,11 @@ My classes tabs, with class and studio pages and account sheets.
   in a row, then skipped it and booked nothing for 4 days (a Saturday class: by Wednesday; 2 or 7 days in Menu › Auto-book)? A morning push
   "Missing your Saturday morning Reformer?" names up to three upcoming classes picked from your history; tapping it
   opens the best one on top of For you. Menu › Auto-book › "Suggest classes when I skip a habit" turns it off.
+- **Milestones** (iPhone and web): your 10th, 25th, 50th and 100th class, 5, 10 and 25 studios, the first class in a
+  new category and 4-, 8- and 12-week streaks, each with its own SF Symbol badge: a Home card when one is fresh
+  (with Share), and all of them under Statistics. Computed on the device from the visit history.
+- **New to you** (iPhone and web): studios you never checked in at, within your plan, in categories you do or close
+  by, as a Home row; a **"Try new studios"** monthly goal counts first visits at new studios.
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.

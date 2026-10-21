@@ -13,6 +13,8 @@ import { challengesHTML, challengesClick, openNewChallenge, loadIfAllowed } from
 import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
 import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 import { cancelChip } from './rules.js';
+import { reached as milestonesReached, fresh as freshMilestone, newToYou } from './milestones.js';
+import { visitsFrom } from './visits.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
  *  Menu, which end every tab's header (on wide screens they live in the sidebar instead). */
@@ -48,7 +50,14 @@ export const Home = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
     el.innerHTML = header('Home') + '<div id="home-body">' + loading() + '</div>';
-    el.addEventListener('click', (e) => forYouClick(e, (id) => link('home', 'class', id)));
+    el.addEventListener('click', (e) => {
+      const sh = e.target.closest('[data-share-ms]');
+      if (sh) { const text = sh.dataset.shareMs; if (navigator.share) navigator.share({ text }).catch(() => {}); else navigator.clipboard.writeText(text).then(() => toast('Copied'), () => {}); return; }
+      const dm = e.target.closest('[data-dismiss-ms]');
+      if (dm) { const seen = ls.get('bruce.milestonesSeen', []); if (!seen.includes(dm.dataset.dismissMs)) ls.set('bruce.milestonesSeen', seen.concat(dm.dataset.dismissMs)); this.refresh(); return; }
+      if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); return; }
+      forYouClick(e, (id) => link('home', 'class', id));
+    });
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
   },
   refresh() {
@@ -68,7 +77,7 @@ export const Home = {
       html += '<h2 class="sec-title">Next up</h2><div class="list">' + classRow(next.class, link('home', 'class', next.class.id), { meta: dayHeader(next.class.start_time), selected: sel && sel.id === next.class.id }) + '</div>' +
         (open ? '<button class="btn lime" data-checkin="' + next.class.studio_id + '">' + icon('checkSeal') + ' Check in at ' + esc(open.t.name) + '</button>' : '');
     }
-    html += forYouHTML((id) => link('home', 'class', id), sel);
+    html += milestoneHTML() + forYouHTML((id) => link('home', 'class', id), sel) + newToYouHTML(sel);
     const spot = sec('SPOTLIGHT');
     if (spot && spot.items.length) {
       html += '<h2 class="sec-title">' + esc((spot.title || 'Spotlight').toUpperCase()) + '</h2><div class="hscroll spotlight">' + spot.items.map((it) => photoCard({
@@ -94,6 +103,38 @@ export const Home = {
     b.innerHTML = html || empty('home', 'Nothing here yet.');
   },
 };
+
+/** Home: the newest milestone of the last 30 days until dismissed (milestones.js). */
+function milestoneHTML() {
+  if (!S.visits) return '';
+  const seen = new Set(ls.get('bruce.milestonesSeen', []));
+  const list = milestonesReached(visitsFrom(S.history, { checkedInOnly: true }), todayKey(), St.catTitle, (id) => St.studioName(id));
+  const m = St.isDemo() ? list.find((x) => !seen.has(x.key)) : freshMilestone(list, seen, todayKey());
+  if (!m) return '';
+  return '<div class="card milestone"><span class="badge">' + icon(m.icon) + (m.kind === 'category' ? '' : '<b>' + m.value + '</b>') + '</span><div class="grow"><small class="muted">MILESTONE</small><b>' + esc(m.title) + '</b><p class="muted small">' + esc(m.detail) + '</p>' +
+    '<div class="row"><button class="btn glass sm" data-share-ms="' + esc(m.title + ' with Bruce Studios. ' + m.detail) + '">' + icon('share') + ' Share</button><button class="link" data-dismiss-ms="' + esc(m.key) + '">Done</button></div></div></div>';
+}
+
+/** Home: studios never visited, in the plan, in categories you do or nearby (milestones.js newToYou). */
+function newToYouHTML(sel) {
+  if (!S.visits || !S.studios.size) return '';
+  const vs = visitsFrom(S.history, { checkedInOnly: true });
+  const visited = new Set(vs.map((v) => v.studioId).filter(Boolean));
+  const counts = {};
+  vs.forEach((v) => v.categories.forEach((c) => { counts[c] = (counts[c] || 0) + 1; }));
+  const liked = Object.entries(counts).filter(([, n]) => n >= 2).map(([c]) => St.catTitle(c)).filter(Boolean);
+  const tier = (S.membership && (S.membership.membership_tier || S.membership.admission_tier)) || 'BASE';
+  const ps = St.placesState(), home = (ps.places || []).find((p) => p.kind === 'home' && p.lat != null);
+  const h = S.here || home || null;
+  const picks = newToYou(St.cityStudios(), visited, liked, tier, h, metres, 8);
+  if (!picks.length) return '';
+  const goal = St.goals().find((g) => g.category === 'newStudios');
+  return '<div class="sec-row"><h2 class="sec-title">NEW TO YOU</h2>' + (goal ? '<button class="btn glass sm" data-goals>Try ' + goal.target + ' new studio' + (goal.target === 1 ? '' : 's') + '</button>' : '') + '</div><div class="hscroll studios">' + picks.map((p) => photoCard({
+    href: link('home', 'studio', p.studio.id), photo: p.studio.photo, glyph: (p.studio.cats || []).join(' ') || p.studio.name, title: p.studio.name,
+    sub: [p.studio.vicinity, p.distance != null ? distance(p.distance) : null, 'never visited'].filter(Boolean).join(' · ') + '<br><small>' + esc(p.reason) + '</small>',
+    topRight: (p.studio.cats || [])[0] ? '<span class="glass-pill">' + esc(p.studio.cats[0]) + '</span>' : '', selected: sel && sel.id === p.studio.id,
+  })).join('') + '</div>';
+}
 
 // ---------------------------------------------------------------- Explore
 

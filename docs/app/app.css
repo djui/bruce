@@ -770,3 +770,12 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .sheet-go { position: sticky; bottom: 0; margin-top: 22px; }
 .filter-foot { display: flex; gap: 6px; margin: 16px auto; width: auto; }
 .map.na-map { height: 300px; margin: 8px 0 14px; }
+
+/* Milestone card on Home (views.js milestoneHTML) */
+.card.milestone { display: flex; gap: 14px; align-items: flex-start; background: color-mix(in srgb, var(--lime) 12%, var(--card)); }
+.card.milestone .badge { flex: none; width: 56px; height: 56px; border-radius: 28px; background: var(--lime); color: #000; display: grid; place-items: center; grid-template-rows: auto auto; gap: 0; }
+.card.milestone .badge .i { width: 20px; height: 20px; }
+.card.milestone .badge b { font-size: 12px; font-weight: 900; line-height: 1; }
+.card.milestone small.muted { font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+.card.milestone > div > b { display: block; font-size: 18px; margin: 2px 0; }
+.card.milestone .row { display: flex; gap: 14px; align-items: center; margin-top: 8px; }

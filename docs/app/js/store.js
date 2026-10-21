@@ -69,7 +69,7 @@ export function slimStudio(s) {
     id: s.id, name: s.name, vicinity: s.vicinity, photo: s.photo, city_id: s.city_id, label: s.label, rating: s.rating, qr: s.qr_code_id,
     cats: (s.studio_categories || []).map((c) => c.category && c.category.title).filter(Boolean),
     address: a.address, lat: a.latitude, lon: a.longitude, door: s.integration_door_type, openings: s.has_openings,
-    limits: s.visit_limit && s.visit_limit.items,
+    limits: s.visit_limit && s.visit_limit.items, hasClasses: s.has_classes,
   };
 }
 export const studio = (id) => S.studios.get(id) || (S.studioDetails.has(id) ? slimStudio(S.studioDetails.get(id)) : null);
