@@ -10,7 +10,36 @@
 		B0000000000000000000A001 /* Bruce Client.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BruceiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		B0000000000000000000A002 /* Base.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Base.xcconfig; sourceTree = "<group>"; };
 		B0000000000000000000A003 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		B0000000000000000000A010 /* BruceWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BruceWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
+
+/* Begin PBXBuildFile section */
+		B0000000000000000000E014 /* BruceWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = B0000000000000000000A010 /* BruceWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		B0000000000000000000E016 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = B0000000000000000000E000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = B0000000000000000000E010;
+			remoteInfo = BruceWidgets;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		B0000000000000000000E013 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				B0000000000000000000E014 /* BruceWidgets.appex in Embed Foundation Extensions */,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		B0000000000000000000B001 /* BruceiOS */ = {
@@ -24,10 +53,28 @@
 			path = ../Shared/BruceCore;
 			sourceTree = SOURCE_ROOT;
 		};
+		B0000000000000000000B003 /* BruceWidgets */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = BruceWidgets;
+			sourceTree = "<group>";
+		};
+		B0000000000000000000B004 /* BruceWidgetKit (app + widget extension) */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			name = BruceWidgetKit;
+			path = ../Shared/BruceWidgetKit;
+			sourceTree = SOURCE_ROOT;
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		B0000000000000000000C001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0000000000000000000C002 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -42,6 +89,8 @@
 			children = (
 				B0000000000000000000B001 /* BruceiOS */,
 				B0000000000000000000B002 /* BruceCore */,
+				B0000000000000000000B004 /* BruceWidgetKit */,
+				B0000000000000000000B003 /* BruceWidgets */,
 				B0000000000000000000D003 /* Config */,
 				B0000000000000000000D002 /* Products */,
 			);
@@ -51,6 +100,7 @@
 			isa = PBXGroup;
 			children = (
 				B0000000000000000000A001 /* BruceiOS.app */,
+				B0000000000000000000A010 /* BruceWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -74,19 +124,43 @@
 				B0000000000000000000E002 /* Sources */,
 				B0000000000000000000C001 /* Frameworks */,
 				B0000000000000000000E003 /* Resources */,
+				B0000000000000000000E013 /* Embed Foundation Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				B0000000000000000000E015 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				B0000000000000000000B001 /* BruceiOS */,
+				B0000000000000000000B002 /* BruceCore */,
+				B0000000000000000000B004 /* BruceWidgetKit */,
+			);
+			name = BruceiOS;
+			productName = BruceiOS;
+			productReference = B0000000000000000000A001 /* BruceiOS.app */;
+			productType = "com.apple.product-type.application";
+		};
+		B0000000000000000000E010 /* BruceWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B0000000000000000000F003 /* Build configuration list for PBXNativeTarget "BruceWidgets" */;
+			buildPhases = (
+				B0000000000000000000E011 /* Sources */,
+				B0000000000000000000C002 /* Frameworks */,
+				B0000000000000000000E012 /* Resources */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				B0000000000000000000B001 /* BruceiOS */,
-				B0000000000000000000B002 /* BruceCore */,
+				B0000000000000000000B003 /* BruceWidgets */,
+				B0000000000000000000B004 /* BruceWidgetKit */,
 			);
-			name = BruceiOS;
-			productName = BruceiOS;
-			productReference = B0000000000000000000A001 /* BruceiOS.app */;
-			productType = "com.apple.product-type.application";
+			name = BruceWidgets;
+			productName = BruceWidgets;
+			productReference = B0000000000000000000A010 /* BruceWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -113,12 +187,20 @@
 			projectRoot = "";
 			targets = (
 				B0000000000000000000E001 /* BruceiOS */,
+				B0000000000000000000E010 /* BruceWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		B0000000000000000000E003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B0000000000000000000E012 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -135,7 +217,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B0000000000000000000E011 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		B0000000000000000000E015 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = B0000000000000000000E010 /* BruceWidgets */;
+			targetProxy = B0000000000000000000E016 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		B0000000000000000000F011 /* Debug */ = {
@@ -246,6 +343,56 @@
 			};
 			name = Release;
 		};
+		B0000000000000000000F031 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B0000000000000000000A002 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/BruceWidgets.entitlements;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/BruceWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME) (unofficial)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(inherited).widgets";
+				PRODUCT_NAME = BruceWidgets;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		B0000000000000000000F032 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = B0000000000000000000A002 /* Base.xcconfig */;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = Config/BruceWidgets.entitlements;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/BruceWidgets-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME) (unofficial)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = "$(inherited).widgets";
+				PRODUCT_NAME = BruceWidgets;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -263,6 +410,15 @@
 			buildConfigurations = (
 				B0000000000000000000F021 /* Debug */,
 				B0000000000000000000F022 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B0000000000000000000F003 /* Build configuration list for PBXNativeTarget "BruceWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B0000000000000000000F031 /* Debug */,
+				B0000000000000000000F032 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

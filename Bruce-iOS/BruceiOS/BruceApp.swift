@@ -22,13 +22,16 @@ struct BruceiOSApp: App {
                     AppDelegate.onDeviceToken = { [model] in Task { await model.syncAutoBookServer() } }
                     AppDelegate.openTarget = { [model] t in model.open(t) }
                     AppModel.travelTimeProvider = { q in await CommuteETA.minutes(q) }
+                    AppModel.onDataChanged = { $0.updateWidgetSnapshot() }
                 }
+                .onOpenURL { url in model.open(widgetURL: url) }   // widgets and the check-in Control (WidgetBridge.swift)
                 .onChange(of: phase) { old, p in
                     if p == .active { location.start() } else if p == .background { location.stop() }
                     // Waitlist spots can turn into bookings while the app is in the background.
                     if p == .active && old == .background {
                         Task { await model.refreshOnForeground(); await HealthSync.shared.sync(model: model) }
                     }
+                    if p == .background { model.updateWidgetSnapshot() }
                 }
         }
     }
@@ -260,6 +263,7 @@ struct SheetScreen: View {
         case .review(let id): ReviewSheet(bookingId: id)
         case .addToCalendar(let id): AddToCalendarSheet(classId: id)
         case .bookAgain(let t): BookAgainSheet(template: t)
+        case .widgets: WidgetsPreviewSheet()
         case .autoBook: AutoBookView()
         case .places: PlacesView()
         case .editPlace(let id): EditPlaceView(placeId: id)

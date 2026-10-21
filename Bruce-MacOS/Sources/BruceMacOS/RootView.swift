@@ -192,7 +192,7 @@ struct SheetHost: View {
         case .bookAgain(let t): BookAgainSheet(template: t)
         case .autoBook: AutoBookView()
         // Places, goals and challenges are iPhone-only for now.
-        case .places, .editPlace, .goals, .editGoal, .newChallenge: PlaceholderPage(title: "Available in the iPhone app")
+        case .places, .editPlace, .goals, .editGoal, .newChallenge, .widgets: PlaceholderPage(title: "Available in the iPhone app")
         }
     }
 }

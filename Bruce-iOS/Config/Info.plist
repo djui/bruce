@@ -13,5 +13,17 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Opened by the widgets and the check-in Control (Shared/BruceWidgetKit): bruece://checkin, /visits, /class/<id>. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>net.dauernheim.bruce</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bruece</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

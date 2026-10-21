@@ -146,6 +146,11 @@ My classes tabs, with class and studio pages and account sheets.
   visits counting up, months, your class personality, favourite studio, top time of day, streak, the friend you
   trained with most, how you compare with other Brüce users (anonymous percentiles from the server), and a share
   image.
+- **Home Screen and Lock Screen widgets** (iPhone): *Next class* (time, studio and the free-cancel deadline, which
+  turns amber and red at the strike steps), *Visits left* (a ring with this month's remaining visits) and a Lock
+  Screen *Check in* button, plus a Control Center control. They read a snapshot the app writes into an App Group;
+  no login or token ever enters the widget extension, and the button and control only **open** the quick check-in
+  sheet, where check-in stays confirmed and location-aware. Every face says "Brüce (unofficial)".
 - **Apple Health** (iPhone): Settings › Apple Health saves every class you attended as a workout, with the
   workout type guessed from the class and its category (Hyrox as HIIT, yoga, cycling, swimming…), start and end
   time and estimated active calories (MET value × duration × your weight from Health, else 75 kg). Solo gym visits
@@ -232,9 +237,11 @@ OpenStreetMap, the Unbounded font from Google Fonts). To try it locally, serve `
 │   ├── Package.swift
 │   ├── Sources/BruceMacOS/ macOS views; Shared -> ../../../Shared/BruceCore (symlink)
 │   └── Support/Info.plist  Embedded for the camera permission prompt
+├── Shared/BruceWidgetKit/  Widget snapshot and faces, compiled into the app and the widget extension
 └── Bruce-iOS/              Xcode project for the iPhone app "Brüce"
     ├── BruceiOS.xcodeproj  Folder-synchronised groups; also compiles ../Shared/BruceCore
     ├── BruceiOS/           iOS views and assets
+    ├── BruceWidgets/       Widget extension: Home Screen widgets, Lock Screen accessories, check-in Control
     ├── Config/             Base.xcconfig, Info.plist, ExportOptions.plist, Local.xcconfig.example
     ├── scripts/            testflight.sh, make-icon.swift
     └── .env.example        Template for TestFlight credentials
