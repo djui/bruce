@@ -121,15 +121,20 @@ struct RaceDetailView: View {
     @Environment(AppModel.self) var m
     let raceId: String
     @State private var noteDraft = ""
+    @State private var waveDraft = ""
+    @State private var bibDraft = ""
+    /// The format looked at before the race is in My races (then it is saved with the race).
+    @State private var formatPick: String?
     @State private var working = false
 
     var race: Race? { m.race(raceId) }
     var mine: MyRace? { m.myRace(forKey: raceId) }
+    func shownFormat(_ r: Race) -> RaceFormat? { r.format(mine?.format ?? formatPick) ?? r.formats?.first }
 
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 20) {
-                IconButton(system: "chevron.left", size: 20) { saveNote(); m.pop() }
+                IconButton(system: "chevron.left", size: 20) { saveNote(); saveStart(); m.pop() }
                 Spacer()
                 if let u = race?.url { ShareButton(url: u) }
             }
@@ -139,8 +144,8 @@ struct RaceDetailView: View {
             else { EmptyState(system: "flag.checkered", text: Copy.raceGone) }
         }
         .task { await m.loadRaces(); await m.loadRaceGoing(); await m.loadChallenges() }
-        .onAppear { noteDraft = mine?.note ?? "" }
-        .onDisappear { saveNote() }
+        .onAppear { noteDraft = mine?.note ?? ""; waveDraft = mine?.wave ?? ""; bibDraft = mine?.bib ?? "" }
+        .onDisappear { saveNote(); saveStart() }
     }
 
     func content(_ r: Race) -> some View {
@@ -154,6 +159,7 @@ struct RaceDetailView: View {
                         if let f = r.factsLine { line("point.topleft.down.to.point.bottomright.curvepath", f) }
                         line("clock", r.countdownText(day: mine?.day))
                         if !past, let s = r.signupLine() { line("ticket", s) }
+                        if !past, let s = r.startInfo { line("figure.walk.arrival", s) }
                         if !past, let s = r.statusText(), r.status != .open, !r.opensLater() { line(RaceStyle.statusSymbol(r.status), s) }
                         if r.klassiker == true { line("rosette", "A leg of En Svensk Klassiker") }
                     }
@@ -250,10 +256,25 @@ struct RaceDetailView: View {
     }
 
     func fees(_ r: Race) -> some View {
-        let steps = r.steps, cur = r.currentStep()
+        let fmt = shownFormat(r)
+        let steps = r.steps(for: fmt), cur = r.currentStep(for: fmt)
         return VStack(alignment: .leading, spacing: 10) {
+            // The ways to enter first; the fee and the rules follow the one picked.
+            if r.hasFormats {
+                HStack(spacing: 8) {
+                    ForEach(r.formats ?? []) { f in
+                        let on = f.code == fmt?.code
+                        Button(f.title) { if mine != nil { m.setRaceFormat(r, code: f.code) } else { formatPick = f.code } }
+                            .buttonStyle(.plain).font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(on ? .black : Theme.ink)
+                            .padding(.horizontal, 12).frame(height: 28)
+                            .background(Capsule().fill(on ? Theme.lime : Theme.chipGrey))
+                    }
+                }
+                if let d = fmt?.detail { Text(d).font(.system(size: 13, weight: .light)).foregroundStyle(Theme.secondary) }
+            }
             HStack {
-                Text("Entry fee").font(.system(size: 15, weight: .light)).foregroundStyle(Theme.secondary)
+                Text(fmt.map { "Entry fee · \($0.title)" } ?? "Entry fee").font(.system(size: 15, weight: .light)).foregroundStyle(Theme.secondary)
                 Spacer()
                 Text(cur.map { $0.priceText + (steps.count > 1 ? " now" : "") } ?? (r.status == .soldOut ? "Sold out" : "On the race page"))
                     .font(.system(size: 16, weight: .bold))
@@ -272,6 +293,7 @@ struct RaceDetailView: View {
                 }
             }
             if let n = r.priceNote { Text(n).font(.system(size: 14, weight: .light)).foregroundStyle(Theme.secondary) }
+            if let rule = r.changeRule { line("arrow.triangle.2.circlepath", rule) }
             if r.status == .open, !r.isPast(), r.nextPriceChange() != nil {
                 Toggle(isOn: Binding(get: { mine?.remindPrice ?? false }, set: { m.setRaceReminder(r, price: $0) })) {
                     Text("Next price step · \(Copy.raceRemindPrice.lowercased())").font(.system(size: 14))
@@ -292,7 +314,29 @@ struct RaceDetailView: View {
                     ForEach(r.days, id: \.self) { d in Text(RaceDay.format(d, "EEE d MMM")).tag(d) }
                 }
             }
-            TextField("Your start, e.g. Doubles Open or 10 km", text: $noteDraft).textFieldStyle(.roundedBorder).onSubmit { saveNote() }
+            if r.hasFormats {
+                Picker("Format", selection: Binding(get: { mine.format ?? "" }, set: { m.setRaceFormat(r, code: $0.isEmpty ? nil : $0) })) {
+                    Text("Not picked").tag("")
+                    ForEach(r.formats ?? []) { f in Text(f.title).tag(f.code) }
+                }
+            }
+            TextField(r.hasFormats ? Copy.raceDivisionPlaceholder : Copy.raceNotePlaceholder, text: $noteDraft).textFieldStyle(.roundedBorder).onSubmit { saveNote() }
+            // The start wave and bib come from the organiser later and are added by hand.
+            HStack(spacing: 10) {
+                TextField(Copy.raceWavePlaceholder, text: $waveDraft).textFieldStyle(.roundedBorder).onSubmit { saveStart() }
+                TextField(Copy.raceBibPlaceholder, text: $bibDraft).textFieldStyle(.roundedBorder).onSubmit { saveStart() }
+            }
+            if let e = m.myRaceEntries.first(where: { $0.mine.key == raceId }), let by = e.arriveBy {
+                Text(Copy.raceArriveBy(by, minutes: r.arriveMinutes)).font(.system(size: 13, weight: .light)).foregroundStyle(Theme.secondary)
+            } else if !r.isPast(day: mine.day) {
+                Text(Copy.raceStartHint).font(.system(size: 12, weight: .light)).foregroundStyle(Theme.secondary)
+            }
+            if !r.isPast(day: mine.day), RaceClock.minutes(mine.wave) == nil {
+                Toggle(isOn: Binding(get: { mine.remindWave }, set: { m.setRaceReminder(r, wave: $0) })) {
+                    Text("\(Copy.raceRemindWave) · \(Copy.raceRemindWaveHint.lowercased())").font(.system(size: 14))
+                }
+                .toggleStyle(.switch).tint(Theme.lime)
+            }
             if !r.isPast(day: mine.day) {
                 Toggle(Copy.planRemindWeek, isOn: Binding(get: { mine.remindWeek }, set: { m.setRaceReminder(r, week: $0) })).toggleStyle(.switch).tint(Theme.lime)
                 Toggle(Copy.planRemindEve, isOn: Binding(get: { mine.remindEve }, set: { m.setRaceReminder(r, eve: $0) })).toggleStyle(.switch).tint(Theme.lime)
@@ -309,11 +353,13 @@ struct RaceDetailView: View {
     }
 
     func saveNote() {
-        guard var x = mine else { return }
-        let n = noteDraft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard (x.note ?? "") != n else { return }
-        x.note = n.isEmpty ? nil : n
-        m.saveMyRace(x)
+        guard let r = race, mine != nil else { return }
+        m.setRaceStart(r, note: noteDraft)
+    }
+    func saveStart() {
+        guard let r = race, mine != nil else { return }
+        m.setRaceStart(r, wave: waveDraft, bib: bibDraft)
+        if let w = mine?.wave { waveDraft = w }
     }
 }
 
@@ -445,6 +491,62 @@ struct NextRaceSection: View {
             }
             .padding(.horizontal, Theme.gutter).padding(.top, 20)
         }
+    }
+}
+
+/// Home, above Spotlight: the next catalog races as a row, with the next price step and friends going.
+struct UpcomingRacesSection: View {
+    @Environment(AppModel.self) var m
+    var body: some View {
+        let list = Races.upcomingOnHome(m.races, mine: m.myRaces, country: m.homeCountry)
+        if !list.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    Text(Copy.raceUpcomingTitle).font(.system(size: 24, weight: .bold))
+                    Spacer()
+                    Button("Show all") { m.showRaceCatalog() }.buttonStyle(.plain).font(.system(size: 15, weight: .medium))
+                }
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 12) {
+                        ForEach(list) { r in
+                            Button { m.push(.race(r.id)) } label: { RaceMiniTile(race: r, going: m.friendsGoing(r.id)) }.buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, Theme.gutter).padding(.top, 20)
+            .task { await m.loadRaces(); await m.loadRaceGoing() }
+        }
+    }
+}
+
+/// A race in Home's row: date, name, place, the next price step and friends going.
+struct RaceMiniTile: View {
+    let race: Race
+    var going: [BruceAPI.UserLite] = []
+    var body: some View {
+        let pill = Races.homePill(race)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top) {
+                BibDate(race: race, scale: 0.8)
+                Spacer()
+                Image(systemName: race.symbol).font(.system(size: 20, weight: .light)).opacity(0.7)
+            }
+            Spacer(minLength: 0)
+            Text(race.name).font(.system(size: 16, weight: .heavy).width(.expanded)).lineLimit(2).minimumScaleFactor(0.8)
+            Text([RaceDay.format(race.date, "EEE d MMM"), race.city.isEmpty ? nil : race.city].compactMap { $0 }.joined(separator: " · "))
+                .font(.system(size: 13, weight: .medium)).opacity(0.9).lineLimit(1)
+            if !pill.isEmpty {
+                Text(pill).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                    .padding(.horizontal, 9).padding(.vertical, 4).background(Capsule().fill(.white.opacity(0.22)))
+            }
+            if !going.isEmpty { GoingFaces(users: going, size: 20, onDark: true) }
+        }
+        .foregroundStyle(.white)
+        .padding(14)
+        .frame(width: 210, height: 180, alignment: .topLeading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(RaceStyle.gradient(race.type)))
+        .contentShape(RoundedRectangle(cornerRadius: 18))
     }
 }
 

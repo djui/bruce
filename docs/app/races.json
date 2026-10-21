@@ -42,11 +42,20 @@
       "distancesKm": [],
       "signupUrl": "https://hyrox.com/find-my-race/",
       "platform": "vivenu",
-      "priceNote": "Single 1,530 SEK, doubles 1,470 SEK per person",
+      "priceNote": "Singles 1,530 SEK, doubles 1,470 SEK per person, relay 870 SEK per person. Prices rise as spots fill. Spectators 220 SEK.",
       "priceSteps": [{ "amount": 1470, "currency": "SEK", "lowest": true }],
       "status": "open",
       "resultsUrl": "https://results.hyrox.com/",
-      "checkedOn": "2026-10-21"
+      "checkedOn": "2026-10-21",
+      "formats": [
+        { "code": "singles", "title": "Singles", "teamSize": 1, "priceSteps": [{ "amount": 1530, "currency": "SEK" }], "note": "Open or Pro" },
+        { "code": "doubles", "title": "Doubles", "teamSize": 2, "priceSteps": [{ "amount": 1470, "currency": "SEK", "per": "person" }], "note": "Open or Pro" },
+        { "code": "relay", "title": "Relay", "teamSize": 4, "priceSteps": [{ "amount": 870, "currency": "SEK", "per": "person" }], "note": "2 runs and 2 stations each" },
+        { "code": "adaptive", "title": "Adaptive", "teamSize": 1 }
+      ],
+      "changeRule": "Changes only with the Flex add-on, bought at checkout: refunds up to 7 days before, plus one name change for doubles and relay. Without Flex, no changes.",
+      "startInfo": "Start wave by email a few days before. Be there 90 minutes early.",
+      "arriveMinutesBefore": 90
     },
     {
       "id": "vasaloppet-2027",
@@ -103,7 +112,15 @@
       "priceSteps": [{ "amount": 1045, "currency": "DKK", "lowest": true }],
       "status": "open",
       "resultsUrl": "https://results.hyrox.com/",
-      "checkedOn": "2026-10-21"
+      "checkedOn": "2026-10-21",
+      "formats": [
+        { "code": "singles", "title": "Singles", "teamSize": 1, "priceSteps": [{ "amount": 1045, "currency": "DKK" }], "note": "Open or Pro" },
+        { "code": "doubles", "title": "Doubles", "teamSize": 2, "note": "Open or Pro" },
+        { "code": "relay", "title": "Relay", "teamSize": 4 }
+      ],
+      "changeRule": "Changes only with the Flex add-on, bought at checkout: refunds up to 7 days before, plus one name change for doubles and relay. Without Flex, no changes.",
+      "startInfo": "Start wave by email a few days before. Be there 90 minutes early.",
+      "arriveMinutesBefore": 90
     },
     {
       "id": "bergen-city-marathon-2027",
@@ -135,6 +152,21 @@
       "priceNote": "750 SEK now",
       "priceSteps": [{ "amount": 750, "currency": "SEK" }],
       "status": "open",
+      "checkedOn": "2026-10-21"
+    },
+    {
+      "id": "premiarhalvan-2027",
+      "name": "Premiärhalvan",
+      "type": "running",
+      "date": "2027-04-24",
+      "city": "Stockholm",
+      "country": "SE",
+      "distancesKm": [21.1],
+      "format": "the season's first half marathon",
+      "signupUrl": "https://stockholmmarathon.se/premiarhalvan/",
+      "platform": "Haku",
+      "priceNote": "By the Stockholm Marathon organiser; the 2027 fee is on the race page.",
+      "status": "checkSite",
       "checkedOn": "2026-10-21"
     },
     {
@@ -196,13 +228,20 @@
       "format": "solo, duo, trio or team",
       "signupUrl": "https://www.toughviking.se/",
       "platform": "RaceID",
-      "priceNote": "750 SEK until 31 Oct, then 775 SEK",
+      "priceNote": "750 SEK until 31 Oct, then 775 SEK. The 2027 main races step up by date: 699, 750, 775, 799, 899, then 999 SEK. The Stadion race also hosts the Swedish OCR Championships.",
       "priceSteps": [
         { "until": "2026-10-31", "amount": 750, "currency": "SEK" },
         { "from": "2026-11-01", "amount": 775, "currency": "SEK" }
       ],
       "status": "open",
-      "checkedOn": "2026-10-21"
+      "checkedOn": "2026-10-21",
+      "formats": [
+        { "code": "open", "title": "Open", "teamSize": 1, "note": "Female or male" },
+        { "code": "duo", "title": "Duo", "teamSize": 2 },
+        { "code": "trio", "title": "Trio", "teamSize": 3 },
+        { "code": "team", "title": "Team", "teamSize": 4, "note": "4 or more; corporate teams of 10+ can pay by invoice" }
+      ],
+      "startInfo": "Personal start time, picked at registration and sent by SMS. Teammates register with the same team name and start group."
     },
     {
       "id": "goteborgsvarvet-2027",
@@ -245,9 +284,11 @@
       "distancesKm": [42.195],
       "signupUrl": "https://stockholmmarathon.se/eng/eng-lopare/",
       "platform": "Haku",
-      "priceNote": "1,295–1,995 SEK in four steps",
+      "priceNote": "1,295, then 1,495, 1,795 and 1,995 SEK in four steps by date. The 2026 race sold out.",
       "status": "checkSite",
-      "checkedOn": "2026-10-21"
+      "checkedOn": "2026-10-21",
+      "changeRule": "The entry is binding and personal, with no refund. Transfers weren't allowed under the 2025 terms.",
+      "startInfo": "Start groups A to G, seeded by earlier race times; pacers from 3:00 to 5:45. The bib is collected at the Expo, Thursday to Saturday before the race."
     },
     {
       "id": "toughest-stockholm-2027",
@@ -355,11 +396,13 @@
       "distancesKm": [5, 10],
       "format": "evening run",
       "signupUrl": "https://midnattsloppet.com/en/start-fee/",
-      "priceNote": "2027 prices come with the sign-up. The first price step was 499 SEK in 2026.",
+      "priceNote": "2027 prices come with the sign-up. In 2026 there were six price steps from 499 to 799 SEK, teams of 4 got 50 SEK off each, and entries could be paid with Epassi and other wellness allowances.",
       "status": "opensSoon",
       "opensOn": "2026-11-01",
       "resultsUrl": "https://midnattsloppet.com/en/startlist-results/",
-      "checkedOn": "2026-10-21"
+      "checkedOn": "2026-10-21",
+      "changeRule": "Name change through the organiser before a deadline (10 Aug in 2025).",
+      "startInfo": "A start group every 5 minutes from 21:10 to 23:20, grouped by expected finish time. The race kit is picked up at a Stadium store."
     },
     {
       "id": "cykelvasan-90-2027",
@@ -417,10 +460,17 @@
       "distancesKm": [15, 5],
       "signupUrl": "https://www.toughviking.se/",
       "platform": "RaceID",
-      "priceNote": "750 SEK now",
+      "priceNote": "750 SEK now. The 2027 main races step up by date: 699, 750, 775, 799, 899, then 999 SEK.",
       "priceSteps": [{ "amount": 750, "currency": "SEK" }],
       "status": "open",
-      "checkedOn": "2026-10-21"
+      "checkedOn": "2026-10-21",
+      "formats": [
+        { "code": "open", "title": "Open", "teamSize": 1, "note": "Female or male" },
+        { "code": "duo", "title": "Duo", "teamSize": 2 },
+        { "code": "trio", "title": "Trio", "teamSize": 3 },
+        { "code": "team", "title": "Team", "teamSize": 4, "note": "4 or more; corporate teams of 10+ can pay by invoice" }
+      ],
+      "startInfo": "Personal start time, picked at registration and sent by SMS. Teammates register with the same team name and start group."
     },
     {
       "id": "ironman-kalmar-2027",

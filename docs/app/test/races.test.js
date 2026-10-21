@@ -54,6 +54,20 @@ test('the validator catches what the schema forbids', () => {
   assert.match(v({ priceSteps: [{ until: '2027-01-10', amount: 1, currency: 'SEK' }, { from: '2027-01-05', amount: 2, currency: 'SEK' }] })[0], /overlap/);
   assert.match(v({ checkedOn: undefined })[0], /checkedOn/);
   assert.match(v({ sigupUrl: 'https://typo.example' }).join(), /unknown field sigupUrl/);
+  // Formats, the change rule, start info and the arrival time.
+  assert.deepEqual(v({ formats: [{ code: 'a', title: 'A', teamSize: 2, distanceKm: 5, note: 'n', priceSteps: [{ amount: 1, currency: 'SEK' }] }], changeRule: 'x', startInfo: 'y', arriveMinutesBefore: 90 }), []);
+  assert.match(v({ formats: [] })[0], /formats/);
+  assert.match(v({ formats: [{ code: 'Open', title: 'Open' }] })[0], /code/);
+  assert.match(v({ formats: [{ code: 'a', title: 'A' }, { code: 'a', title: 'B' }] })[0], /duplicate code/);
+  assert.match(v({ formats: [{ code: 'a', title: 'A', priceSteps: [{ amount: 1, currency: 'XXX' }] }] })[0], /currency/);
+  assert.match(v({ formats: [{ code: 'a', title: 'A', size: 2 }] })[0], /unknown field size/);
+  assert.match(v({ arriveMinutesBefore: 0 })[0], /arriveMinutesBefore/);
+  assert.match(v({ changeRule: ' ' })[0], /changeRule/);
+  // The apps keep the formats they can read and drop the rest.
+  const dec = R.decode({ races: [Object.assign({}, ok, { formats: [{ code: 'a', title: 'A' }, { code: '', title: 'B' }, { title: 'C' }], arriveMinutesBefore: -5 })] })[0];
+  assert.deepEqual(dec.formats.map((f) => f.code), ['a']);
+  assert.equal(dec.arriveMinutesBefore, undefined);
+  assert.equal(R.decode({ races: [Object.assign({}, ok, { formats: [] })] })[0].formats, undefined);
   const two = R.validate({ version: 1, checkedOn: '2026-10-21', races: [ok, Object.assign({}, ok, { date: '2027-04-01' })] });
   assert.ok(two.some((e) => /duplicate id/.test(e)) && two.some((e) => /sorted/.test(e)));
   // The apps skip what they can't read instead of failing on the whole file (and render what they keep).
@@ -195,6 +209,74 @@ test('My races: resolve from the catalog or as saved, upcoming and done, hints',
   assert.equal(gone.checkedOn, '');
   assert.equal(R.hint({ mine: { raceId: 'midnattsloppet-stockholm-2027' }, race: race('midnattsloppet-stockholm-2027') }, TODAY), 'Sign-up opens 1 Nov');
   assert.equal(R.hint({ mine: {}, race: race('goteborgsvarvet-2027') }, TODAY), 'Sold out');
+});
+
+test('formats: per-format fees, the picked one in My races, start wave and arrival time', () => {
+  const r = Object.assign({}, race('hyrox-stockholm-2026'), { arriveMinutesBefore: 90, formats: [
+    { code: 'singles', title: 'Singles', teamSize: 1, priceSteps: [{ amount: 1530, currency: 'SEK' }], note: 'Open or Pro' },
+    { code: 'doubles', title: 'Doubles', teamSize: 2, priceSteps: [{ amount: 1470, currency: 'SEK', per: 'person' }] },
+    { code: 'relay', title: 'Relay', teamSize: 4 }] });
+  assert.ok(R.hasFormats(r));
+  assert.ok(!R.hasFormats(race('vasaloppet-2027')));
+  assert.equal(R.formatOf(r, 'doubles').title, 'Doubles');
+  assert.equal(R.formatOf(r, 'pro'), null);
+  assert.equal(R.formatOf(r, null), null);
+  assert.equal(R.priceText(R.currentStepFor(r, R.formatOf(r, 'doubles'), TODAY)), '1,470 SEK per person');
+  assert.equal(R.priceText(R.currentStepFor(r, R.formatOf(r, 'singles'), TODAY)), '1,530 SEK');
+  // A format without fees of its own shows the race's.
+  assert.equal(R.priceText(R.currentStepFor(r, R.formatOf(r, 'relay'), TODAY)), 'From 1,470 SEK');
+  assert.equal(R.priceText(R.currentStepFor(r, null, TODAY)), 'From 1,470 SEK');
+  assert.equal(R.formatDetail(R.formatOf(r, 'singles')), 'Open or Pro');
+  assert.equal(R.formatDetail(R.formatOf(r, 'doubles')), '2 people');
+  assert.equal(R.formatDetail({ code: 'x', title: 'X', distanceKm: 15 }), '15 km');
+  assert.equal(R.formatDetail({ code: 'x', title: 'X' }), null);
+  // Start waves as typed.
+  assert.equal(R.clockMinutes('14:20'), 860);
+  assert.equal(R.clockNormalized('1420'), '14:20');
+  assert.equal(R.clockNormalized('9.05'), '09:05');
+  assert.equal(R.clockNormalized(' 7:30 '), '07:30');
+  assert.equal(R.clockNormalized('wave 3'), null);
+  assert.equal(R.clockNormalized('25:00'), null);
+  assert.equal(R.clockNormalized('14:60'), null);
+  assert.equal(R.clockNormalized(''), null);
+  assert.equal(R.arriveBy('14:20', 90), '12:50');
+  assert.equal(R.arriveBy('00:30', 90), '00:00');
+  assert.equal(R.arriveBy('wave 3', 90), null);
+  assert.equal(R.arriveMinutes(r), 90);
+  assert.equal(R.arriveMinutes(race('vasaloppet-2027')), 60);
+  const e = R.entries([Object.assign(R.fromRace(r), { day: '2026-12-12', format: 'doubles', note: 'Open', wave: '14:20' })], [r])[0];
+  assert.equal(R.startText(e), 'Doubles · Open');
+  assert.equal(R.whenLine(e), 'Sat 12 Dec · Doubles · Open');
+  assert.equal(R.entryArriveBy(e), '12:50');
+  assert.ok(R.isRaceDay(e, '2026-12-12'));
+  assert.ok(!R.isRaceDay(e, '2026-12-11'));
+  // A format the catalog dropped: the note alone; nothing picked: nothing.
+  assert.equal(R.startText(R.entries([Object.assign(R.fromRace(r), { format: 'pro', note: 'Open' })], [r])[0]), 'Open');
+  assert.equal(R.startText(R.entries([R.fromRace(r)], [r])[0]), null);
+  // The published catalog has the HYROX Stockholm formats and the rules that matter.
+  const pub = R.decode(FILE).find((x) => x.id === 'hyrox-stockholm-2026');
+  assert.deepEqual(pub.formats.map((f) => f.code), ['singles', 'doubles', 'relay', 'adaptive']);
+  assert.equal(pub.arriveMinutesBefore, 90);
+  assert.match(pub.changeRule, /Flex/);
+  assert.ok(R.decode(FILE).some((x) => x.id === 'premiarhalvan-2027'));
+});
+
+test('Home: Upcoming races (not in My races, open or opening, own country first) and the next price step pill', () => {
+  const mine = [R.fromRace(race('hyrox-stockholm-2026'))];
+  assert.deepEqual(R.upcomingOnHome(CATALOG, mine, TODAY, 'SE', 5).map((r) => r.id),
+    ['vasaloppet-2027', 'tough-viking-goteborg-2027', 'tough-viking-stadion-2027', 'toughest-malmo-2027', 'toughest-stockholm-2027']);
+  assert.deepEqual(R.upcomingOnHome(CATALOG, mine, TODAY, 'NO', 3).map((r) => r.id), ['birkebeinerrennet-2027', 'bergen-city-marathon-2027', 'holmenkollstafetten-2027']);
+  assert.deepEqual(R.upcomingOnHome(CATALOG, [], TODAY, null, 4).map((r) => r.id), ['hyrox-stockholm-2026', 'vasaloppet-2027', 'birkebeinerrennet-2027', 'hyrox-copenhagen-2027']);
+  // A country with no races: by date.
+  assert.deepEqual(R.upcomingOnHome(CATALOG, mine, TODAY, 'FI', 3).map((r) => r.id), ['vasaloppet-2027', 'birkebeinerrennet-2027', 'hyrox-copenhagen-2027']);
+  assert.equal(R.upcomingOnHome(CATALOG, [], TODAY).length, 8);
+  assert.ok(R.upcomingOnHome(CATALOG, [], TODAY, null, 99).every((r) => r.status === 'open' || r.status === 'opensSoon'));
+  assert.equal(R.upcomingOnHome(CATALOG, [], '2027-12-01').length, 0);
+  assert.equal(R.homePill(race('tough-viking-stadion-2027'), TODAY), '750 → 775 SEK on 1 Nov');
+  assert.equal(R.homePill(race('vasaloppet-2027'), TODAY), '2,685 → 2,985 SEK on 6 Nov');
+  assert.equal(R.homePill(race('vatternrundan-2027'), TODAY), 'Opens 25 Nov');
+  assert.equal(R.homePill(race('hyrox-stockholm-2026'), TODAY), 'From 1,470 SEK');
+  assert.equal(R.homePill(race('bergen-city-marathon-2027'), TODAY), '900 NOK until 31 Jan');
 });
 
 test('a race as an all-day calendar event', () => {

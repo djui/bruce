@@ -132,6 +132,39 @@ export function pillText(r, today) {
   }
 }
 
+// ---------------------------------------------------------------- formats, start waves
+
+/** Ways to enter, when the race prices or sizes them apart (HYROX singles, doubles, relay). */
+export const hasFormats = (r) => !!(r.formats && r.formats.length);
+/** A format by its code; null for an unknown code (a format the catalog dropped). */
+export const formatOf = (r, code) => (code && (r.formats || []).find((f) => f.code === code)) || null;
+/** The fees of a format: its own steps, else the race's. */
+export const stepsFor = (r, f) => (f && f.priceSteps ? steps({ priceSteps: f.priceSteps }) : steps(r));
+/** Today's fee for a format (the race's when the format has none of its own). */
+export function currentStepFor(r, f, today) { const m = stepsFor(r, f).filter((s) => applies(s, today)); return m[m.length - 1] || null; }
+/** "2 people · Open or Pro", "15 km"; null without details. */
+export function formatDetail(f) {
+  return [f.distanceKm ? num(f.distanceKm, 1) + ' km' : null, f.teamSize > 1 ? f.teamSize + ' people' : null, f.note].filter(Boolean).join(' · ') || null;
+}
+/** "Be there by 12:50" needs the start wave; HYROX wants 90 minutes, others an hour by default. */
+export const arriveMinutes = (r) => (Number.isInteger(r.arriveMinutesBefore) && r.arriveMinutesBefore > 0 ? r.arriveMinutesBefore : 60);
+
+/** "14:20" (also "14.20", "1420", "9:05") as minutes after midnight; null when it isn't a time of day. */
+export function clockMinutes(s) {
+  const t = String(s || '').trim();
+  if (!t) return null;
+  const digits = t.replace(/\D/g, '');
+  if (digits.length !== t.replace(/[:. ]/g, '').length || digits.length < 3 || digits.length > 4) return null;
+  const h = +digits.slice(0, -2), m = +digits.slice(-2);
+  return h <= 23 && m <= 59 ? h * 60 + m : null;
+}
+/** "09:05". */
+export const clockText = (minutes) => { const m = ((minutes % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+/** The typed time, tidied ("1420" → "14:20"); null when it isn't one. */
+export const clockNormalized = (s) => { const m = clockMinutes(s); return m == null ? null : clockText(m); };
+/** "12:50": the start wave less the minutes the organiser wants you there before it. */
+export function arriveBy(wave, minutesBefore) { const w = clockMinutes(wave); return w == null ? null : clockText(Math.max(0, w - minutesBefore)); }
+
 // ---------------------------------------------------------------- labels
 
 export function host(url) {
@@ -195,6 +228,21 @@ export function filterRaces(races, o) {
   return sorted(races.filter((r) => (!types.length || types.includes(r.type)) && (!countries.length || countries.includes(r.country))
     && (f.includePast || !isPast(r, f.today)) && (!q || matches(r, q))));
 }
+/** Home's "Upcoming races": the next catalog races by date that aren't in My races, open or opening (sold-out and
+ *  lottery races stay in Explore), at most `limit`. Races in `country` first when given. */
+export function upcomingOnHome(races, mine, today, country, limit) {
+  const have = new Set((mine || []).map((m) => m.raceId).filter(Boolean));
+  const list = sorted(races).filter((r) => !isPast(r, today) && !have.has(r.id) && (r.status === 'open' || r.status === 'opensSoon'));
+  const n = limit || 8;
+  if (!country || !list.some((r) => r.country === country)) return list.slice(0, n);
+  return list.filter((r) => r.country === country).concat(list.filter((r) => r.country !== country)).slice(0, n);
+}
+/** The carousel pill: the next price step ("750 → 775 SEK on 1 Nov"), else the list pill. */
+export function homePill(r, today) {
+  const c = currentStep(r, today), n = nextStep(r, today);
+  if (r.status === 'open' && c && n && n.from && c.currency === n.currency) return grouped(c.amount) + ' → ' + grouped(n.amount) + ' ' + n.currency.toUpperCase() + ' on ' + shortDay(n.from);
+  return pillText(r, today);
+}
 
 // ---------------------------------------------------------------- the catalog file
 
@@ -205,10 +253,16 @@ export function decode(json) {
   const day = (d) => d == null || isDay(d);
   const stepsOK = (r) => r.priceSteps == null || (Array.isArray(r.priceSteps) && r.priceSteps.every((s) => s && Number.isFinite(s.amount)
     && typeof s.currency === 'string' && day(s.from) && day(s.until)));
+  // Formats this version can't read are dropped one by one, not the race.
+  const formatsOf = (r) => {
+    const list = Array.isArray(r.formats) ? r.formats.filter((f) => f && typeof f.code === 'string' && f.code && typeof f.title === 'string' && f.title && stepsOK(f)) : [];
+    return list.length ? list : undefined;
+  };
   return sorted(list.filter((r) => r && typeof r.id === 'string' && typeof r.name === 'string' && TYPES.some((t) => t.key === r.type)
     && STATUSES.includes(r.status) && isDay(r.date) && day(r.endDate) && (r.endDate || r.date) >= r.date && day(r.opensOn)
     && (!r.checkedOn || isDay(r.checkedOn)) && stepsOK(r) && host(r.signupUrl))
-    .map((r) => Object.assign({ distancesKm: [], city: '', country: '', checkedOn: '' }, r, { distancesKm: Array.isArray(r.distancesKm) ? r.distancesKm.filter((x) => typeof x === 'number' && x > 0) : [] })));
+    .map((r) => Object.assign({ distancesKm: [], city: '', country: '', checkedOn: '' }, r, { distancesKm: Array.isArray(r.distancesKm) ? r.distancesKm.filter((x) => typeof x === 'number' && x > 0) : [],
+      formats: formatsOf(r), arriveMinutesBefore: Number.isInteger(r.arriveMinutesBefore) && r.arriveMinutesBefore > 0 ? r.arriveMinutesBefore : undefined })));
 }
 
 /** Everything wrong with a catalog file, as readable lines (empty when it is valid). The schema is in README.md. */
@@ -222,7 +276,23 @@ export function validate(json) {
   const ids = new Set();
   const https = (u) => { try { return new URL(u).protocol === 'https:'; } catch (e) { return false; } };
   const known = ['id', 'name', 'type', 'sport', 'date', 'endDate', 'city', 'country', 'venue', 'distancesKm', 'format', 'signupUrl', 'platform',
-    'priceNote', 'priceSteps', 'status', 'opensOn', 'klassiker', 'resultsUrl', 'checkedOn'];
+    'priceNote', 'priceSteps', 'status', 'opensOn', 'klassiker', 'resultsUrl', 'checkedOn', 'formats', 'changeRule', 'startInfo', 'arriveMinutesBefore'];
+  const checkSteps = (r, list, at0) => {
+    list.forEach((s, i) => {
+      const at = at0 + '[' + i + '] ';
+      if (!Number.isInteger(s.amount) || s.amount <= 0) err(r, at + 'amount must be a positive whole number');
+      if (!CURRENCIES.includes(s.currency)) err(r, at + 'currency must be one of ' + CURRENCIES.join(', '));
+      if (s.from != null && !isDay(s.from)) err(r, at + 'from must be YYYY-MM-DD');
+      if (s.until != null && !isDay(s.until)) err(r, at + 'until must be YYYY-MM-DD');
+      if (s.from && s.until && s.until < s.from) err(r, at + 'until is before from');
+      if (s.lowest != null && typeof s.lowest !== 'boolean') err(r, at + 'lowest must be true or false');
+      Object.keys(s).filter((k) => !['from', 'until', 'amount', 'currency', 'lowest', 'per'].includes(k)).forEach((k) => err(r, at + 'unknown field ' + k));
+    });
+    // Dated steps must not share a day (an open end runs to the start or end of time).
+    const dated = list.filter((s) => s.from || s.until);
+    const overlap = dated.some((a, i) => dated.slice(i + 1).some((b) => (a.from || '') <= (b.until || '9999') && (b.from || '') <= (a.until || '9999')));
+    if (overlap) err(r, at0 + ': price steps overlap');
+  };
   let prev = '';
   for (const r of json.races) {
     if (!r || typeof r !== 'object') { errors.push('a race is not an object'); continue; }
@@ -251,21 +321,29 @@ export function validate(json) {
     if (!isDay(r.checkedOn)) err(r, 'checkedOn must be YYYY-MM-DD');
     if (r.priceSteps != null) {
       if (!Array.isArray(r.priceSteps) || !r.priceSteps.length) err(r, 'priceSteps must be a non-empty array when present');
+      else checkSteps(r, r.priceSteps, 'priceSteps');
+    }
+    ['changeRule', 'startInfo'].forEach((k) => { if (r[k] != null && (typeof r[k] !== 'string' || !r[k].trim())) err(r, k + ' must be a non-empty string'); });
+    if (r.arriveMinutesBefore != null && (!Number.isInteger(r.arriveMinutesBefore) || r.arriveMinutesBefore <= 0 || r.arriveMinutesBefore > 360)) err(r, 'arriveMinutesBefore must be whole minutes, up to 360');
+    if (r.formats != null) {
+      if (!Array.isArray(r.formats) || !r.formats.length) err(r, 'formats must be a non-empty array when present');
       else {
-        r.priceSteps.forEach((s, i) => {
-          const at = 'priceSteps[' + i + '] ';
-          if (!Number.isInteger(s.amount) || s.amount <= 0) err(r, at + 'amount must be a positive whole number');
-          if (!CURRENCIES.includes(s.currency)) err(r, at + 'currency must be one of ' + CURRENCIES.join(', '));
-          if (s.from != null && !isDay(s.from)) err(r, at + 'from must be YYYY-MM-DD');
-          if (s.until != null && !isDay(s.until)) err(r, at + 'until must be YYYY-MM-DD');
-          if (s.from && s.until && s.until < s.from) err(r, at + 'until is before from');
-          if (s.lowest != null && typeof s.lowest !== 'boolean') err(r, at + 'lowest must be true or false');
-          Object.keys(s).filter((k) => !['from', 'until', 'amount', 'currency', 'lowest', 'per'].includes(k)).forEach((k) => err(r, at + 'unknown field ' + k));
+        const codes = new Set();
+        r.formats.forEach((f, i) => {
+          const at = 'formats[' + i + '] ';
+          if (!f || typeof f !== 'object') { err(r, at + 'is not an object'); return; }
+          Object.keys(f).filter((k) => !['code', 'title', 'distanceKm', 'teamSize', 'priceSteps', 'note'].includes(k)).forEach((k) => err(r, at + 'unknown field ' + k));
+          if (typeof f.code !== 'string' || !/^[a-z0-9]+(-[a-z0-9]+)*$/.test(f.code)) err(r, at + 'code must be lower-case words joined by "-"');
+          if (codes.has(f.code)) err(r, at + 'duplicate code'); codes.add(f.code);
+          if (typeof f.title !== 'string' || !f.title.trim()) err(r, at + 'title missing');
+          if (f.distanceKm != null && (typeof f.distanceKm !== 'number' || !(f.distanceKm > 0))) err(r, at + 'distanceKm must be a positive number');
+          if (f.teamSize != null && (!Number.isInteger(f.teamSize) || f.teamSize < 1)) err(r, at + 'teamSize must be a whole number from 1');
+          if (f.note != null && (typeof f.note !== 'string' || !f.note.trim())) err(r, at + 'note must be a non-empty string');
+          if (f.priceSteps != null) {
+            if (!Array.isArray(f.priceSteps) || !f.priceSteps.length) err(r, at + 'priceSteps must be a non-empty array when present');
+            else checkSteps(r, f.priceSteps, at + 'priceSteps');
+          }
         });
-        // Dated steps must not share a day (an open end runs to the start or end of time).
-        const dated = r.priceSteps.filter((s) => s.from || s.until);
-        const overlap = dated.some((a, i) => dated.slice(i + 1).some((b) => (a.from || '') <= (b.until || '9999') && (b.from || '') <= (a.until || '9999')));
-        if (overlap) err(r, 'price steps overlap');
       }
     }
   }
@@ -290,8 +368,17 @@ export const newId = () => Date.now().toString(36) + Math.random().toString(36).
 export const entries = (mine, catalog) => (mine || []).map((m) => ({ mine: m, race: resolve(m, catalog), day: m.day || resolve(m, catalog).date }));
 export const upcoming = (list, today) => list.filter((e) => !isPast(e.race, today, e.mine.day)).sort((a, b) => (a.day < b.day ? -1 : a.day > b.day ? 1 : 0));
 export const past = (list, today) => list.filter((e) => isPast(e.race, today, e.mine.day)).sort((a, b) => (a.day > b.day ? -1 : 1));
-/** "Sat 12 Dec · Doubles Open". */
-export const whenLine = (e) => [shortDay(e.day, true), e.mine.note].filter(Boolean).join(' · ');
+/** "Doubles · Open" (the catalog format and the note), "10 km" (the note alone), null without either. */
+export function startText(e) {
+  const f = formatOf(e.race, e.mine.format);
+  return [f && f.title, e.mine.note].filter(Boolean).join(' · ') || null;
+}
+/** "Sat 12 Dec · Doubles · Open". */
+export const whenLine = (e) => [shortDay(e.day, true), startText(e)].filter(Boolean).join(' · ');
+/** "12:50": when the organiser wants the member there (their wave less the race's arrival minutes); null without a wave. */
+export const entryArriveBy = (e) => arriveBy(e.mine.wave, arriveMinutes(e.race));
+/** Race day is today (the member's day of the event). */
+export const isRaceDay = (e, today) => daysToGo(e.race, today, e.mine.day) === 0;
 /** What happens next for a race in My races: "Sign-up opens 1 Nov", "775 SEK from 1 Nov", "Sold out". */
 export function hint(e, today) {
   const r = e.race;

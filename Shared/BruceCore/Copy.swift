@@ -99,6 +99,17 @@ enum Copy {
     static let myRacesDevice = "My races stay on this device. Reminders are notifications at 09:00; nothing is signed up for you."
     static let raceRemindSignup = "Remind me that morning"
     static let raceRemindPrice = "Remind me the day before"
+    static let raceRemindWave = "Remind me to add my start wave"
+    static let raceRemindWaveHint = "Three days before race day, while no start wave is added."
+    static let raceFormatHint = "Pick how you enter. The fee and the organiser's rules follow it."
+    static let raceWavePlaceholder = "Start wave, e.g. 14:20"
+    static let raceBibPlaceholder = "Bib number"
+    static let raceNotePlaceholder = "Your start, e.g. Doubles Open or 10 km"
+    static let raceDivisionPlaceholder = "Division, e.g. Open or Pro"
+    static let raceStartHint = "The start wave and bib come from the organiser; add them here when they arrive."
+    static func raceArriveBy(_ time: String, minutes: Int) -> String { "Be there by \(time) (\(minutes) minutes before your start)" }
+    static let raceUpcomingTitle = "Upcoming races"
+    static let raceUpcomingHint = "Brüce only links to each race's own page."
     static let raceEventFooter = "Added with Brüce, an unofficial Bruce Studios client. Not affiliated with the race or its organiser; check the race's own page for changes."
     static let raceCatalogFooter = "Races are picked by hand from each race's own page, with the day they were checked. Brüce links to those pages and is not affiliated with any race or organiser."
 

@@ -146,6 +146,21 @@ export function nextRaceHTML(hrefOf) {
 }
 export { planClick, refreshPlanGoals };
 
+/** Home, above Spotlight (mockup 1): the next catalog races as a carousel, with the next price step and friends going. */
+export function upcomingRacesHTML(hrefOf) {
+  const today = todayKey();
+  const list = R.upcomingOnHome(S.races || [], St.myRaces(), today, St.homeCountry());
+  if (!list.length) return '';
+  return '<div class="sec-row"><h2 class="sec-title">UPCOMING RACES</h2><a class="btn glass sm" href="#/explore?tab=races">Show all</a></div><div class="hscroll race-mini-row">' +
+    list.map((r) => {
+      const pill = R.homePill(r, today), going = St.friendsGoing(r.id);
+      return '<a class="race-mini t-' + esc(r.type) + '" href="' + hrefOf(r.id) + '" aria-label="' + esc([r.name, R.dateText(r), r.city, pill].filter(Boolean).join(', ')) + '">' +
+        '<span class="race-mini-top">' + bib(r) + icon(R.glyph(r), 'race-mini-glyph') + '</span><b>' + esc(r.name) + '</b>' +
+        '<span>' + esc([R.shortDay(r.date, true), r.city].filter(Boolean).join(' · ')) + '</span>' +
+        (pill ? '<em>' + esc(pill) + '</em>' : '') + goingHTML(going, 20) + '</a>';
+    }).join('') + '</div>';
+}
+
 /** My classes › Races: the next race big, then later and past races. */
 export function myRacesHTML(hrefOf, selectedId) {
   const today = todayKey();
@@ -172,7 +187,7 @@ export function myRacesHTML(hrefOf, selectedId) {
   if (next) {
     const r = next.race, h = R.hint(next, today);
     html += '<a class="race-banner t-' + esc(r.type) + (selectedId === r.id ? ' selected' : '') + '" href="' + hrefOf(r.id) + '">' +
-      '<span class="race-banner-top"><em>' + esc([R.heroTag(r), next.mine.note].filter(Boolean).join(' · ')) + '</em><b>' + esc(R.countdownShort(r, today, next.mine.day)) + '</b></span>' +
+      '<span class="race-banner-top"><em>' + esc([R.heroTag(r), R.startText(next)].filter(Boolean).join(' · ')) + '</em><b>' + esc(R.countdownShort(r, today, next.mine.day)) + '</b></span>' +
       '<b class="race-banner-name">' + esc(r.name) + '</b><span>' + esc([R.shortDay(next.day, true), r.venue || r.city].filter(Boolean).join(' · ')) + '</span>' +
       (planOf(next) ? bannerPlanHTML(next) : h ? '<small>' + icon('info') + esc(h) + '</small>' : '') + goingHTML(St.friendsGoing(r.id), 22) + icon(R.glyph(r), 'rcard-glyph') + '</a>';
     if (!planOf(next) && R.daysToGo(r, today, next.mine.day) > 0) html += promptHTML(R.keyOf(next.mine));
@@ -205,6 +220,8 @@ function friendsCardHTML(r, mine) {
 // ---------------------------------------------------------------- race page
 
 export function renderRace(el, id, ctx) {
+  let formatPick = null;   // the format looked at before the race is in My races (then it is saved with the race)
+  const shownFormat = (r) => R.formatOf(r, (mineFor(id) || {}).format || formatPick) || (r.formats || [])[0] || null;
   const draw = () => {
     const r = raceById(id);
     const back = glassBtn(ctx.wide ? 'close' : 'back', 'data-ract="back"', ctx.wide ? 'Close' : 'Back');
@@ -220,6 +237,7 @@ export function renderRace(el, id, ctx) {
     facts.push(['clock', R.countdownText(r, today, day)]);
     const su = !past && R.signupLine(r, today);
     if (su) facts.push(['ticket', su]);
+    if (!past && r.startInfo) facts.push(['clock', r.startInfo]);
     if (!past && r.status !== 'open' && !custom && r.checkedOn && !R.opensLater(r, today)) facts.push(['info', R.statusText(r, today)]);
     if (r.klassiker) facts.push(['trophy', 'A leg of En Svensk Klassiker']);
     const h = R.host(r.signupUrl);
@@ -247,27 +265,45 @@ export function renderRace(el, id, ctx) {
   };
 
   function feeCard(r, today) {
-    const st = R.steps(r), cur = R.currentStep(r, today);
+    // Mockup 2: the ways to enter first; the fee follows the one picked.
+    const f = shownFormat(r);
+    const st = R.stepsFor(r, f), cur = R.currentStepFor(r, f, today);
     const head = cur ? R.priceText(cur) + (st.length > 1 ? ' now' : '') : r.status === 'soldOut' ? 'Sold out' : 'On the race page';
     const amounts = st.map((s) => s.amount), lo = Math.min(...amounts), hi = Math.max(...amounts);
     const label = (s) => (s.from ? 'from ' + R.shortDay(s.from) : s.until ? 'until ' + R.shortDay(s.until) : 'now');
     const next = R.nextStep(r, today);
     const nextLine = r.status === 'open' && !R.isPast(r, today) ? (next && next.from ? R.priceText(next) + ' from ' + R.shortDay(next.from)
-      : cur && cur.until ? R.priceText(cur) + ' until ' + R.shortDay(cur.until) : null) : null;
-    return '<div class="card race-fees"><div class="row-between"><span class="muted">Entry fee</span><b>' + esc(head) + '</b></div>' +
+      : R.currentStep(r, today) && R.currentStep(r, today).until ? R.priceText(R.currentStep(r, today)) + ' until ' + R.shortDay(R.currentStep(r, today).until) : null) : null;
+    const detail = f && R.formatDetail(f);
+    return '<div class="card race-fees">' +
+      (R.hasFormats(r) ? '<div class="chips race-formats" role="group" aria-label="Format">' + r.formats.map((x) =>
+        '<button class="chip' + (f && x.code === f.code ? ' on' : '') + '" data-rfmt="' + esc(x.code) + '" aria-pressed="' + (f && x.code === f.code) + '">' + esc(x.title) + '</button>').join('') + '</div>' +
+        (detail ? '<p class="muted small">' + esc(detail) + '</p>' : '') : '') +
+      '<div class="row-between"><span class="muted">' + esc(f ? 'Entry fee · ' + f.title : 'Entry fee') + '</span><b>' + esc(head) + '</b></div>' +
       (st.length > 1 ? '<div class="ladder" role="img" aria-label="' + esc(st.map((s) => R.priceText(s) + ' ' + label(s)).join(', ')) + '">' + st.map((s) =>
         '<div class="' + (s === cur ? 'on' : '') + '"><b>' + esc(R.grouped(s.amount)) + '</b><i style="height:' + Math.round(22 + 34 * (s.amount - lo) / Math.max(hi - lo, 1)) + 'px"></i><small>' + esc(label(s)) + '</small></div>').join('') + '</div>' : '') +
       (r.priceNote ? '<p class="muted small">' + esc(r.priceNote) + '</p>' : '') +
+      (r.changeRule ? '<p class="small race-rule">' + icon('info') + esc(r.changeRule) + '</p>' : '') +
       (nextLine ? '<p class="small race-next-step">' + icon('bell') + esc(nextLine) + '</p>' : '') + '</div>';
   }
 
   function yourRace(r, mine) {
     const ds = R.days(r);
+    const past = R.isPast(r, todayKey(), mine.day);
+    const e = myEntries().find((x) => R.keyOf(x.mine) === id);
+    const by = e && R.entryArriveBy(e);
     return '<div class="card form-rows race-mine"><h3 class="section-head">Your race</h3>' +
       (R.isMultiDay(r) ? '<label class="frow"><span class="grow">Your day</span><select data-rday><option value="">Every day</option>' +
         ds.map((d) => '<option value="' + d + '"' + (mine.day === d ? ' selected' : '') + '>' + esc(R.shortDay(d, true)) + '</option>').join('') + '</select></label>' : '') +
-      '<label class="frow"><span class="grow">Your start</span><input type="text" data-rnote maxlength="60" placeholder="Doubles Open, 10 km…" value="' + esc(mine.note || '') + '"></label>' +
-      (R.isPast(r, todayKey(), mine.day) ? '' : '<label class="toggle"><span>Race week: Monday 08:00</span><input type="checkbox" data-rremind="remindWeek"' + (mine.remindWeek ? ' checked' : '') + '><i></i></label>' +
+      (R.hasFormats(r) ? '<label class="frow"><span class="grow">Format</span><select data-rformat><option value="">Not picked</option>' +
+        r.formats.map((f) => '<option value="' + esc(f.code) + '"' + (mine.format === f.code ? ' selected' : '') + '>' + esc(f.title) + '</option>').join('') + '</select></label>' : '') +
+      '<label class="frow"><span class="grow">' + (R.hasFormats(r) ? 'Division' : 'Your start') + '</span><input type="text" data-rnote maxlength="60" placeholder="' + (R.hasFormats(r) ? 'Open, Pro…' : 'Doubles Open, 10 km…') + '" value="' + esc(mine.note || '') + '"></label>' +
+      // Mockup 3: the start wave and bib come from the organiser later and are added by hand.
+      '<label class="frow"><span class="grow">Start wave</span><input type="text" data-rwave maxlength="8" inputmode="numeric" placeholder="14:20" value="' + esc(mine.wave || '') + '"></label>' +
+      '<label class="frow"><span class="grow">Bib</span><input type="text" data-rbib maxlength="12" inputmode="numeric" placeholder="1427" value="' + esc(mine.bib || '') + '"></label>' +
+      (by ? '<p class="muted small">Be there by ' + esc(by) + ' (' + R.arriveMinutes(r) + ' minutes before your start).</p>'
+        : past ? '' : '<p class="muted small">The start wave and bib come from the organiser; add them here when they arrive. The Brüce iPhone app can remind you three days before.</p>') +
+      (past ? '' : '<label class="toggle"><span>Race week: Monday 08:00</span><input type="checkbox" data-rremind="remindWeek"' + (mine.remindWeek ? ' checked' : '') + '><i></i></label>' +
         '<label class="toggle"><span>The day before: 18:00<small class="muted">' + esc(St.serverOn() ? 'Our server sends a push to the Brüce iPhone app and an email.' : 'Needs our server, which is off in Settings.') + '</small></span><input type="checkbox" data-rremind="remindEve"' + (mine.remindEve ? ' checked' : '') + '><i></i></label>') +
       '<div class="frow">' + (R.isCustom(r) ? '<button class="btn glass sm" data-ract="edit">' + icon('pencil') + ' Edit</button>' : '') +
       '<span class="spacer"></span><button class="btn glass sm red-text" data-ract="remove">Remove from My races</button></div></div>';
@@ -276,6 +312,13 @@ export function renderRace(el, id, ctx) {
   el.onclick = (e) => {
     if (planClick(e)) return;
     if (crewClick(e, draw)) return;
+    const fb = e.target.closest('[data-rfmt]');
+    if (fb) {
+      const r = raceById(id);
+      if (r && mineFor(id)) updateMine(id, { format: fb.dataset.rfmt }); else formatPick = fb.dataset.rfmt;
+      draw();
+      return;
+    }
     const b = e.target.closest('[data-ract]');
     if (!b) return;
     const r = raceById(id);
@@ -298,7 +341,10 @@ export function renderRace(el, id, ctx) {
   };
   el.onchange = (e) => {
     if (e.target.matches('[data-rday]')) { updateMine(id, { day: e.target.value || null }); draw(); }
+    else if (e.target.matches('[data-rformat]')) { updateMine(id, { format: e.target.value || null }); draw(); }
     else if (e.target.matches('[data-rnote]')) updateMine(id, { note: e.target.value.trim() || null });
+    else if (e.target.matches('[data-rwave]')) { updateMine(id, { wave: R.clockNormalized(e.target.value) || e.target.value.trim() || null }); draw(); }
+    else if (e.target.matches('[data-rbib]')) updateMine(id, { bib: e.target.value.trim() || null });
     else if (e.target.matches('[data-rremind]')) updateMine(id, { [e.target.dataset.rremind]: e.target.checked });
     else if (e.target.matches('[data-rgoing]')) {
       const r = raceById(id), want = e.target.checked;

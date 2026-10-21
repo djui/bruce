@@ -84,6 +84,8 @@ export const studio = (id) => S.studios.get(id) || (S.studioDetails.has(id) ? sl
 export const studioName = (id, fallback) => (studio(id) || {}).name || (fallback && fallback.name) || 'Studio';
 export const isWellness = (id) => (studio(id) || {}).label === 'WELLNESS';
 export const cityStudios = () => [...S.studios.values()].filter((s) => s.city_id === S.settings.cityId);
+/** The country of the member's Bruce city ("SE"), for Home's Upcoming races (races.js). */
+export function homeCountry() { const c = city().country && city().country.code; return c && c.length === 2 ? c.toUpperCase() : (S.settings.cityId === 1 ? 'SE' : null); }
 
 /** Switches the city (Settings and the Explore filter): drops city caches and tells the app. */
 export function selectCity(id) {

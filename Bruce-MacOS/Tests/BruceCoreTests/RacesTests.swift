@@ -215,6 +215,108 @@ final class RacesTests: XCTestCase {
         XCTAssertEqual(bergen.first?.body, "Bergen City Marathon: today is the last day for 900 NOK. Sign up on bergencitymarathon.no.")
     }
 
+    func testFormatsStartWaveAndArrival() throws {
+        var r = race("hyrox-stockholm-2026")
+        r.arriveMinutesBefore = 90
+        r.formats = [RaceFormat(code: "singles", title: "Singles", teamSize: 1, priceSteps: [PriceStep(amount: 1530, currency: "SEK")], note: "Open or Pro"),
+                     RaceFormat(code: "doubles", title: "Doubles", teamSize: 2, priceSteps: [PriceStep(amount: 1470, currency: "SEK", per: "person")]),
+                     RaceFormat(code: "relay", title: "Relay", teamSize: 4)]
+        XCTAssertTrue(r.hasFormats)
+        XCTAssertFalse(race("vasaloppet-2027").hasFormats)
+        XCTAssertEqual(r.format("doubles")?.title, "Doubles")
+        XCTAssertNil(r.format("pro"))
+        XCTAssertNil(r.format(nil))
+        XCTAssertEqual(r.currentStep(for: r.format("doubles"), now: now)?.priceText, "1,470 SEK per person")
+        XCTAssertEqual(r.currentStep(for: r.format("singles"), now: now)?.priceText, "1,530 SEK")
+        // A format without fees of its own shows the race's.
+        XCTAssertEqual(r.currentStep(for: r.format("relay"), now: now)?.priceText, "From 1,470 SEK")
+        XCTAssertEqual(r.currentStep(for: nil, now: now)?.priceText, "From 1,470 SEK")
+        XCTAssertEqual(r.format("singles")?.detail, "Open or Pro")
+        XCTAssertEqual(r.format("doubles")?.detail, "2 people")
+        XCTAssertEqual(RaceFormat(code: "x", title: "X", distanceKm: 15).detail, "15 km")
+        XCTAssertNil(RaceFormat(code: "x", title: "X").detail)
+        // Start waves as typed.
+        XCTAssertEqual(RaceClock.minutes("14:20"), 860)
+        XCTAssertEqual(RaceClock.normalized("1420"), "14:20")
+        XCTAssertEqual(RaceClock.normalized("9.05"), "09:05")
+        XCTAssertEqual(RaceClock.normalized(" 7:30 "), "07:30")
+        XCTAssertNil(RaceClock.normalized("wave 3"))
+        XCTAssertNil(RaceClock.normalized("25:00"))
+        XCTAssertNil(RaceClock.normalized("14:60"))
+        XCTAssertNil(RaceClock.normalized(""))
+        XCTAssertEqual(RaceClock.arriveBy(wave: "14:20", minutesBefore: 90), "12:50")
+        XCTAssertEqual(RaceClock.arriveBy(wave: "00:30", minutesBefore: 90), "00:00")
+        XCTAssertNil(RaceClock.arriveBy(wave: "wave 3", minutesBefore: 90))
+        XCTAssertEqual(r.arriveMinutes, 90)
+        XCTAssertEqual(race("vasaloppet-2027").arriveMinutes, 60)
+        XCTAssertEqual(RaceClock.date("2026-12-12", "14:20"), at("2026-12-12T13:20:00Z"))
+        var mine = MyRace(race: r, day: "2026-12-12", note: "Open")
+        mine.format = "doubles"; mine.wave = "1420"; mine.bib = "1427"
+        let e = MyRaces.entries([mine], catalog: [r])[0]
+        XCTAssertEqual(e.startText, "Doubles · Open")
+        XCTAssertEqual(e.whenLine, "Sat 12 Dec · Doubles · Open")
+        XCTAssertEqual(e.wave, "14:20")
+        XCTAssertEqual(e.arriveBy, "12:50")
+        XCTAssertTrue(e.isRaceDay(now: at("2026-12-12T08:00:00Z")))
+        XCTAssertFalse(e.isRaceDay(now: now))
+        // A format the catalog dropped: the note alone; nothing picked: nothing.
+        mine.format = "pro"
+        XCTAssertEqual(MyRaces.entries([mine], catalog: [r])[0].startText, "Open")
+        XCTAssertNil(MyRaces.entries([MyRace(race: r)], catalog: [r])[0].startText)
+        // The new fields survive a save and load; an older file without them still loads.
+        let data = try JSONEncoder().encode([mine])
+        let back = try JSONDecoder().decode([MyRace].self, from: data)[0]
+        XCTAssertEqual(back.wave, "1420"); XCTAssertEqual(back.bib, "1427"); XCTAssertEqual(back.format, "pro")
+        let old = try JSONDecoder().decode(MyRace.self, from: Data(#"{"name":"X","date":"2027-01-01"}"#.utf8))
+        XCTAssertNil(old.format); XCTAssertNil(old.wave); XCTAssertFalse(old.remindWave)
+        // The published catalog has the HYROX Stockholm formats and the rules that matter; formats this version can't
+        // read are dropped one by one.
+        let pub = try XCTUnwrap(published.first { $0.id == "hyrox-stockholm-2026" })
+        XCTAssertEqual(pub.formats?.map(\.code), ["singles", "doubles", "relay", "adaptive"])
+        XCTAssertEqual(pub.arriveMinutesBefore, 90)
+        XCTAssertTrue(pub.changeRule?.contains("Flex") == true)
+        XCTAssertTrue(published.contains { $0.id == "premiarhalvan-2027" })
+        let lossy = try RaceCatalog.decode(Data(#"{"races":[{"id":"a-2027","name":"A","type":"running","date":"2027-05-01","signupUrl":"https://a.example","status":"open","formats":[{"code":"a","title":"A"},{"code":"","title":"B"},{"title":"C"}],"arriveMinutesBefore":-5}]}"#.utf8))
+        XCTAssertEqual(lossy[0].formats?.map(\.code), ["a"])
+        XCTAssertNil(lossy[0].arriveMinutesBefore)
+    }
+
+    func testUpcomingRacesOnHome() {
+        let mine = [MyRace(race: race("hyrox-stockholm-2026"))]
+        XCTAssertEqual(Races.upcomingOnHome(catalog, mine: mine, country: "SE", now: now, limit: 5).map(\.id),
+                       ["vasaloppet-2027", "tough-viking-goteborg-2027", "tough-viking-stadion-2027", "toughest-malmo-2027", "toughest-stockholm-2027"])
+        XCTAssertEqual(Races.upcomingOnHome(catalog, mine: mine, country: "NO", now: now, limit: 3).map(\.id), ["birkebeinerrennet-2027", "bergen-city-marathon-2027", "holmenkollstafetten-2027"])
+        XCTAssertEqual(Races.upcomingOnHome(catalog, mine: [], now: now, limit: 4).map(\.id), ["hyrox-stockholm-2026", "vasaloppet-2027", "birkebeinerrennet-2027", "hyrox-copenhagen-2027"])
+        // A country with no races: by date.
+        XCTAssertEqual(Races.upcomingOnHome(catalog, mine: mine, country: "FI", now: now, limit: 3).map(\.id), ["vasaloppet-2027", "birkebeinerrennet-2027", "hyrox-copenhagen-2027"])
+        XCTAssertEqual(Races.upcomingOnHome(catalog, mine: [], now: now).count, 8)
+        XCTAssertTrue(Races.upcomingOnHome(catalog, mine: [], now: now, limit: 99).allSatisfy { $0.status == .open || $0.status == .opensSoon })
+        XCTAssertEqual(Races.upcomingOnHome(catalog, mine: [], now: at("2027-12-01T10:00:00Z")).count, 0)
+        XCTAssertEqual(Races.homePill(race("tough-viking-stadion-2027"), now: now), "750 → 775 SEK on 1 Nov")
+        XCTAssertEqual(Races.homePill(race("vasaloppet-2027"), now: now), "2,685 → 2,985 SEK on 6 Nov")
+        XCTAssertEqual(Races.homePill(race("vatternrundan-2027"), now: now), "Opens 25 Nov")
+        XCTAssertEqual(Races.homePill(race("hyrox-stockholm-2026"), now: now), "From 1,470 SEK")
+        XCTAssertEqual(Races.homePill(race("bergen-city-marathon-2027"), now: now), "900 NOK until 31 Jan")
+    }
+
+    func testStartWaveReminder() {
+        var m = MyRace(race: race("hyrox-stockholm-2026"), day: "2026-12-12")
+        m.remindWave = true
+        let p = RaceReminders.plan([m], catalog: catalog, now: now)
+        XCTAssertEqual(p.map(\.id), ["race-reminder-wave-hyrox-stockholm-2026"])
+        // 18:00 in Stockholm three days before (winter time, UTC+1).
+        XCTAssertEqual(p.first?.fire, at("2026-12-09T17:00:00Z"))
+        XCTAssertEqual(p.first?.title, "Add your start wave: HYROX Stockholm")
+        XCTAssertTrue(p.first?.body.hasPrefix("Saturday is race day.") == true)
+        // Once the wave is in, there is nothing to remind about; the switch stays for a wave typed by mistake.
+        m.wave = "14:20"
+        XCTAssertTrue(RaceReminders.plan([m], catalog: catalog, now: now).isEmpty)
+        m.wave = "later"
+        XCTAssertEqual(RaceReminders.plan([m], catalog: catalog, now: now).count, 1)
+        // The server never sends this one: it stays local even for races the server reminds about.
+        XCTAssertEqual(RaceReminders.plan([m], catalog: catalog, now: now, serverIds: [m.key]).count, 1)
+    }
+
     func testRaceCalendarEvent() throws {
         let hyrox = race("hyrox-stockholm-2026")
         let one = try XCTUnwrap(CalendarEvent(race: hyrox, day: "2026-12-12"))
