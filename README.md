@@ -157,8 +157,11 @@ My classes tabs, with class and studio pages and account sheets.
   **next race** with its countdown and, above Spotlight, **Upcoming races**: the next open races in your country with
   the next price step ("750 → 775 SEK on 1 Nov") and friends going. **Add to Calendar** makes an all-day event
   (EventKit on iPhone and Mac, an .ics file on the web). The iPhone and Mac can remind you at 09:00 when **sign-up
-  opens** and the day before the **next price step**, each switched on per race (local notifications). My races stay
-  on the device.
+  opens** and the day before the **next price step**, each switched on per race (local notifications; with the server
+  on, the price step comes as a push and an email, and the web app offers it too). On **race day** (and from 18:00 the
+  evening before) My classes shows the race as a **ticket** in the app's lime, like Show ticket: your format and
+  division, bib, start wave, "Be there by", friends going, the place in Apple Maps and the race page. My races stay on
+  the device.
 - **Train for it** (iPhone, Mac and web; see [Train for it](#train-for-it)): the race page's own action turns a race
   in My races into a weekly **class mix** of Bruce classes up to race day: Base, Build, Peak, race week and a
   recovery week, as a phase strip and a weeks × categories grid you can change week by week, with 2 to 6 classes a
@@ -263,8 +266,8 @@ selected, Explore shows the city's studios on a map next to the list.
 - **Races**: Explore › Races, race pages with the formats, price steps, change rule and the official link, My classes ›
   Races (kept in localStorage, with your format, start wave and bib), the next race and Upcoming races on Home, and
   Add to Calendar as an .ics file. **Train for it** with the plan sheet,
-  This week and Book (no Book every week: the web has no weekly auto-book), monthly goals from the plan, and race-week
-  reminders sent by the server while it is on. **Friends going** (the toggle and faces), **crews** (Start a crew, the
+  This week and Book (no Book every week: the web has no weekly auto-book), monthly goals from the plan, the race-day
+  ticket, and race-week and price-step reminders sent by the server while it is on. **Friends going** (the toggle and faces), **crews** (Start a crew, the
   crew page with the week, invites, Leave) and results and the recovery week after the race.
 - **Friends** (their upcoming classes), **My classes** (bookings, waitlist, bookmarks under Classes; your races under
   Races) and **Notifications**.
@@ -367,7 +370,9 @@ Norway and Denmark (for now).
   free cancellation shows "Cancelling costs a strike"). **Book** opens the usual booking rules sheet; **Book every
   week** is the existing auto-book with its late-spot rule. In race week only classes before race day are
   suggested, and from the week before race week My classes offers to **pause** weekly bookings of hard classes
-  (Hyrox, Strength, High-intensity, CrossFit) until race day is over; nothing is cancelled without you.
+  (Hyrox, Strength, High-intensity, CrossFit) until race day is over; nothing is cancelled without you. **Taper: pause
+  hard classes** in the plan sheet (off by default) does that pausing itself from the Monday of the week before race
+  week, and puts the rules back after race day (iPhone and Mac; the web has no weekly auto-book).
 - **Monthly goals** from the plan: this month's planned classes per category (a week counts for the month its
   Thursday is in, the four biggest categories) become monthly goals with "Reminder when behind"; their targets
   follow the plan each month and they go when the plan stops or ends. A category you already have a goal for keeps
@@ -376,7 +381,9 @@ Norway and Denmark (for now).
   the day before (18:00), each switched on per race. On the device they are local notifications; with the server on,
   each device sends its races with `PUT /me/races` and the server pushes them (the race-week one also by email, with
   what you booked that week), and the device leaves out the ones the server confirmed
-  ([server/README.md](server/README.md#race-reminders)).
+  ([server/README.md](server/README.md#race-reminders)). The **next price step** reminder (09:00 the day before)
+  goes the same way: the device sends the day the fee changes and the words, the server pushes and emails them. The
+  **start wave** reminder (18:00 three days before, while no wave is added) stays on the device.
 
 ## Friends going and race crews
 

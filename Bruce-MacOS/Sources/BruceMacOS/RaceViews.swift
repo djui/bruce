@@ -378,7 +378,9 @@ struct MyRacesList: View {
                 }
                 .font(.system(size: 15, weight: .medium)).buttonStyle(.plain).padding(.top, 12)
                 if up.isEmpty && past.isEmpty { EmptyState(system: "flag.checkered", text: Copy.myRacesEmpty).frame(height: 360) }
-                if let next = up.first {
+                // Race day: the ticket stands in for the tile.
+                if let t = m.raceDayTicket { RaceDayTile(ticket: t) }
+                if let next = up.first, m.raceDayTicket?.entry.id != next.id {
                     Button { m.push(.race(next.race.id)) } label: { NextRaceTile(entry: next, plan: m.racePlan(for: next)) }.buttonStyle(.plain)
                     if m.racePlan(for: next) == nil, (next.daysToGo() ?? 0) > 0 {
                         Button { m.present(.racePlan(next.mine.key)) } label: { Label("\(Copy.planTrainForIt): a weekly class mix up to race day", systemImage: "figure.run") }
@@ -428,6 +430,53 @@ struct MyRacesList: View {
 }
 
 /// The next race with its countdown (My classes › Races and Home).
+/// Race day: the race as a ticket in the app's lime with the bib, the start wave, when to be there and the place.
+struct RaceDayTile: View {
+    @Environment(AppModel.self) var m
+    let ticket: RaceDayTicket
+    var body: some View {
+        let e = ticket.entry, r = e.race
+        let going = m.friendsGoing(r.id)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                pill(ticket.title)
+                if let s = e.startText { pill(s) }
+                Spacer()
+                Image(systemName: r.symbol).font(.system(size: 20, weight: .medium))
+            }
+            Text(r.name.uppercased()).font(.system(size: 20, weight: .black).width(.expanded)).lineLimit(2).minimumScaleFactor(0.7)
+            HStack(spacing: 8) {
+                cell("Bib", ticket.bib ?? "—")
+                cell("Start wave", ticket.wave ?? "—")
+                cell("Be there by", ticket.arriveBy ?? "—")
+            }
+            if !going.isEmpty { GoingFaces(users: going, size: 22) }
+            HStack(spacing: 10) {
+                if let u = ticket.mapsURL { Button { NSWorkspace.shared.open(u) } label: { Label(r.placeLine.replacingOccurrences(of: " | ", with: ", "), systemImage: "map") } }
+                Button { m.push(.race(r.id)) } label: { Label("Race page", systemImage: "flag.checkered") }
+            }
+            .buttonStyle(.plain).font(.system(size: 13, weight: .semibold))
+            Text(Copy.raceDayHint).font(.system(size: 12, weight: .light)).foregroundStyle(.black.opacity(0.6))
+        }
+        .foregroundStyle(.black)
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Theme.lime))
+    }
+    func pill(_ t: String) -> some View {
+        Text(t).font(.system(size: 12, weight: .semibold)).padding(.horizontal, 9).padding(.vertical, 4).background(Capsule().fill(.white.opacity(0.5)))
+    }
+    func cell(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased()).font(.system(size: 10, weight: .heavy)).opacity(0.7)
+            Text(value).font(.system(size: 18, weight: .black).width(.expanded)).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(.white.opacity(0.5)))
+    }
+}
+
 struct NextRaceTile: View {
     let entry: MyRaceEntry
     var plan: RacePlan? = nil

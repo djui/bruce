@@ -849,6 +849,19 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .race-rule .i { flex: none; color: var(--lime-ink); }
 .race-fees .chips.race-formats { margin: 0 -16px; }
 .race-fees .chip[aria-pressed="true"] { background: var(--lime); color: var(--on-lime); }
+/* Race day: the race as a ticket in My classes (the same lime as Show ticket) */
+.race-ticket { margin-bottom: 12px; }
+.race-ticket .ticket-head { flex-wrap: wrap; gap: 8px; }
+.race-ticket .glass-pill { background: rgba(255, 255, 255, 0.5); color: #000; }
+.race-ticket-cells { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.race-ticket-cell { display: grid; gap: 2px; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.5); }
+.race-ticket-cell small { font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.7; }
+.race-ticket-cell b { font: 900 20px/1 var(--display); font-variant-numeric: tabular-nums; }
+.race-ticket .going, .race-ticket .going .avatar { color: #000; }
+.race-ticket .btn.glass { background: rgba(255, 255, 255, 0.5); color: #000; }
+.race-fees .toggle.race-next-step { display: flex; }
+.race-fees .toggle.race-next-step span { display: grid; grid-template-columns: auto 1fr; gap: 2px 8px; }
+.race-fees .toggle.race-next-step small { grid-column: 2; font-weight: 400; }
 /* Home: Upcoming races carousel */
 .race-mini-row { gap: 12px; }
 .race-mini { flex: none; display: grid; align-content: start; gap: 4px; width: 200px; min-height: 180px; padding: 14px; border-radius: 22px; color: #fff; text-decoration: none; background: linear-gradient(135deg, var(--r1), var(--r2)); }

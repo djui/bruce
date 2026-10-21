@@ -602,7 +602,9 @@ struct MyRacesSection: View {
                 }
             }
             if let jr = m.justRaced { JustRacedCard(entry: jr.entry, recovery: jr.recovery) }
-            if let next = up.first {
+            // Race day: the ticket stands in for the banner.
+            if let t = m.raceDayTicket { RaceDayCard(ticket: t).padding(.horizontal, -Theme.gutter) }
+            if let next = up.first, m.raceDayTicket?.entry.id != next.id {
                 NavigationLink(value: Route.race(next.race.id)) {
                     NextRaceBanner(entry: next, plan: m.racePlan(for: next), going: m.friendsGoing(next.race.id))
                 }
@@ -653,6 +655,61 @@ struct MyRacesSection: View {
             }
         }
         .glassEffect(.regular, in: .rect(cornerRadius: 24))
+    }
+}
+
+/// My classes on race day (mockup 5): the race as a ticket in the app's lime, like Show ticket, with the bib, the start
+/// wave, when to be there, friends going, the place in Apple Maps and the race's page.
+struct RaceDayCard: View {
+    @Environment(AppModel.self) var m
+    @Environment(\.openURL) private var openURL
+    let ticket: RaceDayTicket
+    var body: some View {
+        let e = ticket.entry, r = e.race
+        let going = m.friendsGoing(r.id)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                pill(ticket.title)
+                if let s = e.startText { pill(s) }
+                Spacer()
+                Image(systemName: r.symbol).bruceFont(22, weight: .medium)
+            }
+            Text(r.name.uppercased()).bruceFont(22, weight: .black, width: .expanded).lineLimit(2).minimumScaleFactor(0.7)
+            HStack(spacing: 8) {
+                cell("Bib", ticket.bib ?? "—")
+                cell("Start wave", ticket.wave ?? "—")
+                cell("Be there by", ticket.arriveBy ?? "—")
+            }
+            if !going.isEmpty { GoingFaces(users: going, size: 24) }
+            HStack(spacing: 10) {
+                if let u = ticket.mapsURL {
+                    Button { openURL(u) } label: { Label(r.placeLine.replacingOccurrences(of: " | ", with: ", "), systemImage: "map").bruceFont(14, weight: .semibold).lineLimit(1) }
+                        .buttonStyle(.plain).padding(.horizontal, 12).frame(height: 34).background(.white.opacity(0.5), in: Capsule())
+                        .accessibilityHint("Opens the place in Maps")
+                }
+                NavigationLink(value: Route.race(r.id)) { Label("Race page", systemImage: "flag.checkered").bruceFont(14, weight: .semibold) }
+                    .buttonStyle(.plain).padding(.horizontal, 12).frame(height: 34).background(.white.opacity(0.5), in: Capsule())
+            }
+            Text(Copy.raceDayHint).bruceFont(12).foregroundStyle(.black.opacity(0.6)).fixedSize(horizontal: false, vertical: true)
+        }
+        .foregroundStyle(.black)
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.lime, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
+        .accessibilityElement(children: .combine)
+    }
+    func pill(_ t: String) -> some View {
+        Text(t).bruceFont(13, weight: .semibold).lineLimit(1).padding(.horizontal, 10).padding(.vertical, 5).background(.white.opacity(0.5), in: Capsule())
+    }
+    func cell(_ label: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased()).bruceFont(10, weight: .heavy).opacity(0.7)
+            Text(value).bruceFont(20, weight: .black, width: .expanded).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 12).padding(.vertical, 10)
+        .background(.white.opacity(0.5), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 }
 

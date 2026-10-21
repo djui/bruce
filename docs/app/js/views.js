@@ -15,7 +15,7 @@ import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 import { cancelChip } from './rules.js';
 import { reached as milestonesReached, fresh as freshMilestone, newToYou } from './milestones.js';
 import { visitsFrom } from './visits.js';
-import { raceChipsHTML, raceChipsClick, racesListHTML, filteredRaces, nextRaceHTML, upcomingRacesHTML, myRacesHTML, myEntries, openRaceEditor, planClick, refreshPlanGoals } from './racesui.js';
+import { raceChipsHTML, raceChipsClick, racesListHTML, filteredRaces, nextRaceHTML, upcomingRacesHTML, myRacesHTML, raceDayCardHTML, myEntries, openRaceEditor, planClick, refreshPlanGoals } from './racesui.js';
 import { upcoming as upcomingRaces } from './races.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
@@ -483,7 +483,8 @@ export const Mine = {
     const list = { bookings, waitlist: waits, bookmarks: marks }[this.tab].sort(byStart);
     const msg = { bookings: ['mine', 'You have no bookings.'], waitlist: ['bell', "You're not on any waitlists."], bookmarks: ['bookmark', 'No bookmarked classes yet.'] }[this.tab];
     const rv = this.tab === 'bookings' ? St.pendingReviews() : [];
-    b.innerHTML = (this.tab === 'bookings' ? goalsCardHTML() : '') + rv.map((r) => '<div class="card prompt">' + icon('star') + '<div class="grow"><b>Rate ' + esc(r.class.title) + '</b><p class="muted">' + esc(dayHeader(r.class.start_time)) + '</p></div><button class="btn lime sm" data-review="' + r.id + '">Rate</button></div>').join('') +
+    // Race day (racesui.js): the race as a ticket above the bookings.
+    b.innerHTML = (this.tab === 'bookings' ? raceDayCardHTML((id) => link('mine', 'race', encodeURIComponent(id)) + '?tab=races') + goalsCardHTML() : '') + rv.map((r) => '<div class="card prompt">' + icon('star') + '<div class="grow"><b>Rate ' + esc(r.class.title) + '</b><p class="muted">' + esc(dayHeader(r.class.start_time)) + '</p></div><button class="btn lime sm" data-review="' + r.id + '">Rate</button></div>').join('') +
       (list.length ? classList(list, (c) => link('mine', 'class', c.id) + '?tab=' + this.tab, { selectedId: sel && sel.id,
         chipOf: (c) => { const b = this.tab === 'bookings' && S.bookings.get(c.id); return b && !b.checked_in_at ? cancelChip(St.rules(c), Date.now(), shortWhen) : null; },
         trailingOf: (c) => (this.tab === 'bookings' && new Date(c.start_time) > Date.now() ? '<button class="row-btn" data-ics="' + c.id + '" aria-label="Add to Calendar" title="Add to Calendar">' + icon('calendar') + '</button>' : '') }) : empty(msg[0], msg[1]));

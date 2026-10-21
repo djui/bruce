@@ -261,6 +261,29 @@ test('formats: per-format fees, the picked one in My races, start wave and arriv
   assert.ok(R.decode(FILE).some((x) => x.id === 'premiarhalvan-2027'));
 });
 
+test('race day: the ticket today or from 18:00 the evening before, the map link, the price reminder for the server', () => {
+  const r = Object.assign({}, race('hyrox-stockholm-2026'), { arriveMinutesBefore: 90, formats: [{ code: 'doubles', title: 'Doubles' }] });
+  const mine = [Object.assign(R.fromRace(r), { day: '2026-12-12', format: 'doubles', note: 'Open', wave: '1420', bib: '1427' }), R.fromRace(race('tough-viking-stadion-2027'))];
+  const list = R.entries(mine, [r, race('tough-viking-stadion-2027')]);
+  const t = R.raceDayTicket(list, '2026-12-12', 8);
+  assert.equal(t.title, 'Race day · today');
+  assert.equal(R.entryArriveBy(t.entry), '12:50');
+  assert.equal(R.startText(t.entry), 'Doubles · Open');
+  assert.equal(R.raceDayTicket(list, '2026-12-11', 18).title, 'Race day · tomorrow');
+  assert.equal(R.raceDayTicket(list, '2026-12-11', 12), null);
+  assert.equal(R.raceDayTicket(list, TODAY, 20), null);
+  assert.equal(R.mapsURL(r), 'https://maps.apple.com/?q=Strawberry%20Arena%2C%20Solna');
+  assert.equal(R.mapsURL({ venue: null, city: '' }), null);
+  // "Price goes up tomorrow": the day it changes and the words, as the iPhone's notification; the server sends them.
+  const p = R.priceReminder(race('tough-viking-stadion-2027'), TODAY);
+  assert.deepEqual(p, { changeOn: '2026-11-01', remindOn: '2026-10-31', title: 'Price goes up tomorrow',
+    body: 'Tough Viking Stockholms Stadion: 750 SEK until today, 775 SEK from tomorrow. Sign up on toughviking.se.' });
+  assert.equal(R.priceReminder(race('bergen-city-marathon-2027'), TODAY).body, 'Bergen City Marathon: today is the last day for 900 NOK. Sign up on bergencitymarathon.no.');
+  assert.equal(R.priceReminder(race('stockholm-marathon-2027'), TODAY), null, 'no steps known');
+  assert.equal(R.priceReminder(race('vatternrundan-2027'), TODAY), null, 'not open yet');
+  assert.equal(R.priceReminder(race('tough-viking-stadion-2027'), '2027-06-01'), null, 'over');
+});
+
 test('Home: Upcoming races (not in My races, open or opening, own country first) and the next price step pill', () => {
   const mine = [R.fromRace(race('hyrox-stockholm-2026'))];
   assert.deepEqual(R.upcomingOnHome(CATALOG, mine, TODAY, 'SE', 5).map((r) => r.id),

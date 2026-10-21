@@ -155,6 +155,13 @@ have one of the two switched on with `PUT /me/races` and leave the notifications
   day tomorrow. Start times and what to bring are on hyrox.com." Push category `RACE_REMINDER`, payload `{"raceId"}`
   (opens the race page).
 - A reminder already sent stays sent when the race is sent again with the same day; a new day reminds again.
+- **Price goes up tomorrow** (`migrations/0005_race_price.sql`): the catalog's price steps live in the apps, not here,
+  so with "Remind me the day before" on they send the day the fee changes (`priceAt`) and the words (`priceBody`, as
+  the iPhone's own notification: "Tough Viking Stockholms Stadion: 750 SEK until today, 775 SEK from tomorrow. Sign
+  up on toughviking.se."). The minute cron pushes and emails it at 09:00 local the day before, once (`price_sent_at`,
+  kept while `price_at` stays the same; a new step day reminds again), or drops it when more than 12 hours late. A race
+  with only this reminder is stored like one with a race-day reminder (catalog races only). The web app, which has no
+  notifications of its own, offers the switch while the server is on.
 - The **daily cron** removes races whose day is over (from the day after), and with them the row of a user who has
   nothing else on the server. A user whose only data is race reminders (a web user without a device) keeps their
   row until then; `DELETE /me` and an expired login delete the races too.
@@ -267,7 +274,7 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | Request | Body | Effect |
 |---|---|---|
 | `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true,"crewUpdates":true,"lateSpots":"ask"}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes, `nudgeDays` (1-7, default 4) sets their quiet days; `crewUpdates` (optional, default on) switches the Sunday crew push; `lateSpots` (optional, `ask` or `book`, default `ask`) is what happens to a spot 3-12 h before the class (see "Late spots") |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], opening:[{classId,title,start,opens}], maxOpening, log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots, crewUpdates, races:[{id,name,date,url,remindWeek,remindEve,plan,weekSentAt,eveSentAt,going}]}` |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], opening:[{classId,title,start,opens}], maxOpening, log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots, crewUpdates, races:[{id,name,date,url,remindWeek,remindEve,remindPrice,priceAt,plan,weekSentAt,eveSentAt,priceSentAt,going}]}` |
 | `DELETE /me` | | Deletes the user's row, history and races; in a challenge it keeps the login and clears rules, watches, goals, races and push devices |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |
@@ -277,7 +284,7 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | `PUT /me/email` | `{"enabled":false}` | Stops (or with `true` restarts) the booking emails → `{email}`: the address used, or null |
 | `GET /email/off?u=<userId>&t=<token>` | | The unsubscribe link in each email (no login needed; `POST` for one-click) |
 | `PUT /me/goals` | `{"goals":[{"id","title","category","studioId","target","remind"}]}` | Stores the goals with `remind` for "Behind on your goal" pushes (max 10; `[]` clears) |
-| `PUT /me/races` | `{"device":"<id>","races":[{"id","name","date","url","remindWeek","remindEve","going","goingAt","plan":{"perWeek","weeks","startedOn","raceWeek":[{"key","title","count"}]}}]}` | Replaces the races this `device` sent with race-day reminders or going (`id` lower case with dashes, `date` the member's race day; races with neither are left out; `going` only for catalog ids; 409 over 20, or 40 on all devices) → `{races, ids, going, push, email}`: `push` true when the server can push to a device. Stores the login; creates the user's row if needed |
+| `PUT /me/races` | `{"device":"<id>","races":[{"id","name","date","url","remindWeek","remindEve","remindPrice","priceAt","priceBody","going","goingAt","plan":{"perWeek","weeks","startedOn","raceWeek":[{"key","title","count"}]}}]}` | Replaces the races this `device` sent with race-day or price-step reminders or going (`id` lower case with dashes, `date` the member's race day; races with none are left out; `priceAt` a `YYYY-MM-DD`, `priceBody` at most 240 characters; `remindPrice` and `going` only for catalog ids; 409 over 20, or 40 on all devices) → `{races, ids, going, push, email}`: `ids` the races the server reminds about, `push` true when the server can push to a device. Stores the login; creates the user's row if needed |
 | `DELETE /me/races/<id>` | | Removes one race → `{races}` |
 | `GET /races/going?ids=` | | `{going:{raceId:[{userId,name}]}, sharing, mine}`: the caller's Bruce friends who marked an upcoming race going (`ids` optional, comma-separated); empty with `sharing: false` while the caller shares no race (see "Friends going") |
 | `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}`, or a crew `{"title","raceId","weekly","end","invite"}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366) or a race crew (see "Race crews"; 409 when already in a crew for the race), invites friends by push → 201 `{challenge}` |

@@ -5,7 +5,7 @@ import { icsFor, icsFileName, feedUrl } from './calendar.js';
 import { visitsFrom } from './visits.js';
 import { remindPayload, goalTitle } from './goals.js';
 import { DEFAULT_PREFS } from './recommend.js';
-import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRaces, keyOf as raceKey } from './races.js';
+import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRaces, keyOf as raceKey, priceReminder } from './races.js';
 import { makePlan, count as planCount, category as planCategory } from './raceplan.js';
 import { DEMO_RACES, DEMO_MY_RACES } from './demo.js';
 import { sharesGoing } from './crews.js';
@@ -404,13 +404,16 @@ export function loadRaces(force) {
 /** My races, stored in this browser only (like saved places and goals). */
 export function myRaces() { return ls.get('bruce.myRaces' + suffix(), isDemo() ? DEMO_MY_RACES : []); }
 export function saveMyRaces(list) { ls.set('bruce.myRaces' + suffix(), list); emit(); syncRaces(list); }
-/** The body of PUT /me/races: upcoming races with a race-week or day-before reminder (at most 20), with the plan's
- *  race-week mix for the push text (server/README.md). */
+/** The body of PUT /me/races: upcoming races with a race-week, day-before or price-step reminder (at most 20), with
+ *  the plan's race-week mix for the push text and the price step's day and words (server/README.md). */
 export function racesPayload(list, catalog, today) {
   // Going switched here (on or off) goes with the moment it was flipped: the last flip wins on every device.
   const switched = (m) => !!(m.raceId && m.goingAt);
-  return upcomingRaces(raceEntries(list, catalog), today).filter((e) => e.mine.remindWeek || e.mine.remindEve || sharesGoing(e.mine) || switched(e.mine)).slice(0, 20).map((e) => {
+  const price = (e) => (e.mine.remindPrice ? priceReminder(e.race, today) : null);
+  return upcomingRaces(raceEntries(list, catalog), today).filter((e) => e.mine.remindWeek || e.mine.remindEve || price(e) || sharesGoing(e.mine) || switched(e.mine)).slice(0, 20).map((e) => {
     const o = { id: raceKey(e.mine), name: e.race.name, date: e.day, remindWeek: !!e.mine.remindWeek, remindEve: !!e.mine.remindEve };
+    const pr = price(e);
+    if (pr) { o.remindPrice = true; o.priceAt = pr.changeOn; o.priceBody = pr.body; }
     if (switched(e.mine)) { o.going = !!e.mine.going; o.goingAt = e.mine.goingAt; }
     if (e.race.signupUrl) o.url = e.race.signupUrl;
     const p = e.mine.plan && makePlan(e.day, e.race.type, e.race.sport, e.mine.plan);
