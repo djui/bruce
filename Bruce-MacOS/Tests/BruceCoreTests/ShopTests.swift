@@ -92,12 +92,13 @@ final class ShopTests: XCTestCase {
         XCTAssertEqual(c.kinds, [.towel, .mat, .socks, .apparel, .sauna, .other])
         XCTAssertEqual(c.towel(for: ShopCatalog.demoAngan)?.priceText, "449 kr")
         XCTAssertNil(c.towel(for: ShopCatalog.demoYogaloft))
-        let d = try! XCTUnwrap(c.homeDrop(now: now))
+        let d = try! XCTUnwrap(c.drop("hornstull-race-day-2027"))
         XCTAssertEqual(d.title, "Hornstull Race Day tee")
         XCTAssertEqual(d.state(now: now), .open)
         XCTAssertEqual(d.countdownText(now: now), "Closes in 2 d 14 h")
         XCTAssertEqual(d.progressText, "31 of 40")
         XCTAssertEqual(c.drop(for: c.product("karnan-race-day-tee")!)?.id, d.id)
+        XCTAssertEqual(c.homeDrop(now: now)?.id, "finisher-tee-2026", "the member's own unlocked drop comes first on Home")
         XCTAssertEqual(c.products(for: ShopCatalog.demoAngan).map(\.title), ["Bastu towel", "Felt sauna hat", "Linen seat cover"])
     }
 
@@ -111,7 +112,72 @@ final class ShopTests: XCTestCase {
         XCTAssertEqual(m.towelPrompt(studioId: ShopCatalog.demoAngan)?.id, "angan-bastu-towel")
         XCTAssertNil(m.towelPrompt(studioId: ShopCatalog.demoYogaloft), "a yoga studio gets no towel card")
         XCTAssertNil(m.towelPrompt(studioId: 9520), "a spa without a listing gets none either")
-        XCTAssertEqual(m.shopProducts(for: ShopCatalog.demoKarnan).count, 2)
+        XCTAssertEqual(m.shopProducts(for: ShopCatalog.demoKarnan).count, 3)
         XCTAssertNil(m.shopStorefront(1724), "no listing: nothing on the studio page")
+    }
+}
+
+// MARK: - Phase 3: drops
+
+extension ShopTests {
+    func testDropReadyStateAndReserveLink() {
+        var d = drop
+        d.linkUrl = "https://shop.example.org/karnan/race-day-tee"
+        XCTAssertEqual(d.reserveURL(now: now)?.host, "shop.example.org", "open: Reserve opens the studio's own checkout")
+        XCTAssertNil(d.reserveURL(now: ISO8601DateFormatter().date(from: "2027-01-20T00:00:00Z")!), "not open yet")
+        XCTAssertNil(d.reserveURL(now: ISO8601DateFormatter().date(from: "2027-02-08T00:00:00Z")!), "closed")
+        d.linkUrl = "http://shop.example.org/x"
+        XCTAssertNil(d.reserveURL(now: now), "https only")
+        d.ready = true
+        XCTAssertEqual(d.state(now: now), .ready)
+        XCTAssertEqual(d.countdownText(now: now), "Ready for pickup")
+        XCTAssertNil(d.reserveURL(now: now), "at the desk: nothing to reserve")
+        let front = Storefront(studioId: 9840, sellerName: "Kärnan Reformer AB", city: "STO", pickupNote: "At the desk, weekdays 06–20", consentAt: "2026-11-12")
+        XCTAssertEqual(Copy.shopReadyBody(front), "Ready at the desk: Kärnan Reformer AB, at the desk, weekdays 06–20.")
+        XCTAssertEqual(Copy.shopReadyBody(nil), "Ready at the desk.")
+        XCTAssertEqual(Copy.shopReserve("349 kr"), "Reserve · 349 kr")
+    }
+
+    func testUnlockedDropsLayOverTheCatalogue() throws {
+        let c = try ShopCatalog.decode(Data("""
+        {"city":"STO","storefronts":[{"studioId":9840,"sellerName":"Kärnan Reformer AB","city":"STO","consentAt":"2026-11-12"}],
+         "products":[{"id":"socks","studioId":9840,"title":"Grip socks","kind":"socks","priceOre":14900,"fulfilment":"desk"}],
+         "drops":[{"id":"race-day","studioId":9840,"productId":"socks","title":"Socks drop","opensAt":1,"closesAt":9999999999999,"ready":true}]}
+        """.utf8))
+        XCTAssertEqual(c.drops[0].state(now: now), .ready, "the catalogue's `ready` is read")
+        XCTAssertFalse(c.drops[0].unlocked)
+        let mine = try JSONDecoder().decode(ShopServer.Mine.self, from: Data("""
+        {"notify":["finisher-tee"],"drops":[{"id":"finisher-tee","studioId":9840,"productId":"finisher","challengeId":"abc","title":"Finisher tee","opensAt":1,"closesAt":9999999999999,"unlocked":true}],
+         "products":[{"id":"finisher","studioId":9840,"title":"Finisher tee","kind":"apparel","priceOre":34900,"fulfilment":"pod","variants":[{"id":"m","label":"M"}]}]}
+        """.utf8))
+        XCTAssertEqual(mine.notify, ["finisher-tee"])
+        let merged = c.merging(drops: mine.drops, products: mine.products)
+        XCTAssertEqual(merged.products.map(\.id), ["socks", "finisher"])
+        XCTAssertEqual(merged.drops.map(\.id), ["race-day", "finisher-tee"])
+        XCTAssertEqual(merged.drop(forChallenge: "abc")?.id, "finisher-tee")
+        XCTAssertNil(merged.drop(forChallenge: "other"))
+        XCTAssertNil(c.drop(forChallenge: "abc"), "nothing unlocked before the server says so")
+        XCTAssertEqual(merged.homeDrop(now: now)?.id, "finisher-tee", "the member's own drop comes first on Home")
+        XCTAssertEqual(merged.merging(drops: mine.drops, products: mine.products).products.count, 2, "merging twice adds nothing")
+        // An empty Mine (a member with nothing unlocked) decodes too.
+        XCTAssertEqual(try JSONDecoder().decode(ShopServer.Mine.self, from: Data(#"{"notify":[]}"#.utf8)).drops.count, 0)
+    }
+
+    @MainActor func testDemoFinisherTee() {
+        AppModel.demo = true
+        let m = AppModel()
+        m.loadDemo()
+        m.loadDemoChallenges()
+        let done = try! XCTUnwrap(m.challenges.first { $0.id == "demoDone" })
+        XCTAssertEqual(done.metric, "target")
+        XCTAssertEqual(m.challengeDetails["demoDone"]?.leaderboard?.first { $0.userId == 0 }?.done, true, "the demo member hit 20")
+        let d = try! XCTUnwrap(m.rewardDrop(forChallenge: "demoDone"))
+        XCTAssertTrue(d.unlocked)
+        XCTAssertEqual(d.state(), .open)
+        XCTAssertNotNil(d.reserveURL())
+        XCTAssertEqual(m.shopProduct(d.productId)?.title, "Finisher tee")
+        XCTAssertNil(m.rewardDrop(forChallenge: "demoOct"), "a running challenge has no reward")
+        XCTAssertTrue(Copy.shopFinisherBody(done, studio: "Kärnan Reformer", drop: d).hasPrefix("Only for people who hit 20. One print run, picked up at Kärnan Reformer. Pre-order until "))
+        XCTAssertEqual(PushTarget(userInfo: ["dropId": "x", "productId": "karnan-finisher-tee"]), .product("karnan-finisher-tee"))
     }
 }

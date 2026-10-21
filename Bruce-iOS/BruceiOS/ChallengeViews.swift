@@ -301,6 +301,8 @@ struct ChallengeView: View {
                             CrewWeekSection(crew: c, weeks: w) { uid in member = d.leaderboard?.first { $0.userId == uid } }
                         } else {
                             Leaderboard(detail: d) { member = $0 }
+                            // The finisher tee (Shop.swift, mockup 4): only once the server unlocked it for this member.
+                            if let drop = m.rewardDrop(forChallenge: c.id) { FinisherRewardCard(drop: drop, challenge: c) }
                             if let me = d.leaderboard?.first(where: { m.isMe($0.userId) }), !me.isInvited { YourDays(entry: me, challenge: c) }
                             months(d)
                         }
@@ -333,8 +335,8 @@ struct ChallengeView: View {
                 }
             }
         }
-        .task { await m.loadChallenge(challengeId) }
-        .refreshable { await m.loadChallenge(challengeId) }
+        .task { await m.loadChallenge(challengeId); await m.loadShop() }
+        .refreshable { await m.loadChallenge(challengeId); await m.loadShop(force: true) }
         .sheet(item: $member) { e in
             ParticipantSheet(entry: e, metric: summary?.metric ?? "classes").presentationDetents([.medium, .large])
         }
@@ -621,5 +623,61 @@ struct NewChallengeSheet: View {
             m.tab = .friends
             m.stacks[.friends] = [.challenge(id)]
         }
+    }
+}
+
+/// A finished challenge's reward (mockup 4): the tee only finishers can order, "Unlocked", a size pick and Reserve,
+/// which opens the studio's own checkout. The studio sells and hands out at the desk; Brüce only links.
+struct FinisherRewardCard: View {
+    @Environment(AppModel.self) var m
+    @Environment(\.openURL) private var openURL
+    let drop: Drop
+    let challenge: ChallengeSummary
+    @State private var size: String?
+
+    var body: some View {
+        let product = m.shopProduct(drop.productId)
+        let studio = m.studioName(drop.studioId)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 12) {
+                ProductArt(kind: product?.kind ?? .apparel, corner: 12, symbolSize: 26).frame(width: 54, height: 54)
+                VStack(alignment: .leading, spacing: 4) {
+                    DropTag(unlocked: true)
+                    NavigationLink(value: Route.product(drop.productId)) { Text(drop.title).bruceFont(17, weight: .bold).foregroundStyle(Theme.ink) }.buttonStyle(.plain)
+                }
+                Spacer(minLength: 0)
+                Text(drop.countdownText()).bruceFont(12, weight: .semibold).foregroundStyle(Theme.secondary)
+            }
+            Text(Copy.shopFinisherBody(challenge, studio: studio, drop: drop)).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            if let product, !product.variants.isEmpty {
+                GlassEffectContainer {
+                    HStack(spacing: 6) {
+                        ForEach(product.variants) { v in
+                            GlassChip(v.label, selected: size == v.id) { size = v.id }.disabled(!v.inStock)
+                        }
+                    }
+                }
+            }
+            switch drop.state() {
+            case .open:
+                if let u = drop.reserveURL() {
+                    LimeButton(title: Copy.shopReserve(product?.priceText ?? ""), systemImage: "arrow.up.right.square") { openURL(u) }
+                    Text(Copy.shopReserveHint).bruceFont(11).foregroundStyle(Theme.secondary)
+                } else {
+                    Text(Copy.shopReserveAtDesk).bruceFont(13).foregroundStyle(Theme.secondary)
+                }
+            case .ready: Label(Copy.shopReadyBody(m.shopStorefront(drop.studioId)), systemImage: "checkmark.seal.fill").bruceFont(14, weight: .semibold)
+            case .closed: Text(Copy.shopDropClosed).bruceFont(13).foregroundStyle(Theme.secondary)
+            case .upcoming:
+                let on = m.isNotified(drop.id)
+                Button { Task { await m.setNotify(drop, !on) } } label: {
+                    Label(on ? "Notify me is on" : Copy.shopNotifyMe, systemImage: on ? "bell.fill" : "bell").bruceFont(15, weight: .bold).frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.glass)
+            }
+        }
+        .padding(14)
+        .background(Theme.sectionGrey, in: .rect(cornerRadius: 22))
+        .onAppear { if size == nil { size = product?.inStockVariants.first { $0.id == "m" }?.id ?? product?.inStockVariants.first?.id } }
     }
 }

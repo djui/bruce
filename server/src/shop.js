@@ -102,6 +102,15 @@ export function dropState(d, now) {
   return now < d.closesAt ? "open" : "closed";
 }
 
+/**
+ * A challenge's finisher, who alone sees its drop (phase 3): an accepted participant who reached the target of an
+ * "everyone hits N" challenge (`done` on their leaderboard entry), or took part in any other challenge to its end.
+ */
+export function isFinisher(ch, entry, today) {
+  if (!entry || entry.status !== "accepted") return false;
+  return ch.metric === "target" ? entry.done === true : ch.end < today;
+}
+
 /** The run's progress: `{reserved, goal, fraction, text}`, "31 of 40" against the run size (else the minimum). */
 export function dropProgress(d) {
   const goal = d.maxQty || d.minQty || 0;

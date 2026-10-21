@@ -104,8 +104,65 @@ test('the demo catalogue: fictional studios, no Bruce or Brüce marks, the race-
   assert.equal(handleServer('GET', '/shop/studio/1724', {}).body.storefront, null);
   assert.equal(handleServer('PUT', '/me/notify/nope', {}).status, 404);
   assert.deepEqual(handleServer('PUT', '/me/notify/hornstull-race-day-2027', {}).body, { ok: true, notify: true, push: false, email: null });
-  assert.deepEqual(handleServer('GET', '/me/shop', {}).body, { notify: ['hornstull-race-day-2027'] });
+  assert.deepEqual(handleServer('GET', '/me/shop', {}).body.notify, ['hornstull-race-day-2027']);
   assert.equal(handleServer('DELETE', '/me/notify/hornstull-race-day-2027', {}).body.notify, false);
-  assert.deepEqual(handleServer('GET', '/me/shop', {}).body, { notify: [] });
+  assert.deepEqual(handleServer('GET', '/me/shop', {}).body.notify, []);
   assert.equal(handleServer('POST', '/shop/tap', { productId: 'angan-bastu-towel' }).status, 200);
+});
+
+// ---------------------------------------------------------------- phase 3: drops
+
+import { DEMO_FINISHER } from '../js/demo.js';
+
+test('drops: ready at the desk, Reserve while the window is open, unlocked drops laid over the catalogue', () => {
+  const linked = Object.assign({}, drop, { linkUrl: 'https://shop.example.org/karnan/race-day-tee' });
+  assert.equal(Sh.reserveUrl(linked, at('2027-02-05T08:00:00Z')), 'https://shop.example.org/karnan/race-day-tee', 'open: Reserve opens the studio\'s own checkout');
+  assert.equal(Sh.reserveUrl(linked, at('2027-01-20T00:00:00Z')), null, 'not open yet');
+  assert.equal(Sh.reserveUrl(linked, at('2027-02-08T00:00:00Z')), null, 'closed');
+  assert.equal(Sh.reserveUrl(Object.assign({}, linked, { linkUrl: 'http://x' }), at('2027-02-05T08:00:00Z')), null, 'https only');
+  const ready = Object.assign({}, linked, { ready: true });
+  assert.equal(Sh.dropState(ready, at('2027-02-05T08:00:00Z')), 'ready');
+  assert.equal(Sh.countdownText(ready, at('2027-02-05T08:00:00Z')), 'Ready for pickup');
+  assert.equal(Sh.reserveUrl(ready, at('2027-02-05T08:00:00Z')), null, 'at the desk: nothing to reserve');
+  assert.equal(Sh.readyBody({ sellerName: 'Kärnan Reformer AB', pickupNote: 'At the desk, weekdays 06–20' }), 'Ready at the desk: Kärnan Reformer AB, at the desk, weekdays 06–20.');
+  assert.equal(Sh.readyBody(null), 'Ready at the desk.');
+  assert.equal(Sh.finisherBody({ metric: 'target', target: 20 }, 'Kärnan Reformer', drop), 'Only for people who hit 20. One print run, picked up at Kärnan Reformer. Pre-order until Sun 7 Feb.');
+  assert.equal(Sh.finisherBody({ metric: 'classes' }, 'X', drop).slice(0, 40), 'Only for people who took part to the end');
+  const c = Sh.decode({ city: 'STO', storefronts: [{ studioId: 9840, sellerName: 'Kärnan Reformer AB', city: 'STO', consentAt: '2026-11-12' }],
+    products: [{ id: 'socks', studioId: 9840, title: 'Grip socks', kind: 'socks', priceOre: 14900, fulfilment: 'desk' }],
+    drops: [{ id: 'race-day', studioId: 9840, productId: 'socks', title: 'Socks drop', opensAt: 1, closesAt: 9999999999999, ready: true }] });
+  assert.equal(Sh.dropState(c.drops[0], 5), 'ready', 'the catalogue\'s ready is read');
+  assert.equal(c.drops[0].unlocked, false);
+  const mine = { notify: ['finisher-tee'], drops: [{ id: 'finisher-tee', studioId: 9840, productId: 'finisher', challengeId: 'abc', title: 'Finisher tee', opensAt: 1, closesAt: 9999999999999, unlocked: true }],
+    products: [{ id: 'finisher', studioId: 9840, title: 'Finisher tee', kind: 'apparel', priceOre: 34900, fulfilment: 'pod', variants: [{ id: 'm', label: 'M' }] }] };
+  const merged = Sh.merge(c, mine);
+  assert.deepEqual(merged.products.map((p) => p.id), ['socks', 'finisher']);
+  assert.deepEqual(merged.drops.map((d) => d.id), ['race-day', 'finisher-tee']);
+  assert.equal(Sh.dropForChallenge(merged, 'abc').id, 'finisher-tee');
+  assert.equal(Sh.dropForChallenge(merged, 'other'), null);
+  assert.equal(Sh.dropForChallenge(c, 'abc'), null, 'nothing unlocked before the server says so');
+  assert.equal(Sh.homeDrop(merged, 5).id, 'finisher-tee', 'the member\'s own drop comes first on Home');
+  assert.equal(Sh.merge(merged, mine).products.length, 2, 'merging twice adds nothing');
+  assert.equal(Sh.merge(c, { notify: [] }).drops.length, 1, 'a member with nothing unlocked');
+});
+
+test('the demo: the finished challenge unlocks the finisher tee, which stays out of the public catalogue', () => {
+  const now = at('2027-02-05T05:40:00Z');
+  const pub = Sh.decode(DEMO_SHOP(now));
+  assert.ok(!pub.products.some((p) => p.id === 'karnan-finisher-tee'), 'not public');
+  const mine = handleServer('GET', '/me/shop', {}).body;
+  assert.deepEqual(mine.drops.map((d) => [d.id, d.challengeId, d.unlocked]), [['finisher-tee-2026', 'demoDone', true]]);
+  assert.equal(mine.products[0].title, 'Finisher tee');
+  // The demo server builds the drop from today's clock: a window that opened two days ago and closes in six.
+  const merged = Sh.merge(pub, mine), today = Date.now();
+  const d = Sh.dropForChallenge(merged, 'demoDone');
+  assert.equal(Sh.dropState(d, today), 'open');
+  assert.ok(Sh.reserveUrl(d, today));
+  assert.equal(Sh.progressText(d), '12 of 30');
+  assert.equal(Sh.homeDrop(merged, today).id, 'finisher-tee-2026');
+  const done = handleServer('GET', '/challenges/demoDone', {}).body;
+  assert.equal(done.challenge.metric, 'target');
+  assert.deepEqual(done.leaderboard.map((r) => [r.name, r.score, r.done]), [['Friend Two', 23, true], ['Demo', 20, true], ['Friend One', 17, false]]);
+  assert.equal(done.challenge.period.daysLeft, 0, 'over');
+  for (const p of DEMO_FINISHER(now).products) assert.doesNotMatch(p.title, /br[uü]ce/i);
 });

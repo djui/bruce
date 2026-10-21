@@ -261,13 +261,34 @@ apps hide the shop in a city with nothing listed.
   studio approves by email and the operator posts the feed.
 - `GET /shop?city=STO` (no login, cached five minutes) answers `{city, storefronts, products, drops}` for the city:
   storefronts with at least one active product, those products with their variants, and the drops anyone may see (a
-  closed drop stays 30 days for the pickup). `GET /shop/studio/<id>` is the same for one studio page.
+  closed drop stays 30 days for the pickup; each carries `ready`). `GET /shop/studio/<id>` is the same for one studio page.
 - `PUT|DELETE /me/notify/<dropId>` switches Notify me for a drop (the login is stored, as joining a challenge stores it:
   the push and the email need the row); `GET /me/shop` lists the member's drops on every device. Phase 3 sends the
   "Drop open" push and email.
 - `POST /shop/tap` `{"productId"}` adds one to an anonymous daily counter per listing (table `taps`, no user id), the
   KPI "item taps per studio-page view". `GET /shop/stats` with the feed token answers Notify me per drop and taps per
   product and day for the last 90 days.
+
+### Drops
+
+Phase 3 (`migrations/0008_shop_drops.sql`): a drop is a pre-order window for one product, printed in one run and picked
+up at the studio. The studio takes the pre-orders itself: the apps' **Reserve** opens the drop's `linkUrl` (the studio's
+own payment link or shop) while the window is open, and the studio reports what it sold as `reserved` in the feed
+("31 of 40" against `maxQty`, else `minQty`).
+
+- **Drop open**: the minute cron sends a push (category `SHOP_DROP`, payload `{dropId, productId}`, which opens the
+  listing) and an email ("Drop open: Race Day tee" / "Pre-order 349 kr until Sun 7 Feb. Pick up at Kärnan Reformer AB.
+  The studio sells it; Brüce only reminds you.") to everyone on the drop's Notify me list once `opensAt` has come,
+  once (`opened_sent_at`); a window that opened more than 12 hours before the cron saw it is only marked.
+- **Ready for pickup**: the operator posts the feed with `"ready": true` on the drop once the parcel is at the desk;
+  the cron sends "Ready for pickup: Race Day tee" / "Collect it at Kärnan Reformer AB, at the desk, weekdays 06–20." to
+  the same list, once (`ready_at`, `ready_sent_at`); the catalogue answers `ready: true`, and the apps show the drop as
+  ready. `"ready": false` takes it back; marking it ready again tells the list again.
+- **Finishers**: a drop with a `challengeId` (a challenge on this server) is left out of the public catalogue together
+  with its product, and `GET /me/shop` answers it, with the product, only to that challenge's finishers: an accepted
+  participant who reached the target of an "everyone hits N" challenge, or took part in any other challenge to its end
+  (`src/shop.js` `isFinisher`, from the stored per-visit detail). The apps show it on the challenge page ("Unlocked",
+  a size pick, Reserve) and lay it over the catalogue.
 
 ## Users and what is stored
 
@@ -344,7 +365,7 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | `GET /shop/stats` | with `Authorization: Bearer <SHOP_FEED_TOKEN>` | `{notify:[{dropId,n}], taps:[{productId,day,n}]}`, the last 90 days of taps |
 | `PUT /me/notify/<dropId>` | | Notify me on for a drop → `{ok, notify: true, push, email}`; 404 for an unknown drop. Stores the login; creates the user's row if needed |
 | `DELETE /me/notify/<dropId>` | | Notify me off → `{ok, notify: false}` |
-| `GET /me/shop` | | `{notify:[dropId]}`: the drops the member asked to be told about |
+| `GET /me/shop` | | `{notify:[dropId], drops:[...], products:[...]}`: the drops the member asked to be told about, and the drops a finished challenge unlocked for them (`unlocked: true`) with those drops' products (see "Drops") |
 | `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}`, or a crew `{"title","raceId","weekly","end","invite"}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366) or a race crew (see "Race crews"; 409 when already in a crew for the race), invites friends by push → 201 `{challenge}` |
 | `GET /challenges` | | `{challenges:[…], usesBruce:[userId]}`: the caller's challenges and invites, and which friends use the server |
 | `GET /challenges/<id>` | | Participants: `{challenge, leaderboard:[{userId,name,status,rank,score,visits,classes,dropins,minutes,studios,topStudio,topClass,categories,together,lastVisit,done,daily,recent}], months:[{month,label,entries}], crew, updatedAt}` (`crew` for crews only); others: a preview `{challenge, joinable}` |

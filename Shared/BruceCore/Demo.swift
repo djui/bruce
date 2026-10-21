@@ -239,6 +239,12 @@ extension AppModel {
         case "towel": push(.studio(ShopCatalog.demoAngan)); loadDemoSaunaCheckIn(); present(.ticket(5002))
         case "drop": push(.product("karnan-race-day-tee"))
         case "homeshop": tab = .home; demoScrollBottom = true
+        // Phase 3: the finished challenge with its finisher tee (mockup 4), the unlocked drop's page, and a drop ready at the desk.
+        case "finisher": tab = .friends; demoFriendsTab = 1; push(.challenge("demoDone")); demoScrollBottom = true
+        case "finishertee": push(.product("karnan-finisher-tee"))
+        case "dropready":
+            if let i = shop?.drops.firstIndex(where: { $0.id == "hornstull-race-day-2027" }) { shop?.drops[i].ready = true }
+            push(.product("karnan-race-day-tee"))
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
         case "detail": push(.classDetail(9001))

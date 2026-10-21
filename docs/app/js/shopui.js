@@ -21,17 +21,46 @@ export function tileHTML(p, href, compact) {
     '<b>' + esc(p.title) + '</b><span><em>' + esc(Sh.kr(p.priceOre)) + '</em>' + (compact ? '' : ' · ' + esc(studioShort(p.studioId))) + '</span></a>';
 }
 
-/** A drop (mockup 1): "DROP" tag, the title, where to pick it up, the countdown, "31 of 40" and a meter, with Notify me. */
+const tag = (unlocked) => '<span class="mtag">' + (unlocked ? 'Unlocked' : 'Drop') + '</span>';
+/** The card's button: Notify me before the window, Reserve (the studio's checkout) in it, "Ready for pickup" at the desk. */
+function dropButton(d) {
+  const now = Date.now();
+  const state = Sh.dropState(d, now), on = S.shopNotify.has(d.id), url = Sh.reserveUrl(d, now);
+  if (state === 'ready') return '<span class="btn sm lime">' + icon('checkSeal') + ' ' + Sh.READY + '</span>';
+  if (state === 'closed') return '<span class="btn sm glass on">' + icon('clock') + ' Closed</span>';
+  if (url) return '<a class="btn sm lime" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' Reserve</a>';
+  return '<button class="btn sm' + (on ? ' glass on' : ' lime') + '" data-notify="' + esc(d.id) + '" aria-pressed="' + on + '">' + icon('bell') + (on ? ' Notifying' : ' Notify me') + '</button>';
+}
+
+/** A drop (mockup 1): "DROP" (or "UNLOCKED") tag, the title, where to pick it up, the countdown, "31 of 40" and a meter,
+ *  with Notify me, Reserve or "Ready for pickup" as the window stands. */
 export function dropCardHTML(d, href) {
   const now = Date.now();
   const p = Sh.product(S.shop, d.productId);
-  const on = S.shopNotify.has(d.id);
   return '<div class="drop-card" role="group" aria-label="' + esc('Drop: ' + d.title + ', ' + Sh.countdownText(d, now) + ', ' + Sh.progressText(d) + ' reserved') + '">' +
-    '<a class="drop-body" href="' + href + '"><span class="row-between"><span class="mtag">Drop</span>' + icon(p ? Sh.kindIcon(p.kind) : 'brief', 'drop-glyph') + '</span>' +
+    '<a class="drop-body" href="' + href + '"><span class="row-between">' + tag(d.unlocked) + icon(p ? Sh.kindIcon(p.kind) : 'brief', 'drop-glyph') + '</span>' +
     '<b>' + esc(d.title) + '</b><span>Pick up at ' + esc(St.studioName(d.studioId)) + '</span>' +
-    '<span class="drop-meta"><span>' + icon('clock') + esc(Sh.countdownText(d, now)) + '</span><span>' + esc(Sh.progressText(d)) + '</span></span>' +
+    '<span class="drop-meta"><span>' + icon(Sh.dropState(d, now) === 'ready' ? 'checkSeal' : 'clock') + esc(Sh.countdownText(d, now)) + '</span><span>' + esc(Sh.progressText(d)) + '</span></span>' +
     '<span class="meter"><i style="width:' + Math.round(100 * Sh.progress(d)) + '%"></i></span></a>' +
-    '<div class="row-between"><b>' + (p ? esc(Sh.kr(p.priceOre)) : '') + '</b><button class="btn sm' + (on ? ' glass on' : ' lime') + '" data-notify="' + esc(d.id) + '" aria-pressed="' + on + '">' + icon('bell') + (on ? ' Notifying' : ' Notify me') + '</button></div></div>';
+    '<div class="row-between"><b>' + (p ? esc(Sh.kr(p.priceOre)) : '') + '</b>' + dropButton(d) + '</div></div>';
+}
+
+/** A finished challenge's reward (mockup 4): the tee only finishers can order, "Unlocked", a size pick and Reserve. */
+export function rewardCardHTML(c, tab) {
+  const d = Sh.dropForChallenge(S.shop, c.id);
+  if (!d) return '';
+  const now = Date.now();
+  const p = Sh.product(S.shop, d.productId);
+  const studio = St.studioName(d.studioId);
+  const state = Sh.dropState(d, now), url = Sh.reserveUrl(d, now), on = S.shopNotify.has(d.id);
+  const sizes = p && p.variants.length ? '<div class="chips wrap sizes">' + p.variants.map((v, i) => '<button class="chip" data-size="' + esc(v.id) + '" aria-pressed="' + (v.id === 'm' || (!p.variants.some((x) => x.id === 'm') && i === 0)) + '"' + (v.inStock ? '' : ' disabled') + '>' + esc(v.label) + '</button>').join('') + '</div>' : '';
+  const action = state === 'open' ? (url ? '<a class="btn lime" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' ' + esc('Reserve · ' + (p ? Sh.kr(p.priceOre) : '')) + '</a><p class="muted small">' + esc(Sh.RESERVE_HINT) + '</p>'
+      : '<p class="muted small">' + esc(Sh.RESERVE_DESK) + '</p>')
+    : state === 'ready' ? '<p><b>' + icon('checkSeal') + ' ' + esc(Sh.readyBody(Sh.storefront(S.shop, d.studioId))) + '</b></p>'
+    : state === 'closed' ? '<p class="muted small">' + esc(Sh.DROP_CLOSED) + '</p>'
+    : '<button class="btn glass" data-notify="' + esc(d.id) + '" aria-pressed="' + on + '">' + icon('bell') + (on ? ' Notify me is on' : ' Notify me') + '</button>';
+  return '<div class="card reward-card"><div class="reward-top">' + art(p ? p.kind : 'apparel', 'small') + '<div class="grow">' + tag(true) + '<a href="' + productRoute(tab, d.productId) + '"><b>' + esc(d.title) + '</b></a></div><span class="muted small">' + esc(Sh.countdownText(d, now)) + '</span></div>' +
+    '<p class="muted small">' + esc(Sh.finisherBody(c, studio, d)) + '</p>' + sizes + action + '</div>';
 }
 
 /** Home, after Spotlight: the live drop and a row of listings, with "Show all" into Home › Shop. Empty without a listing. */
@@ -43,8 +72,10 @@ export function shopHomeHTML(tab) {
     '<div class="hscroll shop-row">' + S.shop.products.slice(0, 8).map((p) => tileHTML(p, productRoute(tab, p.id))).join('') + '</div>';
 }
 
-/** Handles a Notify me click anywhere; true when it was one. */
+/** Handles a Notify me click anywhere (and a size pick on a reward card); true when it was one. */
 export function shopClick(e, rerender) {
+  const sz = e.target.closest('[data-size]');
+  if (sz) { sz.parentElement.querySelectorAll('[data-size]').forEach((x) => x.setAttribute('aria-pressed', x === sz)); return true; }
   const b = e.target.closest('[data-notify]');
   if (!b) return false;
   const d = S.shop && S.shop.drops.find((x) => x.id === b.dataset.notify);
@@ -98,6 +129,14 @@ export function renderProduct(el, id, ctx) {
     const studio = St.studioName(p.studioId);
     const url = Sh.httpsUrl(p.linkUrl) || (front && Sh.httpsUrl(front.webshopUrl));
     const link = url && (p.fulfilment !== 'desk' || p.linkUrl);
+    const now = Date.now(), dstate = d && Sh.dropState(d, now), reserve = d && Sh.reserveUrl(d, now), on = d && S.shopNotify.has(d.id);
+    // A drop's Reserve opens the studio's own checkout while the window is open; before it, Notify me; at the desk, "Ready for pickup".
+    const actions = d && dstate === 'open' ? (reserve ? '<a class="btn lime" href="' + esc(reserve) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' ' + esc('Reserve · ' + Sh.kr(p.priceOre)) + '</a><p class="muted small center">' + esc(Sh.RESERVE_HINT) + '</p>'
+        : '<span class="btn glass" aria-disabled="true">' + icon('person') + ' ' + esc(Sh.RESERVE_DESK) + '</span>')
+      : d && dstate === 'ready' ? '<span class="btn lime" aria-disabled="true">' + icon('checkSeal') + ' ' + Sh.READY + '</span>'
+      : d && dstate === 'upcoming' ? '<button class="btn ' + (on ? 'glass' : 'lime') + '" data-notify="' + esc(d.id) + '" aria-pressed="' + on + '">' + icon('bell') + (on ? ' Notify me is on' : ' Notify me') + '</button>'
+      : link ? '<a class="btn lime" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + (p.linkUrl ? 'Open in the webshop' : 'Webshop') + icon('external') + '</a>'
+      : '<span class="btn glass" aria-disabled="true">' + icon('person') + ' Ask at the desk</span>';
     el.innerHTML = '<header class="hero product-hero k-' + esc(p.kind) + '">' + icon(Sh.kindIcon(p.kind), 'product-glyph') + '<div class="hero-bar">' + close + '</div></header>' +
       '<div class="pane-pad"><h1 class="product-title">' + esc(p.title) + '</h1>' +
       '<p class="muted small">' + esc([studio, p.description].filter(Boolean).join(' · ')) + '</p>' +
@@ -107,8 +146,7 @@ export function renderProduct(el, id, ctx) {
       '<a class="card row-card" href="' + ctx.link('studio', p.studioId) + '">' + icon('building') + '<div class="grow"><b>' + esc(studio) + '</b><p class="muted">' + esc(front ? Sh.soldBy(front.sellerName, p.fulfilment === 'desk') : 'Studio page') + '</p></div>' + icon('chevron') + '</a>' +
       (front && front.pickupNote ? '<p class="muted small">' + icon('pin') + ' ' + esc(front.pickupNote) + '</p>' : '') +
       '<p class="muted small note">' + esc(Sh.NOT_AFFILIATED) + '</p>' +
-      '<div class="actions sticky">' + (link ? '<a class="btn lime" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + (p.linkUrl ? 'Open in the webshop' : 'Webshop') + icon('external') + '</a>'
-        : '<span class="btn glass" aria-disabled="true">' + icon('person') + ' Ask at the desk</span>') + '</div></div>';
+      '<div class="actions sticky">' + actions + '</div></div>';
   };
   el.onclick = (e) => {
     if (e.target.closest('[data-sact="back"]')) { ctx.close(); return; }
@@ -118,14 +156,16 @@ export function renderProduct(el, id, ctx) {
   St.loadShop().then(() => { draw(); St.tapProduct(id); });
 }
 
-/** The drop's window: "Pre-order until Sun 7 Feb · one print run", the countdown, "31 of 40" and Notify me. */
+/** The drop's window: "Pre-order until Sun 7 Feb · one print run", the countdown, "31 of 40" and Notify me; "Ready for
+ *  pickup" once the studio has it at the desk, "The pre-order has closed" after the window. */
 function dropBlockHTML(d, studio) {
   const now = Date.now();
-  const on = S.shopNotify.has(d.id);
-  return '<div class="card drop-block"><div class="row-between"><span class="mtag">Drop</span><b class="small">' + icon('clock') + ' ' + esc(Sh.countdownText(d, now)) + '</b></div>' +
-    '<p>' + esc(Sh.dropLine(d)) + '</p><div class="row-between small"><span class="muted">Pick up at ' + esc(studio) + '</span><b>' + esc(Sh.progressText(d)) + '</b></div>' +
+  const on = S.shopNotify.has(d.id), state = Sh.dropState(d, now);
+  const line = state === 'ready' ? Sh.readyBody(Sh.storefront(S.shop, d.studioId)) : state === 'closed' ? Sh.DROP_CLOSED : d.unlocked ? Sh.FINISHER_HINT + ' ' + Sh.dropLine(d) + '.' : Sh.dropLine(d);
+  return '<div class="card drop-block"><div class="row-between">' + tag(d.unlocked) + '<b class="small">' + icon(state === 'ready' ? 'checkSeal' : 'clock') + ' ' + esc(Sh.countdownText(d, now)) + '</b></div>' +
+    '<p>' + esc(line) + '</p><div class="row-between small"><span class="muted">Pick up at ' + esc(studio) + '</span><b>' + esc(Sh.progressText(d)) + '</b></div>' +
     '<span class="meter"><i style="width:' + Math.round(100 * Sh.progress(d)) + '%"></i></span>' +
-    '<label class="toggle"><span>Notify me<small class="muted">' + esc(Sh.NOTIFY_HINT) + '</small></span><input type="checkbox" data-notify="' + esc(d.id) + '"' + (on ? ' checked' : '') + '><i></i></label></div>';
+    (state === 'upcoming' || state === 'open' ? '<label class="toggle"><span>Notify me<small class="muted">' + esc(state === 'open' ? 'A push to the Brüce iPhone app and an email when it is ready for pickup.' : Sh.NOTIFY_HINT) + '</small></span><input type="checkbox" data-notify="' + esc(d.id) + '"' + (on ? ' checked' : '') + '><i></i></label>' : '') + '</div>';
 }
 
 // ---------------------------------------------------------------- studio page and the ticket

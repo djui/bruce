@@ -55,8 +55,7 @@ struct DropCard: View {
         let on = m.isNotified(drop.id)
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
-                Text(Copy.shopDropTag.uppercased()).font(.system(size: 10, weight: .heavy).width(.expanded)).foregroundStyle(.black)
-                    .padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.lime))
+                DropTag(unlocked: drop.unlocked)
                 Spacer()
                 Image(systemName: product?.kind.symbol ?? "tshirt").font(.system(size: 40, weight: .ultraLight)).foregroundStyle(.white.opacity(0.35))
             }
@@ -83,19 +82,36 @@ struct DropCard: View {
             HStack {
                 if let product { Text(product.priceText).font(.system(size: 15, weight: .heavy)) }
                 Spacer()
-                Button { Task { await m.setNotify(drop, !on) } } label: {
-                    Label(on ? "Notifying" : Copy.shopNotifyMe, systemImage: on ? "bell.fill" : "bell").font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(on ? .white : .black)
-                        .padding(.horizontal, 12).frame(height: 30)
-                        .background(Capsule().fill(on ? Color.white.opacity(0.22) : Theme.lime))
+                switch drop.state() {
+                case .open where drop.reserveURL() != nil:
+                    Button { NSWorkspace.shared.open(drop.reserveURL()!) } label: { cardButton("Reserve", "arrow.up.right.square", lime: true) }.buttonStyle(.plain)
+                case .open, .upcoming:
+                    Button { Task { await m.setNotify(drop, !on) } } label: { cardButton(on ? "Notifying" : Copy.shopNotifyMe, on ? "bell.fill" : "bell", lime: !on) }.buttonStyle(.plain)
+                case .ready: cardButton(Copy.shopReadyTitle, "checkmark.seal.fill", lime: true)
+                case .closed: cardButton("Closed", "clock", lime: false)
                 }
-                .buttonStyle(.plain)
             }
         }
         .foregroundStyle(.white)
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(LinearGradient(colors: [Color(red: 0.12, green: 0.44, blue: 0.47), Color(red: 0.06, green: 0.18, blue: 0.21)], startPoint: .topLeading, endPoint: .bottomTrailing)))
+    }
+
+    func cardButton(_ title: String, _ symbol: String, lime: Bool) -> some View {
+        Label(title, systemImage: symbol).font(.system(size: 13, weight: .bold))
+            .foregroundStyle(lime ? .black : .white)
+            .padding(.horizontal, 12).frame(height: 30)
+            .background(Capsule().fill(lime ? Theme.lime : Color.white.opacity(0.22)))
+    }
+}
+
+/// "DROP" or "UNLOCKED" as a lime tag.
+struct DropTag: View {
+    var unlocked = false
+    var body: some View {
+        Text((unlocked ? Copy.shopUnlocked : Copy.shopDropTag).uppercased()).font(.system(size: 10, weight: .heavy).width(.expanded)).foregroundStyle(.black)
+            .padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.lime))
     }
 }
 
@@ -224,14 +240,15 @@ struct ProductView: View {
 
     func dropBlock(_ d: Drop, _ studio: String) -> some View {
         let on = m.isNotified(d.id)
+        let state = d.state()
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(Copy.shopDropTag.uppercased()).font(.system(size: 10, weight: .heavy).width(.expanded)).foregroundStyle(.black)
-                    .padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.lime))
+                DropTag(unlocked: d.unlocked)
                 Spacer()
-                Label(d.countdownText(), systemImage: "clock").font(.system(size: 13, weight: .bold))
+                Label(d.countdownText(), systemImage: state == .ready ? "checkmark.seal.fill" : "clock").font(.system(size: 13, weight: .bold))
             }
-            Text(Copy.shopDropLine(d)).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
+            Text(state == .ready ? Copy.shopReadyBody(m.shopStorefront(d.studioId)) : state == .closed ? Copy.shopDropClosed
+                 : d.unlocked ? Copy.shopFinisherHint + " " + Copy.shopDropLine(d) + "." : Copy.shopDropLine(d)).font(.system(size: 14)).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Text(Copy.shopPickup(studio)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
                 Spacer()
@@ -244,21 +261,31 @@ struct ProductView: View {
                 }
             }
             .frame(height: 6)
-            Toggle(isOn: Binding(get: { on }, set: { v in Task { await m.setNotify(d, v) } })) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(Copy.shopNotifyMe).font(.system(size: 15, weight: .semibold))
-                    Text(Copy.shopNotifyHint).font(.system(size: 12)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            if state == .upcoming || state == .open {
+                Toggle(isOn: Binding(get: { on }, set: { v in Task { await m.setNotify(d, v) } })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Copy.shopNotifyMe).font(.system(size: 15, weight: .semibold))
+                        Text(state == .open ? "A push and an email when it is ready for pickup." : Copy.shopNotifyHint).font(.system(size: 12)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .toggleStyle(.switch)
             }
-            .toggleStyle(.switch)
+            if state == .open, let u = d.reserveURL() {
+                LimeButton(title: Copy.shopReserve(m.shopProduct(d.productId)?.priceText ?? "")) { NSWorkspace.shared.open(u) }
+                Text(Copy.shopReserveHint).font(.system(size: 11)).foregroundStyle(Theme.secondary)
+            } else if state == .open {
+                Text(Copy.shopReserveAtDesk).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+            }
         }
         .padding(14)
         .background(RoundedRectangle(cornerRadius: 14).fill(Theme.lime.opacity(0.14)))
     }
 
-    /// Phase 2: no checkout. The desk, the product's own page or the studio's webshop (in the browser).
+    /// No checkout. A drop's Reserve is in its block; else the desk, the product's own page or the studio's webshop (in the browser).
     @ViewBuilder func actions(_ p: Product, _ front: Storefront?) -> some View {
-        if let u = p.url ?? front?.webshop, p.fulfilment != .desk || p.url != nil {
+        if let d = m.shopDrop(for: p), d.state() == .open || d.state() == .ready {
+            EmptyView()
+        } else if let u = p.url ?? front?.webshop, p.fulfilment != .desk || p.url != nil {
             LimeButton(title: p.url != nil ? "Open in the webshop" : Copy.shopWebshop) { NSWorkspace.shared.open(u) }
         } else {
             Text(Copy.shopAskAtDesk).font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 54)
