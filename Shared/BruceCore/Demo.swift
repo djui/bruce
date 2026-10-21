@@ -303,6 +303,9 @@ extension AppModel {
             if let t = BookAgainTemplate(studioId: 1489, masterId: nil, title: "Morning Flow", start: classDetails[9006]?.start.flatMap { cal.date(byAdding: .day, value: -7, to: $0) }, instructor: "Instructor D") {
                 sheets = [.statistics, .bookAgain(t)]
             }
+        case "widgets":
+            bookings = [9006, 9001].compactMap { id in classDetails[id].map { BruceAPI.Booking(id: id, classId: id, studioId: $0.studioId, checkedInAt: nil, class: $0) } }
+            present(.widgets)
         case "bookwhenopens": push(.classDetail(9011))
         case "bookwhenopenswatching": if let w = classDetails[9011].flatMap(OpeningWatch.init) { openingWatches = [w] }; push(.classDetail(9011))
         case "firstvisit": push(.classDetail(9009))   // Example Salt Spa: no check-in in the demo history

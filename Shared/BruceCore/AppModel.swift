@@ -36,6 +36,8 @@ enum SheetRoute: Hashable {
     case addToCalendar(Int)
     /// Book again: the next class of a series the user went to (BookAgain.swift).
     case bookAgain(BookAgainTemplate)
+    /// iPhone: the widget faces, for demo screenshots (WidgetBridge.swift).
+    case widgets
     /// Auto-book rules and the optional server (AutoBook.swift).
     case autoBook
     /// "Rate class" dialog for a booking id (POST /v52/review [c8:467]).
@@ -305,6 +307,8 @@ final class AppModel {
     var isLoggedIn: Bool { (AppModel.demo && !demoLoggedOut) || !token.isEmpty }
     var showWelcome: Bool { !isLoggedIn && !sneakPeek }
     var userId: Int? { session?.userId }
+    /// Set by the iPhone app: rewrites the widget snapshot after bookings or limits load (WidgetBridge.swift).
+    @MainActor static var onDataChanged: ((AppModel) -> Void)?
     /// Bruce's webcal feed of all bookings (CalendarExport.swift); nil until the user record is loaded. A credential.
     var calendarFeedURL: URL? { CalendarFeed.url(userId: userId ?? user?.id, secret: user?.secret) }
     var unreadNotifications: Bool { notifications.contains { isNew($0) } }
@@ -791,6 +795,7 @@ final class AppModel {
         bookmarks = (try? await BruceAPI.fetchBookmarks(token: token, userId: uid)) ?? []
         await loadReviewable()
         pruneOpeningWatches()
+        AppModel.onDataChanged?(self)
         if !AppModel.demo { await CancelReminders.sync(bookings: bookings, studioName: studioName) }
     }
 
@@ -931,6 +936,7 @@ final class AppModel {
         blockInfo = try? await BruceAPI.fetchBlockInfo(token: token, userId: uid)
         paymentMethods = (try? await BruceAPI.fetchPaymentMethods(token: token, userId: uid)) ?? []
         invites = (try? await BruceAPI.fetchVouchers(token: token, userId: uid)) ?? []
+        AppModel.onDataChanged?(self)
     }
 
     func loadVisits() async {

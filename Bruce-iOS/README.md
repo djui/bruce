@@ -182,6 +182,18 @@ Rendering:
 - `NSLocationWhenInUseUsageDescription`: check-in suggestion and nearby studios.
 - `ITSAppUsesNonExemptEncryption = NO` (HTTPS only).
 
+## Widgets and Controls
+
+`BruceWidgets` (an app extension target, `Bruce-iOS/BruceWidgets/`) ships three widgets and a Control: *Next class*
+(systemSmall, systemMedium, accessoryRectangular, accessoryInline), *Visits left* (systemSmall, accessoryCircular),
+a Lock Screen *Check in* button (accessoryCircular) and the Control Center *Check in with Brüce* control. All of them
+render from `Shared/BruceWidgetKit/WidgetSnapshot.swift`, a JSON file the app writes into the App Group
+`group.net.dauernheim.bruce` after the bookings and visit limits load (`WidgetBridge.swift`) and reloads the timelines.
+The extension has no network code and no access to the Keychain session. The button and the Control open
+`bruece://checkin` (the app's URL scheme, `Config/Info.plist`), which presents the quick check-in sheet; widgets link to
+`bruece://class/<id>` and `bruece://visits`. Both targets carry the App Group entitlement (`Config/*.entitlements`).
+Demo screen `widgets` shows the faces at their sizes.
+
 ## TestFlight
 
 `scripts/testflight.sh` archives (Release, `generic/platform=iOS`), exports with

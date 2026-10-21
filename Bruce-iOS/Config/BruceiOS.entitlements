@@ -10,5 +10,10 @@
 	<true/>
 	<key>com.apple.developer.healthkit.access</key>
 	<array/>
+	<!-- Widgets read a snapshot the app writes here (Shared/BruceWidgetKit/WidgetSnapshot.swift). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.net.dauernheim.bruce</string>
+	</array>
 </dict>
 </plist>
