@@ -24,14 +24,14 @@ struct AutoBookRule: Codable, Identifiable, Hashable {
     var minuteOfDay: Int
     var createdAt = Date()
 
+    init(studioId: Int, masterId: Int?, title: String, weekday: Int, minuteOfDay: Int) {
+        self.studioId = studioId; self.masterId = masterId; self.title = title; self.weekday = weekday; self.minuteOfDay = minuteOfDay
+    }
+
     init?(_ c: BruceAPI.BruceClass) {
         guard let s = c.start else { return nil }
         let d = BruceDate.calendar.dateComponents([.weekday, .hour, .minute], from: s)
-        studioId = c.studioId
-        masterId = c.masterId
-        title = c.title
-        weekday = d.weekday ?? 1
-        minuteOfDay = (d.hour ?? 0) * 60 + (d.minute ?? 0)
+        self.init(studioId: c.studioId, masterId: c.masterId, title: c.title, weekday: d.weekday ?? 1, minuteOfDay: (d.hour ?? 0) * 60 + (d.minute ?? 0))
     }
 
     func matches(_ c: BruceAPI.BruceClass) -> Bool {

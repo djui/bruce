@@ -10,6 +10,7 @@ import { loadState, tierOK, inPolygon, studioInArea, rectangle, studioPasses, cl
 import { challengeIdFromHash, challengeShareUrl, challengeRoute } from '../js/links.js';
 import { cancelStrikes, nextCancelStep, cancelCost, cancelChip, POLICY } from '../js/rules.js';
 import { icsFor, icsTime, icsFileName, feedUrl } from '../js/calendar.js';
+import { templateOf, matches, candidateDays, pick } from '../js/bookagain.js';
 
 const Z = 'Europe/Stockholm';
 const NOW = '2026-10-14T10:00:00Z';   // Wednesday 14 October 2026, 12:00 in Stockholm
@@ -379,4 +380,32 @@ test('the free-cancel chip is green, then amber at 1 and 2 strikes, red at 3, go
   assert.deepEqual(cancelChip(r, start - 2 * H, when), { text: 'Cancel now: 2 strikes · 3 from 15:00', tone: 'orange', strikes: 2 });
   assert.deepEqual(cancelChip(r, start - 0.5 * H, when), { text: 'Cancel now: 3 strikes', tone: 'red', strikes: 3 });
   assert.equal(cancelChip(r, start, when), null);
+});
+
+// ---------------------------------------------------------------- book again (bookagain.js)
+
+test('book again matches the next class of the series by weekday, time and master id or title', () => {
+  // Tuesday 20 Oct 2026 18:00 Stockholm = 16:00Z
+  const past = { id: 1, studio_id: 7, title: 'Reformer', start_time: '2026-10-20T16:00:00Z', master_id: 77, instructor: '**Anna**' };
+  const t = templateOf(past, 7);
+  assert.deepEqual(t, { studioId: 7, masterId: 77, title: 'Reformer', weekday: 3, minuteOfDay: 18 * 60, instructor: '**Anna**' });
+  const now = Date.parse('2026-10-21T10:00:00Z');   // Wednesday
+  assert.deepEqual(candidateDays(t, now), ['2026-10-27', '2026-11-03']);
+  const next = { id: 2, studio_id: 7, title: 'Reformer', start_time: '2026-10-27T17:00:00Z', master_id: 77, instructor: 'Anna', available_spots: 3, bookable_earliest_time: '2026-10-20T17:00:00Z' };
+  const other = { id: 3, studio_id: 7, title: 'Reformer', start_time: '2026-10-27T18:00:00Z', master_id: 77 };    // 19:00, not the slot
+  const renamed = { id: 4, studio_id: 7, title: 'Reformer Flow', start_time: '2026-11-03T17:00:00Z', master_id: 77 };
+  assert.equal(matches(t, next), true);
+  assert.equal(matches(t, other), false);
+  assert.equal(matches(t, renamed), true);          // same master id wins over the title
+  assert.equal(matches({ ...t, masterId: null }, renamed), false);   // no master id: the title must match
+  const m = pick([other, renamed, next], t, now);
+  assert.equal(m.next.id, 2);
+  assert.equal(m.opens, null);
+  assert.equal(m.sameInstructor, true);
+  const later = { ...next, id: 5, bookable_earliest_time: '2026-10-22T17:00:00Z' };
+  assert.equal(pick([later], t, now).opens, Date.parse('2026-10-22T17:00:00Z'));
+  assert.equal(pick([past], t, now), null);         // nothing upcoming
+  // The same weekday today only counts while the class is still ahead.
+  assert.equal(candidateDays(t, Date.parse('2026-10-27T15:00:00Z'))[0], '2026-10-27');
+  assert.equal(candidateDays(t, Date.parse('2026-10-27T17:00:00Z'))[0], '2026-11-03');
 });

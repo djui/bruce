@@ -155,11 +155,20 @@ struct ClassDetailView: View {
     @ViewBuilder func actionBar(_ c: BruceAPI.BruceClass) -> some View {
         Group {
             if let b = booking, b.isCheckedIn {
-                // Checked in: the class stays here (as in the original) with its ticket, then the rating.
-                if let r = m.reviewableBooking(forClass: c.id) {
-                    LimeButton(title: Copy.reviewTitle, systemImage: "star.fill") { m.present(.review(r.id)) }
-                } else {
-                    LimeButton(title: "Show ticket", systemImage: "ticket") { m.present(.ticket(b.id)) }
+                // Checked in: the class stays here (as in the original) with its ticket, then the rating, and Book again.
+                HStack(spacing: 10) {
+                    if let r = m.reviewableBooking(forClass: c.id) {
+                        LimeButton(title: Copy.reviewTitle, systemImage: "star.fill") { m.present(.review(r.id)) }
+                    } else {
+                        LimeButton(title: "Show ticket", systemImage: "ticket") { m.present(.ticket(b.id)) }
+                    }
+                    if let t = BookAgainTemplate(c) {
+                        Button { m.openBookAgain(t) } label: {
+                            Text("Book again").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                                .frame(maxWidth: .infinity).frame(height: 40)
+                        }
+                        .buttonStyle(.glass).controlSize(.large)
+                    }
                 }
             } else if booking != nil {
                 RedButton(title: "Cancel booking") { m.present(.bookingRules(c.id)) }
@@ -1048,6 +1057,13 @@ struct ReviewSheet: View {
                 }
                 .disabled(rating == 0 || needsComment || sending)
                 .padding(.top, 4)
+                if let c, let t = BookAgainTemplate(c) {
+                    Button { m.openBookAgain(t) } label: {
+                        Label("Book again", systemImage: "arrow.counterclockwise").font(.system(size: 17, weight: .semibold))
+                            .frame(maxWidth: .infinity).frame(height: 40)
+                    }
+                    .buttonStyle(.glass).controlSize(.large)
+                }
             }
             .padding(Theme.gutter)
         }

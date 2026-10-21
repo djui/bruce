@@ -79,6 +79,10 @@ My classes tabs, with class and studio pages and account sheets.
   the free-cancel deadline in its notes and a 1 h alert. Settings › **Calendar subscription** opens Bruce's own
   `webcal://` feed of all your bookings directly (long-press to copy the link instead); a one-off event does not
   follow changes to the class, the feed does.
+- **Book again**: a past class in Statistics, My classes (long-press), the rating sheet and an attended class's page
+  offers "Book again": the next class of the same series (same studio, weekday and time; same `master_id` or
+  title) with Book, or "Booking opens Sat 24 Oct" when it is not bookable yet, plus "Book every week", which hands
+  the series to auto-book. One or two class-list requests for that studio only.
 - **Free cancel until 18:30**: every booked row in My classes says what cancelling costs right now, green while it is
   free, amber once it costs 1 or 2 strikes ("Cancel now: 2 strikes · 3 from 18:30"), red at 3. Settings › **Last
   free cancel reminder** (off by default) sends a local notification one hour before the free deadline; nothing is

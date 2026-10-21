@@ -82,11 +82,19 @@ struct ClassDetailView: View {
                 VStack(alignment: .leading, spacing: 0) {
                     if let b = booking, b.isCheckedIn {
                         // Checked in: keep the class with its ticket, then offer the rating (as the original).
-                        Group {
+                        HStack(spacing: 12) {
                             if let r = m.reviewableBooking(forClass: c.id) {
                                 LimeButton(title: Copy.reviewTitle) { m.present(.review(r.id)) }
                             } else {
                                 LimeButton(title: "Show ticket") { m.present(.ticket(b.id)) }
+                            }
+                            if let t = BookAgainTemplate(c) {
+                                Button { m.openBookAgain(t) } label: {
+                                    Text("Book again").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                                        .frame(maxWidth: .infinity).frame(height: 54)
+                                        .overlay(Capsule().stroke(Theme.ink, lineWidth: 1.5)).contentShape(Capsule())
+                                }
+                                .buttonStyle(.plain)
                             }
                         }
                         .padding(.top, 24)

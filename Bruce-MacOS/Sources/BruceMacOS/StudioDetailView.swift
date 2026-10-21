@@ -554,6 +554,14 @@ struct ReviewSheet: View {
                     }
                     .disabled(rating == 0 || needsComment || sending)
                     .opacity(rating == 0 || needsComment || sending ? 0.5 : 1)
+                    if let c, let t = BookAgainTemplate(c) {
+                        Button { m.openBookAgain(t) } label: {
+                            Text("Book again").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                                .frame(maxWidth: .infinity).frame(height: 54)
+                                .overlay(Capsule().stroke(Theme.ink, lineWidth: 1.5)).contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
                 }
                 .padding(Theme.gutter)
             }

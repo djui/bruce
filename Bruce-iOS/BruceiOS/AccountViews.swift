@@ -362,9 +362,9 @@ struct VisitRow: View {
             }
             .foregroundStyle(Theme.ink)
             Spacer(minLength: 0)
+            if m.isLoggedIn, let t = BookAgainTemplate(v) { BookAgainButton(template: t) }
         }
         .padding(.vertical, 14).padding(.horizontal, Theme.gutter)
-        .accessibilityElement(children: .combine)
     }
 }
 
