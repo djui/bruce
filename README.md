@@ -290,7 +290,7 @@ xcodebuild -project BruceiOS.xcodeproj -scheme BruceiOS \
 
 Simulator builds need no signing setup. To run on a device, copy `Config/Local.xcconfig.example` to
 `Config/Local.xcconfig` (git-ignored) and set your `DEVELOPMENT_TEAM`, plus your own
-`PRODUCT_BUNDLE_IDENTIFIER` if you don't own `net.dauernheim.bruce`.
+`BRUCE_BUNDLE_ID` if you don't own `net.dauernheim.bruce` (the widget extension becomes `<id>.widgets`).
 
 ### Demo mode (developer switch)
 
@@ -329,7 +329,7 @@ scripts/testflight.sh                # archive + upload
 scripts/testflight.sh --no-upload    # archive + export an .ipa locally
 ```
 
-You need your own App Store Connect app record. Set `BUNDLE_ID` and `PRODUCT_BUNDLE_IDENTIFIER` to its
+You need your own App Store Connect app record. Set `BUNDLE_ID` and `BRUCE_BUNDLE_ID` to its
 bundle ID. See the [iOS README](Bruce-iOS/README.md#testflight) for all variables.
 
 ## API documentation

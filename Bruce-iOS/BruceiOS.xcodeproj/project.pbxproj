@@ -349,7 +349,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B0000000000000000000A002 /* Base.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Config/BruceWidgets.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(BRUCE_WIDGET_ENTITLEMENTS)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/BruceWidgets-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME) (unofficial)";
@@ -359,7 +359,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "$(inherited).widgets";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BRUCE_BUNDLE_ID).widgets";
 				PRODUCT_NAME = BruceWidgets;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -374,7 +374,7 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = B0000000000000000000A002 /* Base.xcconfig */;
 			buildSettings = {
-				CODE_SIGN_ENTITLEMENTS = Config/BruceWidgets.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "$(BRUCE_WIDGET_ENTITLEMENTS)";
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Config/BruceWidgets-Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "$(APP_DISPLAY_NAME) (unofficial)";
@@ -384,7 +384,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = "$(inherited).widgets";
+				PRODUCT_BUNDLE_IDENTIFIER = "$(BRUCE_BUNDLE_ID).widgets";
 				PRODUCT_NAME = BruceWidgets;
 				SKIP_INSTALL = YES;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";

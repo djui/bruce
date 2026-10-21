@@ -53,8 +53,22 @@ AUTH=(-allowProvisioningUpdates
       -authenticationKeyID "$ASC_KEY_ID"
       -authenticationKeyIssuerID "$ASC_ISSUER_ID")
 
-OVERRIDES=(DEVELOPMENT_TEAM="$TEAM_ID" PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID"
+# BRUCE_BUNDLE_ID, not PRODUCT_BUNDLE_IDENTIFIER: the widget extension derives its own id from it.
+OVERRIDES=(DEVELOPMENT_TEAM="$TEAM_ID" BRUCE_BUNDLE_ID="$BUNDLE_ID"
            CODE_SIGN_STYLE=Automatic CURRENT_PROJECT_VERSION="$BUILD_NUMBER")
+
+# APP_GROUP=0: archive without the App Group entitlement (both targets). Needed until the group
+# group.<bundle id> exists and is attached to both App IDs in Certificates, Identifiers & Profiles (automatic signing
+# can enable the App Groups capability but cannot create or attach the group). Without it the Home Screen widgets show
+# their placeholder; the Live Activity, the check-in Control and the Lock Screen button still work.
+if [[ "${APP_GROUP:-1}" == "0" ]]; then
+  for t in BruceiOS BruceWidgets; do
+    cp "$ROOT/Config/$t.entitlements" "$OUT/$t.entitlements"
+    plutil -remove 'com\.apple\.security\.application-groups' "$OUT/$t.entitlements"
+  done
+  OVERRIDES+=(BRUCE_APP_ENTITLEMENTS="$OUT/BruceiOS.entitlements" BRUCE_WIDGET_ENTITLEMENTS="$OUT/BruceWidgets.entitlements")
+  echo "==> APP_GROUP=0: archiving without the App Group entitlement"
+fi
 [[ -n "$MARKETING_VERSION" ]] && OVERRIDES+=(MARKETING_VERSION="$MARKETING_VERSION")
 
 echo "==> Archiving $BUNDLE_ID build $BUILD_NUMBER (team $TEAM_ID)"

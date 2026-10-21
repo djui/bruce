@@ -23,7 +23,7 @@ xcodebuild -project BruceiOS.xcodeproj -scheme BruceiOS \
 - Deployment target iOS 26.0; builds with the iOS 27 SDK (Xcode 27). iPhone only, portrait.
 - Bundle ID `net.dauernheim.bruce`, automatic signing. Simulator builds need no team. For a device,
   copy `Config/Local.xcconfig.example` to `Config/Local.xcconfig` (git-ignored) and set your
-  `DEVELOPMENT_TEAM`; it can also override `APP_DISPLAY_NAME`, `PRODUCT_BUNDLE_IDENTIFIER` and the versions.
+  `DEVELOPMENT_TEAM`; it can also override `APP_DISPLAY_NAME`, `BRUCE_BUNDLE_ID` (the widget extension becomes `<id>.widgets`) and the versions.
 - The project is a hand-written Xcode 16+ project using folder-synchronized groups: every `.swift` file in
   `BruceiOS/` and `../Shared/BruceCore/` is compiled automatically, so adding files needs no project edits.
 
@@ -192,6 +192,13 @@ Try it with `xcrun simctl ui <udid> content_size accessibility-large` before tak
 
 ## Widgets and Controls
 
+**App Group registration.** The widgets' App Group `group.net.dauernheim.bruce` must exist and be attached to both App
+IDs (`net.dauernheim.bruce` and `net.dauernheim.bruce.widgets`) in Certificates, Identifiers & Profiles. Automatic
+signing (`xcodebuild -allowProvisioningUpdates`) can switch on the App Groups capability but cannot create or attach the
+group itself, so do that once in the portal (or in Xcode › Signing & Capabilities with an Apple ID login). Until then,
+`APP_GROUP=0 scripts/testflight.sh` archives without the entitlement: the Home Screen widgets show their placeholder,
+everything else works.
+
 `BruceWidgets` (an app extension target, `Bruce-iOS/BruceWidgets/`) ships three widgets and a Control: *Next class*
 (systemSmall, systemMedium, accessoryRectangular, accessoryInline), *Visits left* (systemSmall, accessoryCircular),
 a Lock Screen *Check in* button (accessoryCircular) and the Control Center *Check in with Brüce* control. All of them
@@ -232,6 +239,7 @@ scripts/testflight.sh
 | `BUNDLE_ID` | `net.dauernheim.bruce` (use your own App Store Connect app) |
 | `ASC_KEY_PATH` | `~/.appstoreconnect/private_keys/AuthKey_<ASC_KEY_ID>.p8` |
 | `BUILD_NUMBER` | UTC timestamp |
+| `APP_GROUP` | `1`; `0` archives without the App Group entitlement (see below) |
 | `MARKETING_VERSION` | from the xcconfig |
 
 `scripts/testflight.sh --no-upload` exports an `.ipa` locally instead of uploading.
