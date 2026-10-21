@@ -6,7 +6,7 @@
 DEVELOPMENT_TEAM =
 
 // Optional: use your own bundle ID if you sign the app with your own team.
-// PRODUCT_BUNDLE_IDENTIFIER = com.example.bruce
+// BRUCE_BUNDLE_ID = com.example.bruce
 
 // Optional: home-screen name.
 // APP_DISPLAY_NAME = Brüce
