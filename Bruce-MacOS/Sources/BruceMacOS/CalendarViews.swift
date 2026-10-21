@@ -68,12 +68,13 @@ enum CalendarWriter {
         if (try? await store.requestWriteOnlyAccessToEvents()) == true, let cal = store.defaultCalendarForNewEvents {
             let e = EKEvent(eventStore: store)
             e.title = event.title
-            e.startDate = event.start
-            e.endDate = event.end
+            e.startDate = event.allDay ? event.deviceAllDayRange.start : event.start
+            e.endDate = event.allDay ? event.deviceAllDayRange.end : event.end
             e.location = event.location
             e.notes = event.notes
             e.url = event.url
-            e.addAlarm(EKAlarm(relativeOffset: -Double(CalendarEvent.alertMinutes) * 60))
+            e.isAllDay = event.allDay
+            e.addAlarm(EKAlarm(relativeOffset: -Double(event.alarmMinutes) * 60))
             e.calendar = cal
             if (try? store.save(e, span: .thisEvent, commit: true)) != nil { return .saved }
         }

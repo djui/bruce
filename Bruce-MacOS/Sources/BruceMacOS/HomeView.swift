@@ -25,6 +25,7 @@ struct HomeView: View {
                     } else if !m.isLoggedIn {
                         loggedOut
                     } else {
+                        NextRaceSection()
                         if !spotlight.isEmpty { spotlightSection }
                         if !categoryItems.isEmpty { categoriesSection }
                         ForEach(studioSections, id: \.self) { s in studioRow(s) }

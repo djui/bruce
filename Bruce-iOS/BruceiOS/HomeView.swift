@@ -20,6 +20,7 @@ struct HomeView: View {
                     loggedOut
                 } else {
                     if let b = nextBooking, let c = b.class { nextUp(c) }
+                    NextRaceCard()
                     MilestoneCard()
                     ForYouSection()
                     NewToYouSection()

@@ -82,13 +82,23 @@ struct ExploreView: View {
                 }
                 IconButton(system: "magnifyingglass", size: 22) { m.present(.search) }.help("Search")
             }
-            UnderlineTabs(titles: ["Studios", "Classes"],
-                          badges: [String(studios.count), m.classesLoadingDay != nil && tabIndex == 1 ? "…" : String(classes.count)],
+            UnderlineTabs(titles: ["Studios", "Classes", "Races"],
+                          badges: [String(studios.count), m.classesLoadingDay != nil && tabIndex == 1 ? "…" : String(classes.count),
+                                   m.races.isEmpty ? "…" : String(Races.filter(m.races).count)],
                           selection: $tabIndex)
-            chips.padding(.top, 14).padding(.bottom, 8)
-            if tabIndex == 0 { if m.exploreMap { StudiosMap(studios: studios) } else { studioList } } else { classList }
+            if tabIndex == 2 {
+                RaceExploreList()
+            } else {
+                chips.padding(.top, 14).padding(.bottom, 8)
+                if tabIndex == 0 { if m.exploreMap { StudiosMap(studios: studios) } else { studioList } } else { classList }
+            }
         }
-        .onAppear { if m.demoExploreTab != 0 { tabIndex = m.demoExploreTab; m.demoExploreTab = 0 } }
+        .onAppear {
+            if m.demoExploreTab != 0 { tabIndex = m.demoExploreTab; m.demoExploreTab = 0 }
+            if let t = m.exploreTabRequest { tabIndex = t; m.exploreTabRequest = nil }
+        }
+        .onChange(of: m.exploreTabRequest) { _, t in if let t { tabIndex = t; m.exploreTabRequest = nil } }
+        .task { await m.loadRaces() }
         .task(id: "\(tabIndex)-\(dayOffset)") { if tabIndex == 1 { await m.loadClasses(day: selectedDay) } }
     }
 

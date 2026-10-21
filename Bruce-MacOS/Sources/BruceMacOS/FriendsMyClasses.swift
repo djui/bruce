@@ -69,9 +69,14 @@ struct MyClassesView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ScreenHeader(title: "My classes") { CountPill(used: m.upcomingBookings.count, total: m.simultaneousLimit ?? 3) }
-            UnderlineTabs(titles: ["Bookings", "Waitlist", "Bookmarks"], selection: $tab)
+            ScreenHeader(title: "My classes") {
+                if tab == 3 { IconButton(system: "plus", size: 22) { m.present(.editRace(nil)) }.help("Add a race") }
+                else { CountPill(used: m.upcomingBookings.count, total: m.simultaneousLimit ?? 3) }
+            }
+            UnderlineTabs(titles: ["Bookings", "Waitlist", "Bookmarks", "Races"], selection: $tab)
             switch tab {
+            case 3:
+                MyRacesList()
             case 0:
                 if m.bookings.isEmpty { EmptyState(system: "calendar.badge.checkmark", text: "You have no bookings.") }
                 // Checked-in classes stay listed with a "Checked in" badge, as in the original [c8:404].
@@ -88,7 +93,11 @@ struct MyClassesView: View {
             }
         }
         .task { await m.loadMine() }
-        .onAppear { if m.demoMyClassesTab != 0 { tab = m.demoMyClassesTab; m.demoMyClassesTab = 0 } }
+        .onAppear {
+            if m.demoMyClassesTab != 0 { tab = m.demoMyClassesTab; m.demoMyClassesTab = 0 }
+            if m.showRacesInMyClasses { tab = 3; m.showRacesInMyClasses = false }
+        }
+        .onChange(of: m.showRacesInMyClasses) { _, on in if on { tab = 3; m.showRacesInMyClasses = false } }
     }
 
     func list(_ items: [(Int, BruceAPI.BruceClass, BruceAPI.Booking?)],

@@ -69,6 +69,7 @@ struct RootView: View {
         case .category(let id): CategoryView(categoryId: id)
         // For you, goals and challenges are iPhone-only for now.
         case .forYou, .goals, .challenge: PlaceholderPage(title: "Available in the iPhone app")
+        case .race(let id): RaceDetailView(raceId: id)
         }
     }
 }
@@ -191,6 +192,7 @@ struct SheetHost: View {
         case .addToCalendar(let id): AddToCalendarSheet(classId: id)
         case .bookAgain(let t): BookAgainSheet(template: t)
         case .autoBook: AutoBookView()
+        case .editRace(let id): RaceEditor(raceId: id)
         // Places, goals and challenges are iPhone-only for now.
         case .places, .editPlace, .goals, .editGoal, .newChallenge, .widgets: PlaceholderPage(title: "Available in the iPhone app")
         }

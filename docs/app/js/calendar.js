@@ -38,6 +38,30 @@ export function icsFor(c, o) {
   return lines.join('\r\n') + '\r\n';
 }
 
+export const RACE_ALERT_MINUTES = 6 * 60;
+const RACE_FOOTER = "Added with Brüce, an unofficial Bruce Studios client. Not affiliated with the race or its organiser; check the official page for changes.";
+
+/**
+ * A race as an all-day event (races.js): the member's `day` of the event if they picked one, else every day of it,
+ * with an alert at 18:00 the evening before. `o`: {day, facts ("8 km · solo, duo, trio or team"), url, now}.
+ */
+export function icsForRace(r, o) {
+  const p = o || {};
+  const first = p.day || r.date, last = p.day || r.endDate || r.date;
+  const next = new Date(last + 'T12:00:00Z'); next.setUTCDate(next.getUTCDate() + 1);
+  const ymd = (d) => d.replace(/-/g, '');
+  const notes = [p.facts, p.url ? 'Race page: ' + p.url : null].filter(Boolean).concat(['', RACE_FOOTER]);
+  const where = [r.venue, r.city].filter(Boolean).join(', ');
+  const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Brüce (unofficial)//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    'BEGIN:VEVENT', 'UID:race-' + r.id + '@bruce.unofficial', 'DTSTAMP:' + icsTime(p.now || Date.now()),
+    'DTSTART;VALUE=DATE:' + ymd(first), 'DTEND;VALUE=DATE:' + ymd(next.toISOString().slice(0, 10)), 'SUMMARY:' + escText(r.name), 'TRANSP:TRANSPARENT'];
+  if (where) lines.push('LOCATION:' + escText(where));
+  lines.push('DESCRIPTION:' + escText(notes.join('\n')));
+  if (p.url) lines.push('URL:' + p.url);
+  lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + escText(r.name), 'TRIGGER:-PT' + RACE_ALERT_MINUTES + 'M', 'END:VALARM', 'END:VEVENT', 'END:VCALENDAR');
+  return lines.join('\r\n') + '\r\n';
+}
+
 /** "hot-yoga-2026-10-27.ics" (`dayKey` is the class day as YYYY-MM-DD). */
 export function icsFileName(title, dayKey) {
   const slug = String(title).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');

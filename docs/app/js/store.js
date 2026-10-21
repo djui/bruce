@@ -5,8 +5,11 @@ import { icsFor, icsFileName, feedUrl } from './calendar.js';
 import { visitsFrom } from './visits.js';
 import { remindPayload, goalTitle } from './goals.js';
 import { DEFAULT_PREFS } from './recommend.js';
+import { decode as decodeRaces } from './races.js';
+import { DEMO_RACES, DEMO_MY_RACES } from './demo.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
+const RACES_CACHE_MS = 6 * 3600 * 1000;
 
 /** Doors whose QR ids are known (Presets.swift `KnownDoors`), plus doors learned from the user's own scans. */
 const KNOWN_DOORS = { 1724: { major: '13994', doorId: '118661' }, 1764: { major: '13816', doorId: '118551' } };
@@ -33,6 +36,7 @@ export const S = {
   seenNotifications: ls.get('bruce.seenNotifications', 0),
   skippedReviews: new Set(ls.get('bruce.skippedReviews', [])),
   learnedDoors: ls.get('bruce.doors', {}),
+  races: null, racesError: null, racesLoading: null,   // the race catalog (races.js), null until read
 };
 
 export const emit = () => S.listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
@@ -368,3 +372,29 @@ export function chipCategories() {
   const first = sorted.find((c) => c.id === pin);
   return first ? [first, ...sorted.filter((c) => c !== first)] : sorted;
 }
+
+// ---------------------------------------------------------------- races (races.js, racesui.js)
+
+/** The race catalog: races.json next to this page (GitHub Pages publishes docs/), the last good copy in this browser,
+ *  demo races in demo mode. A failed read keeps whatever is shown. */
+export function loadRaces(force) {
+  if (isDemo()) { if (!S.races) S.races = decodeRaces({ races: DEMO_RACES }); return Promise.resolve(S.races); }
+  if (S.racesLoading) return S.racesLoading;
+  const cached = ls.get('bruce.races', null);
+  if (!S.races && cached && Array.isArray(cached.races)) S.races = decodeRaces(cached);
+  if (!force && cached && Date.now() - cached.at < RACES_CACHE_MS && S.races && S.races.length) return Promise.resolve(S.races);
+  S.racesLoading = fetch('races.json', { cache: 'no-cache' })
+    .then((r) => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .then((json) => {
+      const list = decodeRaces(json);
+      if (!list.length) throw new Error('no races');
+      S.races = list; S.racesError = null;
+      ls.set('bruce.races', { at: Date.now(), races: json.races });
+    })
+    .catch(() => { if (!S.races || !S.races.length) { S.races = []; S.racesError = "Couldn't load the race list. Check your connection and reload."; } })
+    .then(() => { S.racesLoading = null; emit(); return S.races; });
+  return S.racesLoading;
+}
+/** My races, stored in this browser only (like saved places and goals). */
+export function myRaces() { return ls.get('bruce.myRaces' + suffix(), isDemo() ? DEMO_MY_RACES : []); }
+export function saveMyRaces(list) { ls.set('bruce.myRaces' + suffix(), list); emit(); }

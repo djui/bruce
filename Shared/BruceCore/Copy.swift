@@ -82,6 +82,26 @@ enum Copy {
     static let calendarAdded = "Added to Calendar"
     static let calendarEventFooter = "Added with Brüce, an unofficial Bruce Studios client. This event is a copy and doesn't follow changes to the class; the calendar subscription in Settings stays in sync."
 
+    // MARK: Races (Races.swift)
+
+    /// On every race page.
+    static let raceNotAffiliated = "Brüce is not affiliated with this race or its organiser. Sign-up, prices and rules are theirs: check the race's own page before you sign up."
+    static func raceFactsChecked(_ race: Race) -> String? {
+        race.checkedOn.isEmpty ? nil : "Facts as shown on the race's own page on \(RaceDay.format(race.checkedOn, "d MMMM yyyy")). They change; the link is always one tap away."
+    }
+    static let raceCustom = "You added this race. It stays on this device; Brüce has no facts or prices for it."
+    static let raceGone = "This race is no longer in Brüce's list. The details are the ones you saved."
+    static let raceAdded = "Added to My races"
+    static let raceRemoved = "Removed from My races"
+    static let racesLoadFailed = "Couldn't load the race list. Check your connection and pull to refresh."
+    static let racesEmpty = "No races match. Brüce lists about 30 races in Sweden, Norway and Denmark."
+    static let myRacesEmpty = "No races yet. Pick one in Explore › Races, or add your own with +."
+    static let myRacesDevice = "My races stay on this device. Reminders are notifications at 09:00; nothing is signed up for you."
+    static let raceRemindSignup = "Remind me that morning"
+    static let raceRemindPrice = "Remind me the day before"
+    static let raceEventFooter = "Added with Brüce, an unofficial Bruce Studios client. Not affiliated with the race or its organiser; check the race's own page for changes."
+    static let raceCatalogFooter = "Races are picked by hand from each race's own page, with the day they were checked. Brüce links to those pages and is not affiliated with any race or organiser."
+
     /// Under "Book every week" on the Book again sheet (BookAgain.swift).
     static let bookEveryWeek = "Books this series every week the moment it opens and tells you each time (Menu › Auto-book lists it)."
 

@@ -140,6 +140,18 @@ My classes tabs, with class and studio pages and account sheets.
   (with Share), and all of them under Statistics. Computed on the device from the visit history.
 - **New to you** (iPhone and web): studios you never checked in at, within your plan, in categories you do or close
   by, as a Home row; a **"Try new studios"** monthly goal counts first visits at new studios.
+- **Races** (iPhone, Mac and web): about 30 Nordic races of the 2026–27 season (running, HYROX, obstacle, ski, bike
+  and swim, triathlon) in a hand-curated catalog, [`docs/app/races.json`](docs/app/races.json) (see
+  [Race catalog](#race-catalog)). **Explore › Races** lists them by month with type chips, a country filter, search and
+  a pill with today's entry fee or the sign-up status ("2,685 SEK until 5 Nov", "Sold out", "Opens 25 Nov"). A
+  **race page** has the date, distances, days to go, where sign-up happens and the day the facts were checked, the
+  known price steps, and a link to the race's own page: Brüce never signs you up, takes payment or reads a
+  registration platform, and every race page says it is not affiliated with the organiser. **My races** (My classes ›
+  Races, and on the Mac a fourth tab) follows races from the list or races you add by hand (name, date, city, link),
+  with your day of a multi-day event and your start ("Doubles Open"); Home shows the **next race** with its countdown
+  above Spotlight. **Add to Calendar** makes an all-day event (EventKit on iPhone and Mac, an .ics file on the web).
+  The iPhone and Mac can remind you at 09:00 when **sign-up opens** and the day before the **next price step**, each
+  switched on per race (local notifications). My races stay on the device; no server is involved yet.
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.
@@ -212,9 +224,9 @@ mode) and uses the extra room a browser has. On a phone it has the same five tab
 900px wide there is a sidebar, and the list and the selected class or studio sit side by side; with nothing
 selected, Explore shows the city's studios on a map next to the list.
 
-- **Home**: reviews to give, your next class with a Check in button, Spotlight, categories, nearby and new studios.
-- **Explore**: Studios and Classes with counts, search (studio, class, instructor), favourite, category and
-  "Free spots" filters, 7 days of classes, and a studio map.
+- **Home**: reviews to give, your next class with a Check in button, your next race, Spotlight, categories, nearby and new studios.
+- **Explore**: Studios, Classes and Races with counts, search (studio, class, instructor; race, city, distance),
+  favourite, category and "Free spots" filters, 7 days of classes, and a studio map.
 - **Class page**: time, instructor, spots, notices, the booking rules (book until, check-in window, cancel until),
   friends and classmates booked, Invite friends, facilities, and Book, Cancel booking, Add to Calendar (an .ics
   file), Join or Leave waitlist, Similar classes, Check in, Show ticket and Rate the class. Booking and cancelling
@@ -224,7 +236,10 @@ selected, Explore shows the city's studios on a map next to the list.
 - **Check in**: suggests the studio whose check-in window is open, or the last visited one, then does one
   check-in request and shows the ticket. Scan the door QR code with the camera (BarcodeDetector, or jsQR where
   that is missing) or type the code. Studios that open with Parakey still need the Parakey app.
-- **Friends** (their upcoming classes), **My classes** (bookings, waitlist, bookmarks) and **Notifications**.
+- **Races**: Explore › Races, race pages with the price steps and the official link, My classes › Races (kept in
+  localStorage), the next race on Home, and Add to Calendar as an .ics file.
+- **Friends** (their upcoming classes), **My classes** (bookings, waitlist, bookmarks under Classes; your races under
+  Races) and **Notifications**.
 - **Account menu**: plan, visit meters and strikes, statistics (visits per month and the visits behind each bar),
   payments with PDF receipts, invite codes, and settings (city, appearance, social visibility, notification
   types, API server, calendar subscription).
@@ -238,6 +253,50 @@ OpenStreetMap, the Unbounded font from Google Fonts). To try it locally, serve `
 `python3 -m http.server -d docs`) and open `http://localhost:8000/app/`. GitHub Pages publishes `docs/` from
 `main`, so a merge deploys it.
 
+## Race catalog
+
+[`docs/app/races.json`](docs/app/races.json) is the one list of races all three apps read: GitHub Pages publishes it at
+[djui.github.io/bruce/app/races.json](https://djui.github.io/bruce/app/races.json), the iPhone and Mac apps fetch it
+(at most every 6 hours) and keep the last good copy, and the web app reads it next to its page. Demo mode uses a slice
+of it built into the apps and never fetches it. Each race:
+
+| Field | |
+|---|---|
+| `id` | Stable, lower case with dashes, with the year (`tough-viking-stadion-2027`). My races and, later, friends refer to it |
+| `name` | Plain text, as the organiser writes it. No logos, no brand colours, nothing that suggests Brüce speaks for the race |
+| `type` | `running`, `hyrox`, `obstacle`, `endurance` (with `sport`: `ski`, `bike` or `swim`) or `triathlon` |
+| `date`, `endDate` | Local race days, `YYYY-MM-DD`; `endDate` only for multi-day events |
+| `city`, `country`, `venue` | `country` is `SE`, `NO` or `DK` |
+| `distancesKm`, `format` | Distances in km (may be empty) and a few words ("solo, duo, trio or team", "15-leg relay") |
+| `signupUrl` | The race's own page (https), never a registration platform's API |
+| `platform` | The named sign-up platform ("RaceID", "Haku"); left out when the race runs its own sign-up |
+| `priceNote`, `priceSteps` | The fees as the page words them, and the known steps `{from, until, amount, currency, lowest, per}` (days inclusive; `lowest`: "From 799 SEK"; `per`: "per team") |
+| `status`, `opensOn` | `open`, `opensSoon` (with `opensOn`), `soldOut`, `lottery` or `checkSite` (when the page was unclear) |
+| `klassiker`, `resultsUrl` | A leg of En Svensk Klassiker; a link to the official results (optional) |
+| `checkedOn` | The day the facts were read off the race's own page, shown on every race page |
+
+`node --test docs/app/test/` validates the file (unique ids, real dates, `endDate` on or after `date`, known values,
+https links, sorted by date, price steps that don't overlap) and checks that the demo races match it. Apps skip an
+entry they can't read (a new type, say) instead of failing on the whole file.
+
+**Upkeep** (about an hour a season, a few minutes a month): run the link check by hand, then fix what it reports by
+reading the race's own page and editing `races.json` in a pull request with a new `checkedOn`:
+
+```sh
+node scripts/check-races.mjs                 # every race
+node scripts/check-races.mjs --only vasaloppet-2027
+node scripts/check-races.mjs --dry-run       # only reads robots.txt, lists what it would fetch
+```
+
+[`scripts/check-races.mjs`](scripts/check-races.mjs) reads each host's robots.txt once and honours it for its
+`BruceRaceCheck` user agent (a crawl delay over a minute means "check by hand"), never contacts registration or results
+platforms (vivenu, RaceID, Haku, njuko, Onreg, Sportstiming, EQ Timing, RACE RESULT, Let's Do This, Ahotu), sends one
+GET per link with a named User-Agent and reports the HTTP status and whether the race date appears on the page. It
+never edits the catalog and nothing runs it automatically.
+
+**Not planned:** selling entries, affiliate links, scraped results, Strava sync, pace coaching, races outside Sweden,
+Norway and Denmark (for now).
+
 ## Repository layout
 
 ```
@@ -247,6 +306,7 @@ OpenStreetMap, the Unbounded font from Google Fonts). To try it locally, serve `
 ├── swagger.html            Offline-friendly Swagger UI viewer (spec embedded)
 ├── docs/                   GitHub Pages site: landing page, screenshots, app/ (web version), api/ (Swagger UI + openapi.yaml copy)
 ├── Shared/BruceCore/       Shared Swift code (API, models, AppModel, TokenStore, logic, demo data)
+├── scripts/check-races.mjs Hand-run link check for the race catalog (docs/app/races.json)
 ├── Bruce-MacOS/            SwiftPM package, executable target BruceMacOS
 │   ├── Package.swift
 │   ├── Sources/BruceMacOS/ macOS views; Shared -> ../../../Shared/BruceCore (symlink)
@@ -297,7 +357,9 @@ Simulator builds need no signing setup. To run on a device, copy `Config/Local.x
 `BRUCE_DEMO=1` runs either app with fictional placeholder data: no API calls, no remote images, and no
 map tiles except on the custom-area drawing map, which needs Apple Maps to draw on. Book, cancel and check-in only change local state. `BRUCE_SCREEN=<name>` opens a
 specific screen (`explore`, `classes`, `studio`, `detail`, `checkin`, `friends`, `myclasses`, `account`,
-`settings`, `welcome`, `mybookings`, `similar`, `alerts`, `area`, …; the full list is in [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)).
+`settings`, `welcome`, `mybookings`, `similar`, `alerts`, `area`, `races` (Explore › Races), `race` (a race page),
+`myraces` (My classes › Races), `myrace` (a race in My races), `addrace` (add a race by hand), …; the full list is in
+[`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)). Demo Home shows the Next race card.
 Demo mode is not reachable from the UI.
 
 ```sh
@@ -366,7 +428,10 @@ so they are **not** included in this repository. Examples in the docs use placeh
 ## Privacy
 
 - The apps talk only to Bruce Studios' own servers (`api.bruce.app`, and Cloudinary for studio images),
-  plus Apple Maps. There is no analytics, tracking or third-party SDK.
+  plus Apple Maps. There is no analytics, tracking or third-party SDK. The race list is read from this project's
+  own GitHub Pages site (`djui.github.io/bruce/app/races.json`, no data sent); race links open in your browser.
+- My races, their reminders and your race notes stay on the device (Application Support on iPhone and Mac,
+  localStorage on the web).
 - Your password is sent once to log in and never stored. The session tokens are stored only in the
   Keychain (iOS service `net.dauernheim.bruce`; macOS `net.dauernheim.BruceMacOS`). Log out removes them.
 - Location (iOS, when in use) is used on the device for distances and the check-in suggestion. The

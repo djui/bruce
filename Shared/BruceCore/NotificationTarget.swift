@@ -85,15 +85,18 @@ extension AppModel {
 
 /// Where a push from our server leads: a challenge invite (`CHALLENGE_INVITE`, payload `challengeId`), a goal
 /// reminder (`GOAL_REMINDER`, payload `goalId`) or skipped-habit picks (`RECOMMENDATION`, payload `recommend`:
-/// class ids, best first).
+/// class ids, best first). Race reminders are local notifications with the same kind of payload (`raceId`).
 enum PushTarget: Equatable {
     case challenge(String)
     case goals
     /// The best pick, if any.
     case recommendation(Int?)
+    /// A race reminder (local notification, Races.swift), payload `raceId`.
+    case race(String)
 
     init?(userInfo: [AnyHashable: Any]) {
         if let id = userInfo["challengeId"] as? String, !id.isEmpty { self = .challenge(id); return }
+        if let id = userInfo["raceId"] as? String, !id.isEmpty { self = .race(id); return }
         if userInfo["goalId"] != nil { self = .goals; return }
         if let ids = userInfo["recommend"] as? [Any] { self = .recommendation((ids.first as? NSNumber)?.intValue); return }
         return nil
@@ -115,6 +118,10 @@ extension AppModel {
             // The best pick on top of For you, so Back shows the rest.
             tab = .home
             stacks[.home] = [.forYou] + (id.map { [Route.classDetail($0)] } ?? [])
+        case .race(let id):
+            // The race page on top of My classes › Races.
+            showMyRaces()
+            stacks[.myClasses] = [.race(id)]
         }
     }
 }

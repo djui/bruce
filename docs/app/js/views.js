@@ -15,6 +15,8 @@ import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 import { cancelChip } from './rules.js';
 import { reached as milestonesReached, fresh as freshMilestone, newToYou } from './milestones.js';
 import { visitsFrom } from './visits.js';
+import { raceChipsHTML, raceChipsClick, racesListHTML, filteredRaces, nextRaceHTML, myRacesHTML, myEntries, openRaceEditor } from './racesui.js';
+import { upcoming as upcomingRaces } from './races.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
  *  Menu, which end every tab's header (on wide screens they live in the sidebar instead). */
@@ -59,6 +61,7 @@ export const Home = {
       forYouClick(e, (id) => link('home', 'class', id));
     });
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
+    St.loadRaces().then(() => this.refresh());
   },
   refresh() {
     const b = $('#home-body', this.el);
@@ -77,6 +80,7 @@ export const Home = {
       html += '<h2 class="sec-title">Next up</h2><div class="list">' + classRow(next.class, link('home', 'class', next.class.id), { meta: dayHeader(next.class.start_time), selected: sel && sel.id === next.class.id }) + '</div>' +
         (open ? '<button class="btn lime" data-checkin="' + next.class.studio_id + '">' + icon('checkSeal') + ' Check in at ' + esc(open.t.name) + '</button>' : '');
     }
+    html += nextRaceHTML((id) => link('home', 'race', encodeURIComponent(id)));
     html += milestoneHTML() + forYouHTML((id) => link('home', 'class', id), sel) + newToYouHTML(sel);
     const spot = sec('SPOTLIGHT');
     if (spot && spot.items.length) {
@@ -188,16 +192,19 @@ export const Explore = {
     this.cat = p.get('cat') ? S.categories.find((c) => c.id === +p.get('cat')) || { id: +p.get('cat'), title: '' } : null;
     this.shown = 40;
     const days = Array.from({ length: 7 }, (_, i) => addDays(todayKey(), i));
-    el.innerHTML = header('Explore', '<button class="glass-btn" data-x="map" aria-pressed="' + ex.map + '" aria-label="Map">' + icon(ex.map ? 'menu' : 'map') + '</button>') +
+    const races = ex.tab === 'races';
+    el.innerHTML = header('Explore', races ? '' : '<button class="glass-btn" data-x="map" aria-pressed="' + ex.map + '" aria-label="Map">' + icon(ex.map ? 'menu' : 'map') + '</button>') +
       '<div class="sticky-tools"><div id="x-tabs"></div>' +
-      '<label class="search">' + icon('search') + '<input type="search" id="xq" placeholder="Studios, classes, instructors" value="' + esc(ex.q) + '" aria-label="Search"></label>' +
-      '<div class="chips">' + '<span id="x-filter">' + this.filterChip() + '</span>' + chip(icon('heart'), ex.favs, 'data-x="favs" aria-label="Favourites"') +
-      St.chipCategories().map((c) => chip(esc(c.title), this.cat && this.cat.id === c.id, 'data-cat="' + c.id + '"')).join('') + chip('···', false, 'data-x="filter" aria-label="More filters"') + '</div>' +
+      '<label class="search">' + icon('search') + '<input type="search" id="xq" placeholder="' + (races ? 'Races, cities, distances' : 'Studios, classes, instructors') + '" value="' + esc(ex.q) + '" aria-label="Search"></label>' +
+      (races ? '<div class="chips" id="x-rchips">' + raceChipsHTML() + '</div>'
+        : '<div class="chips">' + '<span id="x-filter">' + this.filterChip() + '</span>' + chip(icon('heart'), ex.favs, 'data-x="favs" aria-label="Favourites"') +
+      St.chipCategories().map((c) => chip(esc(c.title), this.cat && this.cat.id === c.id, 'data-cat="' + c.id + '"')).join('') + chip('···', false, 'data-x="filter" aria-label="More filters"') + '</div>') +
       (ex.tab === 'classes' ? '<div class="chips days">' + days.map((d) => { const [a, b] = dayChip(d); return chip(a + '<small>' + b + '</small>', d === this.day, 'data-day="' + d + '"'); }).join('') + '</div>' : '') +
       '</div><div id="x-list"></div>';
     const qEl = $('#xq', el);
     qEl.addEventListener('input', () => { ex.q = qEl.value; this.shown = 40; this.refresh(); });
     el.addEventListener('click', (e) => {
+      if (raceChipsClick(e)) { $('#x-rchips', el).innerHTML = raceChipsHTML(); this.refresh(); return; }
       const x = e.target.closest('[data-x]');
       if (x) {
         const k = x.dataset.x;
@@ -215,6 +222,7 @@ export const Explore = {
     });
     St.loadStudios().catch((e) => toast(e.message));
     this.loadClasses();
+    St.loadRaces().then(() => this.refresh());
     this.refresh();
   },
   filterChip() { const n = activeCount(ex, !!this.cat, curArea()); return chip(icon('filter') + (n ? '<span class="num">' + n + '</span>' : ''), n > 0, 'data-x="filter" aria-label="Filter"'); },
@@ -225,7 +233,7 @@ export const Explore = {
     const cat = 'cat' in change ? change.cat : this.cat && this.cat.id;
     if (cat) p.set('cat', cat);
     const day = change.day || (tab === 'classes' && this.day !== todayKey() ? this.day : null);
-    if (day) p.set('day', day);
+    if (day && tab === 'classes') p.set('day', day);
     const d = this.ctx.detail;
     return '#/explore' + (d ? '/' + d.kind + '/' + d.id : '') + '?' + p.toString();
   },
@@ -254,7 +262,7 @@ export const Explore = {
     const el = this.el;
     if (!el || !el.isConnected) return;
     const sel = this.ctx.detail;
-    $('#x-filter', el).innerHTML = this.filterChip();
+    if ($('#x-filter', el)) $('#x-filter', el).innerHTML = this.filterChip();
     const fav = $('[data-x="favs"]', el); if (fav) fav.setAttribute('aria-pressed', ex.favs);
     const studios = filteredStudios(this.cat);
     if (ex.tab === 'classes') this.loadClasses();   // the cache can be cleared or expire under us (a class page reloads after booking)
@@ -262,8 +270,13 @@ export const Explore = {
     const classes = filteredClasses(cc && cc.classes, this.cat, this.day);
     $('#x-tabs', el).innerHTML = underlineTabs([
       { key: 'studios', title: 'Studios', badge: S.studios.size ? studios.length : '' },
-      { key: 'classes', title: 'Classes', badge: cc && cc.done ? classes.length : '' }], ex.tab, 'data-xtab');
+      { key: 'classes', title: 'Classes', badge: cc && cc.done ? classes.length : '' },
+      { key: 'races', title: 'Races', badge: S.races && S.races.length ? filteredRaces(ex.tab === 'races' ? ex.q : '').length : '' }], ex.tab, 'data-xtab');
     const box = $('#x-list', el);
+    if (ex.tab === 'races') {
+      box.innerHTML = racesListHTML(ex.q, (id) => '#/explore/race/' + encodeURIComponent(id) + '?tab=races', sel && sel.kind === 'race' ? sel.id : null);
+      return;
+    }
     const foot = activeCount(ex, !!this.cat, curArea()) ? '<button class="btn glass sm filter-foot" data-x="filter">' + icon('filter') + ' Filter active</button>' : '';
     if (ex.tab === 'studios') {
       if (ex.map) {
@@ -308,7 +321,8 @@ export function placeholderPane(el, tab) {
     makeMap(el.firstChild, pts, { center: c ? [c.latitude, c.longitude] : [59.33, 18.07] });
     return;
   }
-  const hint = { home: 'Pick a class or studio to see it here.', explore: 'Pick a class to see it here.', mine: 'Pick one of your classes to see it here.',
+  const hint = { home: 'Pick a class or studio to see it here.', explore: ex.tab === 'races' ? 'Pick a race to see it here.' : 'Pick a class to see it here.',
+    mine: 'Pick one of your classes or races to see it here.',
     friends: "Pick a friend's class to see it here.", checkin: 'Check in at a studio, or scan the door QR code.' }[tab];
   el.innerHTML = '<div class="pane-empty"><img src="icon-rounded.png" alt="" width="72" height="72"><p>' + esc(hint || '') + '</p></div>';
 }
@@ -420,9 +434,12 @@ export const Mine = {
   render(el, ctx) {
     this.el = el; this.ctx = ctx;
     this.tab = ctx.params.get('tab') || this.tab || 'bookings';
-    el.innerHTML = header('My classes', '<span class="glass-pill count-pill" id="mine-count"></span>') + '<div id="mine-tabs" class="sticky-tools"></div><div id="mine-body">' + loading() + '</div>';
+    el.innerHTML = header('My classes', '<span id="mine-head"></span>') + '<div id="mine-tabs" class="sticky-tools"></div><div id="mine-body">' + loading() + '</div>';
     el.addEventListener('click', (e) => {
-      const t = e.target.closest('[data-mtab]'); if (t) { this.tab = t.dataset.mtab; this.refresh(); return; }
+      const seg = e.target.closest('[data-mseg]');
+      if (seg) { this.tab = seg.dataset.mseg === 'races' ? 'races' : (this.classTab || 'bookings'); this.refresh(); return; }
+      const t = e.target.closest('[data-mtab]'); if (t) { this.tab = this.classTab = t.dataset.mtab; this.refresh(); return; }
+      if (e.target.closest('[data-addrace]')) { openRaceEditor(null); return; }
       if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); }
       const ics = e.target.closest('[data-ics]');
       if (ics) {
@@ -433,6 +450,7 @@ export const Mine = {
     });
     St.loadMine().then(() => this.refresh()).catch((e) => toast(e.message));
     St.loadReviewable();
+    St.loadRaces().then(() => this.refresh());
     this.refresh();
   },
   refresh() {
@@ -443,10 +461,19 @@ export const Mine = {
     const waits = [...S.standbys.values()].map((x) => x.class);
     const marks = [...S.bookmarks.values()].map((x) => x.class).filter((c) => new Date(c.start_time) > Date.now() - 3600000);
     const lim = St.simultaneousLimit();
-    $('#mine-count', this.el).textContent = St.upcomingBookings().length + (lim ? ' / ' + lim : '');
-    $('#mine-tabs', this.el).innerHTML = underlineTabs([
-      { key: 'bookings', title: 'Bookings', badge: bookings.length || '' }, { key: 'waitlist', title: 'Waitlist', badge: waits.length || '' },
-      { key: 'bookmarks', title: 'Bookmarks' }], this.tab, 'data-mtab');
+    const races = this.tab === 'races';
+    const upRaces = upcomingRaces(myEntries(), todayKey()).length;
+    $('#mine-head', this.el).innerHTML = races ? '<button class="glass-btn" data-addrace aria-label="Add a race">' + icon('plus') + '</button>'
+      : '<span class="glass-pill count-pill">' + esc(St.upcomingBookings().length + (lim ? ' / ' + lim : '')) + '</span>';
+    // Classes | Races (RaceViews.swift's My classes segments); the class lists are chips under Classes.
+    $('#mine-tabs', this.el).innerHTML = underlineTabs([{ key: 'classes', title: 'Classes', badge: bookings.length || '' },
+      { key: 'races', title: 'Races', badge: upRaces || '' }], races ? 'races' : 'classes', 'data-mseg') +
+      (races ? '' : '<div class="chips">' + [['bookings', 'Bookings', bookings.length], ['waitlist', 'Waitlist', waits.length], ['bookmarks', 'Bookmarks', 0]]
+        .map(([k, t, n]) => chip(esc(t) + (n ? '<b>' + n + '</b>' : ''), this.tab === k, 'data-mtab="' + k + '"')).join('') + '</div>');
+    if (races) {
+      b.innerHTML = myRacesHTML((id) => link('mine', 'race', encodeURIComponent(id)) + '?tab=races', sel && sel.kind === 'race' ? sel.id : null);
+      return;
+    }
     const list = { bookings, waitlist: waits, bookmarks: marks }[this.tab].sort(byStart);
     const msg = { bookings: ['mine', 'You have no bookings.'], waitlist: ['bell', "You're not on any waitlists."], bookmarks: ['bookmark', 'No bookmarked classes yet.'] }[this.tab];
     const rv = this.tab === 'bookings' ? St.pendingReviews() : [];

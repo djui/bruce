@@ -43,6 +43,8 @@ final class UIState: ObservableObject {
     @Published var query = ""
     /// Tab that started the search (Home search field); dismissing search returns there.
     var returnTab: Tab?
+    /// Explore shows its Races segment: the search filters races instead of opening studio and class results.
+    @Published var racesSearch = false
 }
 
 extension SheetRoute: Identifiable { public var id: Self { self } }
@@ -146,6 +148,7 @@ extension View {
             case .forYou: ForYouListView()
             case .goals: GoalsView()
             case .challenge(let id): ChallengeView(challengeId: id)
+            case .race(let id): RaceDetailView(raceId: id)
             }
         }
     }
@@ -270,6 +273,7 @@ struct SheetScreen: View {
         case .goals: GoalsView(inSheet: true)
         case .editGoal(let id): GoalEditor(goalId: id)
         case .newChallenge: NewChallengeSheet()
+        case .editRace(let id): RaceEditor(raceId: id)
         }
     }
 }
@@ -354,7 +358,7 @@ struct SearchAccessory: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass").foregroundStyle(Theme.secondary)
-            TextField("Studios, classes, instructors", text: $ui.query)
+            TextField(ui.racesSearch && m.tab == .explore ? "Races, cities, distances" : "Studios, classes, instructors", text: $ui.query)
                 .focused($focused).submitLabel(.search)
                 .textInputAutocapitalization(.never).autocorrectionDisabled()
             if ui.searchActive {
@@ -373,7 +377,11 @@ struct SearchAccessory: View {
 
     func begin() {
         if !ui.searchActive {
-            if m.tab != .explore { ui.returnTab = m.tab; m.tab = .explore }
+            if m.tab != .explore {
+                ui.returnTab = m.tab; m.tab = .explore
+                // Search from another tab looks for studios and classes, even if Explore was left on Races.
+                if ui.racesSearch { m.exploreTabRequest = 0 }
+            }
             ui.searchActive = true
         }
     }
