@@ -160,7 +160,7 @@
       "country": "NO",
       "distancesKm": [],
       "format": "15-leg relay",
-      "signupUrl": "https://www.holmenkollstafetten.no/pamelding",
+      "signupUrl": "https://holmenkollstafetten.no/pamelding",
       "platform": "Onreg",
       "priceNote": "4,700 NOK per team",
       "priceSteps": [{ "amount": 4700, "currency": "NOK", "per": "team" }],
