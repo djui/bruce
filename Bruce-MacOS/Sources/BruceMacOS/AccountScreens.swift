@@ -386,6 +386,12 @@ struct StatisticsView: View {
                             ForEach(groups[day]!.sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }) { v in
                                 ClassRow(time: BruceDate.time(v.date), duration: v.durationMinutes.map { "\($0) min" } ?? "",
                                          title: v.title, studio: m.studioName(for: v), meta: m.visitMeta(v), showMenu: false)
+                                    .contextMenu { if let t = BookAgainTemplate(v) { Button("Book again…") { m.openBookAgain(t) } } }
+                                    .overlay(alignment: .trailing) {
+                                        if m.isLoggedIn, let t = BookAgainTemplate(v) {
+                                            Button("Book again") { m.openBookAgain(t) }.buttonStyle(.bordered).controlSize(.small).padding(.trailing, Theme.gutter)
+                                        }
+                                    }
                             }
                         } header: {
                             SectionHeaderBar(text: BruceDate.dayHeader(day))

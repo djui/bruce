@@ -115,6 +115,7 @@ struct MyClassesView: View {
                                 if let r = m.reviewableBooking(forClass: c.id) {
                                     Button("\(Copy.reviewTitle)…") { m.present(.review(r.id)) }
                                 }
+                                if let t = BookAgainTemplate(c) { Button("Book again…") { m.openBookAgain(t) } }
                             } else if item.2 != nil {
                                 Button("Add to Calendar") { m.present(.addToCalendar(c.id)) }
                                 Button("Cancel booking…") { m.present(.bookingRules(c.id)) }

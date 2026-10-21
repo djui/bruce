@@ -9,6 +9,7 @@ import { openPlaces } from './foryou.js';
 import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
 import { openWrapped } from './wrapped.js';
 import { cancelStrikes, cancelCost, POLICY, STRIKES_TO_BLOCK, BLOCK_DAYS, STRIKE_EXPIRY_DAYS, NO_SHOW_STRIKES } from './rules.js';
+import { templateOf, candidateDays, pick } from './bookagain.js';
 
 // ---------------------------------------------------------------- booking rules (book / cancel)
 
@@ -33,6 +34,51 @@ export function openRules(c, mode, action) {
     '<p class="muted small note">' + icon('info') + ' Reaching ' + STRIKES_TO_BLOCK + ' strikes pauses class booking for ' + BLOCK_DAYS + ' days; one strike expires every ' + STRIKE_EXPIRY_DAYS + ' days.' + (unlock ? ' You can lift a block early for ' + unlock + ' kr.' : '') + '</p>', { cls: 'tall' });
   const go = s.el.querySelector('[data-go]');
   go.addEventListener('click', () => run(go, async () => { await action(); s.close(); }));
+}
+
+// ---------------------------------------------------------------- book again
+
+const WEEKDAYS = ['Sundays', 'Mondays', 'Tuesdays', 'Wednesdays', 'Thursdays', 'Fridays', 'Saturdays'];
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** "Book again" for a past class: the next class of the series, Book or "Booking opens …", and Book every week. */
+export function openBookAgain(c, studioId, linkFn) {
+  const link = linkFn || ((kind, id) => '#/home/' + kind + '/' + id);
+  const t = templateOf(c, studioId);
+  if (!t) { toast('Nothing to book again here'); return; }
+  const label = WEEKDAYS[t.weekday - 1] + ' ' + pad2(Math.floor(t.minuteOfDay / 60)) + ':' + pad2(t.minuteOfDay % 60);
+  const s = sheet('Book again', '<h2 class="sheet-title">' + esc(c.title.toUpperCase()) + '</h2><p class="center muted">' + esc(St.studioName(t.studioId)) + ' · ' + esc(label) + '</p><div id="again">' + loading() + '</div>');
+  (async () => {
+    const now = Date.now();
+    let found = null;
+    for (const key of candidateDays(t, now)) {
+      const classes = await Bruce.classes(key, { studioId: t.studioId }).catch(() => []);
+      found = pick(classes, t, now);
+      if (found) break;
+    }
+    const box = $('#again', s.el);
+    if (!box) return;
+    if (!found) {
+      box.innerHTML = empty('calendar', 'No upcoming ' + label + ' class in this series at ' + St.studioName(t.studioId) + ' in the next two weeks.') +
+        '<a class="btn glass" href="' + link('studio', t.studioId) + '" data-close>Show studio</a>';
+      return;
+    }
+    const n = found.next;
+    const spots = n.available_spots == null ? '' : n.available_spots <= 0 ? 'Fully booked' : n.available_spots > 5 ? '5+ spots left' : n.available_spots + ' spot' + (n.available_spots === 1 ? '' : 's') + ' left';
+    const who = found.sameInstructor ? 'same instructor' : instructor(n.instructor);
+    const booked = S.bookings.has(n.id);
+    const href = link('class', n.id);
+    box.innerHTML = '<div class="card"><b>Next: ' + esc(fmt(n.start_time, { weekday: 'short', day: 'numeric', month: 'short' })) + ' · ' + esc(time(n.start_time)) + (minutes(n.start_time, n.end_time) ? ' · ' + minutes(n.start_time, n.end_time) + ' min' : '') + '</b>' +
+      '<p class="muted">' + esc([spots, who].filter(Boolean).join(' · ')) + '</p>' +
+      (found.opens ? '<p class="orange"><b>' + icon('clock') + ' Booking opens ' + esc(fmt(found.opens, { weekday: 'short', day: 'numeric', month: 'short' })) + ', ' + esc(time(found.opens)) + '</b></p>' : '') + '</div>' +
+      (booked ? '<a class="btn lime" href="' + href + '" data-close>Booked · show class</a>'
+        : !found.opens && (n.available_spots == null || n.available_spots > 0) ? '<button class="btn lime" data-book>Book ' + esc(fmt(n.start_time, { weekday: 'short', day: 'numeric', month: 'short' })) + '</button>'
+        : '<a class="btn glass" href="' + href + '" data-close>' + (found.opens ? 'Show class' : 'Fully booked · show class') + '</a>') +
+      '<a class="btn glass" href="' + href + '" data-close>' + icon('calendar') + ' Book every week on the class page</a>' +
+      '<p class="muted small note">' + icon('info') + ' ' + (found.opens ? 'Not bookable yet. "Book every week" on the class page books it the moment it opens, and every week after.' : 'The class page has "Book every week" for this series.') + '</p>';
+    const b = box.querySelector('[data-book]');
+    if (b) b.addEventListener('click', () => { s.close(); openRules(n, 'book', async () => { await Bruce.book(n.id); toast('Booked ' + n.title); St.loadMine(); }); });
+  })();
 }
 
 // ---------------------------------------------------------------- similar classes, invite, visit limit
@@ -169,8 +215,9 @@ export function openReview(b) {
     '<textarea id="rv-comment" rows="3" placeholder="Comment (optional)"></textarea><p class="muted small" id="rv-hint" hidden>' + icon('info') + ' Tell the studio what could be better: a comment is needed for ratings of 1 or 2.</p>' +
     '<label class="toggle"><span>Hide my name and photo</span><input type="checkbox" id="rv-anon"><i></i></label>' +
     '<p class="muted small note">' + icon('info') + ' Ratings with a comment show your first name and photo on the studio page unless you hide them.</p>' +
-    '<button class="btn lime" data-send disabled>Send</button><button class="btn glass" data-skip>Skip</button>', { cls: 'tall' });
+    '<button class="btn lime" data-send disabled>Send</button><button class="btn glass" data-skip>Skip</button><button class="btn glass" data-again>Book again</button>', { cls: 'tall' });
   const send = s.el.querySelector('[data-send]');
+  s.el.querySelector('[data-again]').addEventListener('click', () => openBookAgain(c, b.studio_id || c.studio_id));
   const comment = $('#rv-comment', s.el);
   const update = () => {
     s.el.querySelectorAll('[data-n]').forEach((x) => x.classList.toggle('on', +x.dataset.n <= n));
@@ -270,6 +317,10 @@ export function openStatistics() {
   s.body.addEventListener('click', (e) => {
     if (e.target.closest('[data-wrapped]')) openWrapped();
     else if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); }
+    else if (e.target.closest('[data-again]')) {
+      const v = (S.visits || []).find((x) => x.id === +e.target.closest('[data-again]').dataset.again);
+      if (v && v.class) openBookAgain(v.class, v.studio_id || v.class.studio_id);
+    }
   });
   Promise.all([Bruce.aggregate().catch(() => []), St.loadHistory().then(() => S.visits)])
     .then(([agg, visits]) => {
@@ -305,7 +356,8 @@ function visitRow(v) {
   const title = solo ? (c.opening && c.start_time ? 'Solo training ' + time(c.start_time) + ' - ' + time(c.end_time) : 'Solo training') : c.title;
   const dur = solo ? null : minutes(c.start_time, c.end_time);
   return '<div class="crow"><div class="crow-time"><b>' + time(visitDate(v)) + '</b><small>' + (dur ? dur + ' min' : '') + '</small></div><div class="crow-body"><h3>' + esc(title) + '</h3><p>' + esc(st.name || '') + '</p>' +
-    '<p class="muted">' + esc([st.vicinity, instructor(c.instructor)].filter(Boolean).join(' | ')) + '</p></div></div>';
+    '<p class="muted">' + esc([st.vicinity, instructor(c.instructor)].filter(Boolean).join(' | ')) + '</p></div>' +
+    (!solo ? '<button class="btn glass sm" data-again="' + v.id + '">Book again</button>' : '') + '</div>';
 }
 
 function openPayments() {

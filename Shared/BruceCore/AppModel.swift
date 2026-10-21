@@ -34,6 +34,8 @@ enum SheetRoute: Hashable {
     case similarClasses(Int), area(UUID), parakey(Int)
     /// Add one booked class to the calendar (CalendarExport.swift).
     case addToCalendar(Int)
+    /// Book again: the next class of a series the user went to (BookAgain.swift).
+    case bookAgain(BookAgainTemplate)
     /// Auto-book rules and the optional server (AutoBook.swift).
     case autoBook
     /// "Rate class" dialog for a booking id (POST /v52/review [c8:467]).

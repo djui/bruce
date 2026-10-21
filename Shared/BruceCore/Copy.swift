@@ -82,6 +82,9 @@ enum Copy {
     static let calendarAdded = "Added to Calendar"
     static let calendarEventFooter = "Added with Brüce, an unofficial Bruce Studios client. This event is a copy and doesn't follow changes to the class; the calendar subscription in Settings stays in sync."
 
+    /// Under "Book every week" on the Book again sheet (BookAgain.swift).
+    static let bookEveryWeek = "Books this series every week the moment it opens and tells you each time (Menu › Auto-book lists it)."
+
     /// Settings toggle for CancelReminders.swift.
     static let cancelReminder = "A notification 1 h before cancelling a booked class starts to cost a strike. Nothing is cancelled for you."
 

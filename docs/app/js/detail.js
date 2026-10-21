@@ -4,7 +4,7 @@ import { Bruce } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import { hero, classRow, glassBtn, underlineTabs, chip, empty, loading, avatar, stars, toast, run, confirmSheet, makeMap } from './ui.js';
-import { openRules, openSimilar, openInvite, openVisitLimit, openTicket, openReview, checkInFlow } from './sheets.js';
+import { openRules, openSimilar, openInvite, openVisitLimit, openTicket, openReview, checkInFlow, openBookAgain } from './sheets.js';
 import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 
 let token = 0;
@@ -75,7 +75,8 @@ export async function renderClass(el, id, ctx) {
     let actions = '';
     if (booking && booking.checked_in_at) {
       actions = '<button class="btn lime" data-dact="ticket">' + icon('ticket') + ' Show ticket</button>' +
-        (S.reviewable.find((x) => x.class_id === c.id) ? '<button class="btn glass" data-dact="rate">' + icon('star') + ' Rate the class</button>' : '');
+        (S.reviewable.find((x) => x.class_id === c.id) ? '<button class="btn glass" data-dact="rate">' + icon('star') + ' Rate the class</button>' : '') +
+        '<button class="btn glass" data-dact="again">' + icon('clock') + ' Book again</button>';
     } else if (booking) {
       actions = (window ? '<button class="btn lime" data-dact="checkin">' + icon('checkSeal') + ' Check in</button>' : '') +
         (started ? '' : '<button class="btn glass" data-dact="calendar">' + icon('calendar') + ' Add to Calendar</button><button class="btn red" data-dact="cancel">Cancel booking</button>');
@@ -172,6 +173,7 @@ export async function renderClass(el, id, ctx) {
         await St.loadMine(); draw(S.classDetails.get(c.id) || c);
       });
       else if (a === 'book') openRules(c, 'book', async () => { await Bruce.book(c.id); toast('Booked ' + c.title); await after(); });
+      else if (a === 'again') openBookAgain(c, c.studio_id, ctx.link);
       else if (a === 'calendar') { const f = St.calendarFile(c); addToCalendar(f.text, f.fileName); toast('Event file ready. ' + ONE_OFF_NOTE); }
       else if (a === 'cancel') openRules(c, 'cancel', async () => { await Bruce.cancel(booking.id); toast('Booking cancelled'); await after(); });
       else if (a === 'join') run(b, async () => { await Bruce.joinWaitlist(c.id); toast("You're on the waitlist. You'll get a notification if a spot opens up."); await after(); });

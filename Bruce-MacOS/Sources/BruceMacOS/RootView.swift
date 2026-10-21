@@ -189,6 +189,7 @@ struct SheetHost: View {
         case .area(let id): AreaMapSheet(areaId: id)
         case .review(let id): ReviewSheet(bookingId: id)
         case .addToCalendar(let id): AddToCalendarSheet(classId: id)
+        case .bookAgain(let t): BookAgainSheet(template: t)
         case .autoBook: AutoBookView()
         // Places, goals and challenges are iPhone-only for now.
         case .places, .editPlace, .goals, .editGoal, .newChallenge: PlaceholderPage(title: "Available in the iPhone app")

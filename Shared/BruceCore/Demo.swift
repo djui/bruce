@@ -295,6 +295,11 @@ extension AppModel {
             // Today 23:25 (cancelling costs a strike already), tomorrow 07:00 and 11:30 (still free).
             bookings = [9008, 9006, 9001].compactMap { id in classDetails[id].map { BruceAPI.Booking(id: id, classId: id, studioId: $0.studioId, checkedInAt: nil, class: $0) } }
             tab = .myClasses
+        case "bookagain":
+            // The Statistics visit row's Book again for a class like 9006 (Morning Flow, Example Yoga Studio).
+            if let t = BookAgainTemplate(studioId: 1489, masterId: nil, title: "Morning Flow", start: classDetails[9006]?.start.flatMap { cal.date(byAdding: .day, value: -7, to: $0) }, instructor: "Instructor D") {
+                sheets = [.statistics, .bookAgain(t)]
+            }
         case "detailmap": push(.classDetail(9001)); demoScrollBottom = true
         case "invite": present(.invite)
         case "howitworks": sheets = [.invite, .howItWorks]
