@@ -238,6 +238,7 @@ struct StrikesView: View {
                 policy("No strikes", Theme.teal, Copy.strikeFree.map { (nil, $0) })
                 policy("1 strike", Theme.secondary, Copy.strikeOne)
                 policy("2 strikes", Theme.hoursOrange, Copy.strikeTwo)
+                policy("3 strikes", Theme.strikeRed, Copy.strikeThree)
             }
             .padding(Theme.gutter)
         }

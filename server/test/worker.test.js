@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { d1 as memoryDB } from "./d1.js";
 import worker, { localParts, localMidnight, matches, opensAt, scanPlan, book, tick, tickUser, watchWaitlists, LoggedOut,
-  freeCancelUntil, lateSpotAction, cancelNote } from "../src/worker.js";
+  freeCancelUntil, lateSpotAction, cancelNote, cancelStrikes, askMessage } from "../src/worker.js";
 
 const rule = { id: "r1", studioId: 6614, masterId: 77, title: "Reformer", weekday: 3, minuteOfDay: 18 * 60 };
 // Tue 2026-10-20 18:00 Stockholm (CEST, UTC+2) = 16:00Z
@@ -265,8 +265,14 @@ test("late spots: booked while cancelling is free, then as chosen, under 3 h alw
   assert.equal(lateSpotAction(start, free, start - 8 * H, "book"), "book");
   assert.equal(lateSpotAction(start, free, start - 2 * H, "book"), "ask");
   assert.match(cancelNote(start, free, start - 13 * H), /^Free cancel until 06:00\./);   // 18:00 in Stockholm
-  assert.match(cancelNote(start, free, start - 8 * H), /Cancel before 15:00: 1 strike/);
-  assert.match(cancelNote(start, free, start - 2 * H), /2 strikes/);
+  assert.match(cancelNote(start, free, start - 8 * H), /^Can't make it\? Cancel before 15:00: 1 strike\. Before 17:00: 2\. After that, or a no-show: 3\.$/);
+  assert.match(cancelNote(start, free, start - 2 * H), /^Can't make it\? Cancel before 17:00: 2 strikes\. After that, or a no-show: 3\.$/);
+  assert.equal(cancelNote(start, free, start - 30 * 60_000), "Cancelling or a no-show now costs 3 strikes.");
+  assert.deepEqual([13, 8, 2, 0.5].map((h) => cancelStrikes(start, free, start - h * H)), [0, 1, 2, 3]);
+  assert.match(askMessage("Yoga", start, start - 8 * H, true).body, /costs 1 strike\. Book only/);
+  assert.match(askMessage("Yoga", start, start - 2 * H, true).body, /costs 2 strikes\./);
+  assert.match(askMessage("Yoga", start, start - 0.5 * H, false).body, /costs 3 strikes\./);
+  assert.equal(askMessage("Yoga", start, start - 0.5 * H, false).title, "Open for booking: Yoga");
 });
 
 test("late spots: by default a waitlist spot 8 h before is offered once per freed spot, not booked", async () => {

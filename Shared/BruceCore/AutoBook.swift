@@ -86,10 +86,11 @@ enum AutoBook {
 
     // MARK: Late spots
 
-    /// Cancelling costs a strike from the class's `unbookable_latest_time` (12 h before) and 2 strikes under 3 h before
-    /// (Copy.swift). So a spot found after the free cancellation is booked or offered as the user chose
-    /// (`AutoBookServer.lateSpots`), and under 3 h before always offered (a notification with a Book button). The server
-    /// decides the same way (`lateSpotAction` in server/src/worker.js).
+    /// Cancelling costs a strike from the class's `unbookable_latest_time` (12 h before), 2 strikes under 3 h before and
+    /// 3 under 1 h, as much as a no-show (`BookingRules.cancelStrikes`, Copy.swift). So a spot found after the free
+    /// cancellation is booked or offered as the user chose (`AutoBookServer.lateSpots`), and under 3 h before always
+    /// offered (a notification with a Book button). The server decides the same way (`lateSpotAction` in
+    /// server/src/worker.js).
     static let alwaysAsk: TimeInterval = 3 * 3600
     static func offersInstead(start: Date, freeUntil: Date, now: Date = Date(), choice: AutoBookServer.LateSpots) -> Bool {
         if now < freeUntil { return false }

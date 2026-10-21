@@ -134,7 +134,7 @@ struct ServerError: LocalizedError {
 
 enum AutoBookCopy {
     static let howItWorks = "A class opens for booking a fixed time before it starts, usually 7 days. While this app is running (and the Mac is awake) it books the class the moment it opens. Cancelling an auto-booked class does not rebook it."
-    static let lateSpots = "Cancelling then costs a strike. Ask me first sends a notification with a Book button to your iPhone (and an email) instead. Under 3 h before, when cancelling costs 2 strikes, you're always asked; 12 h or more before, it's always booked."
+    static let lateSpots = "Cancelling then costs a strike. Ask me first sends a notification with a Book button to your iPhone (and an email) instead. Under 3 h before, when cancelling costs 2 strikes (3 under 1 h, as much as a no-show), you're always asked; 12 h or more before, it's always booked."
     static let server = "Books even when no device is awake: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login; switching it off removes your login and classes from the server."
 }
 

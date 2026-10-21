@@ -24,6 +24,23 @@ struct BookingRules {
     }
 
     static func long(_ d: Date) -> String { BruceDate.format(d, "HH:mm, EEEE, d MMMM") }
+
+    /// Strikes a cancellation costs at `now` (Bruce's rules since June 2026, Copy.swift): none until `lateCancel`
+    /// (12 h before), 1 until `shortNotice` (3 h), 2 until `lastMinute` (1 h), then 3, as much as a no-show.
+    func cancelStrikes(at now: Date = Date()) -> Int {
+        if now < lateCancel { return 0 }
+        if now < shortNotice { return 1 }
+        if now < lastMinute { return 2 }
+        return 3
+    }
+
+    /// When the cost of cancelling next goes up, and to how many strikes; nil once it is at its highest.
+    func nextCancelStep(at now: Date = Date()) -> (at: Date, strikes: Int)? {
+        if now < lateCancel { return (lateCancel, 1) }
+        if now < shortNotice { return (shortNotice, 2) }
+        if now < lastMinute { return (lastMinute, 3) }
+        return nil
+    }
 }
 
 func classDateLine(_ c: BruceAPI.BruceClass) -> String {

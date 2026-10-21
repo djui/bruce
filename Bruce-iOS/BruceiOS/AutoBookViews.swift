@@ -132,7 +132,7 @@ enum AutoBookCopy {
     static func habitNudges(days: Int) -> String {
         "Did a class 3 weeks in a row, then skipped it and booked nothing for \(days) days? You get a morning notification with classes picked from your history."
     }
-    static let lateSpots = "Cancelling then costs a strike. Ask me first sends a notification with a Book button instead. Under 3 h before, when cancelling costs 2 strikes, you're always asked; 12 h or more before, it's always booked."
+    static let lateSpots = "Cancelling then costs a strike. Ask me first sends a notification with a Book button instead. Under 3 h before, when cancelling costs 2 strikes (3 under 1 h, as much as a no-show), you're always asked; 12 h or more before, it's always booked."
     static let server = "Books even when your phone is locked or offline: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login to book with; switching it off removes your login and classes from the server."
 }
 

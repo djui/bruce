@@ -10,6 +10,10 @@ enum Policy {
     static let strikesToBlock = 3
     /// Length of a booking block in days (the API gives `block_end_date` only while a block is active).
     static let blockDays = 14
+    /// One strike expires this many days after it was given (help centre, June 2026; the same in SE, NO and DK).
+    static let strikeExpiryDays = 30
+    /// Strikes for a no-show (booked, never checked in), the same as a cancellation under 1 hour before.
+    static let noShowStrikes = 3
     /// Fallback yearly pause allowance when `membership/user_info` has no `pause_days_total`/`total_pause_periods`.
     static let pauseDays = 60
     static let pausePeriods = 2
@@ -28,9 +32,14 @@ enum Copy {
 
     /// Footer under Book / Cancel. `unlockPrice` is the city's `user_strike_block_un_lock_price` in kr.
     static func strikeFooter(unlockPrice: Int?) -> String {
-        var s = "Reaching \(Policy.strikesToBlock) strikes pauses class booking for \(Policy.blockDays) days."
+        var s = "Reaching \(Policy.strikesToBlock) strikes pauses class booking for \(Policy.blockDays) days; one strike expires every \(Policy.strikeExpiryDays) days."
         if let p = unlockPrice { s += " You can lift a block early for \(p) kr." }
         return s
+    }
+
+    /// What cancelling costs right now, for the Cancel sheet and My classes ("Cancelling now costs 2 strikes").
+    static func cancelCost(strikes: Int) -> String {
+        strikes <= 0 ? "Cancelling now is free." : "Cancelling now costs \(strikes) strike\(strikes == 1 ? "" : "s")."
     }
 
     /// Summary on the Strikes screen, from `user_block/info` and the city's unblock price.
@@ -48,15 +57,19 @@ enum Copy {
             parts.append("Free unlocks left: \(left).")
         }
         if let p = unlockPrice { parts.append("After that, lifting a block costs \(p) kr.") }
+        parts.append("One strike expires every \(Policy.strikeExpiryDays) days.")
         return parts.joined(separator: " ")
     }
 
+    // Bruce's rules since June 2026 (help centre: cancellation rules, booking block), the same in Sweden, Norway and
+    // Denmark; only the unlock price differs and comes from the city. A no-show now costs as much as a block.
     static let strikeFree = ["Cancelling 12 hours or more before the class starts.",
                              "Checking in within the studio's check-in window."]
     static let strikeOne: [(String?, String)] = [("Late cancellation", ": 3 to 12 hours before start, 1 strike"),
                                                 ("Late check-in", ": after the check-in window, 1 strike")]
-    static let strikeTwo: [(String?, String)] = [("Very late cancellation", ": under 3 hours before start, 2 strikes"),
-                                                ("No-show", ": booked but never checked in, 2 strikes")]
+    static let strikeTwo: [(String?, String)] = [("Short-notice cancellation", ": 1 to 3 hours before start, 2 strikes")]
+    static let strikeThree: [(String?, String)] = [("Last-minute cancellation", ": under 1 hour before start, 3 strikes"),
+                                                  ("No-show", ": booked but never checked in, 3 strikes")]
     static let noShow = "Booked, but never checked in."
 
     // MARK: Check-in

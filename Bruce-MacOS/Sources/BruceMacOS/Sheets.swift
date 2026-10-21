@@ -372,6 +372,8 @@ struct StrikesView: View {
                         policy("1 strike", Color(white: 0.45), Copy.strikeOne)
                         Divider()
                         policy("2 strikes", Color(red: 0.62, green: 0.45, blue: 0.0), Copy.strikeTwo)
+                        Divider()
+                        policy("3 strikes", Theme.strikeRed, Copy.strikeThree)
                     }
                     .padding(.horizontal, Theme.gutter + 12).padding(.bottom, 30)
                 }

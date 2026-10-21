@@ -8,6 +8,7 @@ import { travelMinutes, detourMinutes, recommend, slotOf } from '../js/recommend
 import { wrappedStats, archetype, together, longestStreak, topPercent, cardsFor } from '../js/wrapped-stats.js';
 import { loadState, tierOK, inPolygon, studioInArea, rectangle, studioPasses, classPasses, activeCount, clearFilters, selectedArea } from '../js/filters.js';
 import { challengeIdFromHash, challengeShareUrl, challengeRoute } from '../js/links.js';
+import { cancelStrikes, nextCancelStep, cancelCost, POLICY } from '../js/rules.js';
 
 const Z = 'Europe/Stockholm';
 const NOW = '2026-10-14T10:00:00Z';   // Wednesday 14 October 2026, 12:00 in Stockholm
@@ -317,4 +318,25 @@ test('a selected area only counts in its own city', () => {
   assert.equal(selectedArea(list, 'a1', 1).id, 'a1');
   assert.equal(selectedArea(list, 'a1', 2), null);
   assert.equal(selectedArea(list, null, 1), null);
+});
+
+// ---------------------------------------------------------------- strike rules (rules.js)
+
+test('cancelling costs 0, 1, 2 then 3 strikes at the 12 h, 3 h and 1 h steps', () => {
+  const start = Date.parse('2026-10-20T16:00:00Z'), H = 3600000;
+  const r = { start, lateCancel: start - 12 * H, shortNotice: start - 3 * H, lastMinute: start - H };
+  assert.deepEqual([13, 12, 8, 3, 2, 1, 0.5, 0].map((h) => cancelStrikes(r, start - h * H)), [0, 1, 1, 2, 2, 3, 3, 3]);
+  assert.deepEqual(nextCancelStep(r, start - 13 * H), { at: r.lateCancel, strikes: 1 });
+  assert.deepEqual(nextCancelStep(r, start - 8 * H), { at: r.shortNotice, strikes: 2 });
+  assert.deepEqual(nextCancelStep(r, start - 2 * H), { at: r.lastMinute, strikes: 3 });
+  assert.equal(nextCancelStep(r, start - 0.5 * H), null);
+  // A class with a shorter late-cancel window (unbookable_latest 2 h) still follows the hour steps after it.
+  const short = { ...r, lateCancel: start - 2 * H };
+  assert.deepEqual([3, 1.5, 0.5].map((h) => cancelStrikes(short, start - h * H)), [0, 2, 3]);
+  assert.equal(cancelCost(0), 'Cancelling now is free.');
+  assert.equal(cancelCost(1), 'Cancelling now costs 1 strike.');
+  assert.equal(cancelCost(3), 'Cancelling now costs 3 strikes.');
+  assert.equal(POLICY.length, 4);
+  assert.match(POLICY[2], /no-show: 3 strikes/);
+  assert.match(POLICY[3], /every 30 days/);
 });

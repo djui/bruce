@@ -49,21 +49,23 @@ Bruce does not book waitlisters itself: a "Free spot" notification only tells th
 
 ### Late spots: ask before booking what costs a strike to cancel
 
-Bruce's strike policy: cancelling is free until `unbookable_latest_time` (12 hours before the class), costs 1 strike
-up to 3 hours before and 2 strikes after that; a no-show costs 2. A spot booked late can't be given back for free, so
-the server only books freely while cancelling is free (`lateSpotAction` in `src/worker.js`):
+Bruce's strike policy (help centre, June 2026; the same in Sweden, Norway and Denmark): cancelling is free until
+`unbookable_latest_time` (12 hours before the class), costs 1 strike up to 3 hours before, 2 up to 1 hour before and 3
+after that; a no-show costs 3, and 3 strikes pause class booking for 14 days (one strike expires every 30 days). A spot
+booked late can't be given back for free, so the server only books freely while cancelling is free (`lateSpotAction`
+in `src/worker.js`):
 
 | Spot is free | What the server does |
 |---|---|
 | 12 h or more before (before the free-cancel deadline) | Books it |
 | 3-12 h before | As the user chose: `lateSpots` `"ask"` (default) or `"book"` (the apps' Auto-book setting "Spot opens 3-12 h before") |
-| Under 3 h before | Always asks |
+| Under 3 h before (cancelling costs 2 strikes, under 1 h 3) | Always asks |
 
 "Ask" is a push with a **Book** button (category `LATE_SPOT`, payload `{"classId"}`) and the same email, sent once per
 freed spot (`offered` on the watch until the class is full again); the watch keeps going. The same applies to a weekly
 class that only opens or is only found after its free cancellation ("Open for booking: …", logged as "Offered (opened
 late)"). Booking pushes (category `AUTOBOOK_BOOKED`, a **Cancel booking** button in the iPhone app) say what cancelling
-costs now: "Free cancel until 06:00." or "Cancel before 15:00: 1 strike. After that, or a no-show: 2."
+costs now: "Free cancel until 06:00." or "Cancel before 15:00: 1 strike. Before 17:00: 2. After that, or a no-show: 3."
 
 ## Challenges with friends
 
