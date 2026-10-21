@@ -241,6 +241,34 @@ challenge.
 - Leaving a crew is leaving the challenge: the member's per-visit detail goes when they are in no other challenge,
   and a crew without accepted members is deleted with its `crew_updates` rows.
 
+## Shop
+
+Phase 2 of the Studio Merch plan: a catalogue of products the studios already sell, listed by hand with each studio's
+written approval, with planned drops and Notify me (`migrations/0007_shop.sql`, the pure logic in `src/shop.js`). The
+studio is the seller of record; the server lists and reminds. No money and no address pass through it, prices are in
+öre and include VAT, and no product carries a Bruce or Brüce mark (the feed refuses one). Production starts empty: the
+apps hide the shop in a city with nothing listed.
+
+- `POST /shop/import` with `Authorization: Bearer <SHOP_FEED_TOKEN>` (set with `npx wrangler secret put SHOP_FEED_TOKEN`;
+  without it the route answers 503) and `{"source": "operator", "storefronts": [...]}`: one entry per studio, with the
+  seller's name, the Bruce city code, its webshop (https, optional), a pickup note, the day the studio approved the
+  listing by email (`consentAt`, required), its products (`id`, `title`, `kind` towel|mat|socks|apparel|sauna|other,
+  `priceOre`, `vatRate` default 25, `fulfilment` desk|link|pod, `linkUrl`, `variants`) and its drops (`productId`,
+  `opensAt`, `closesAt`, `minQty`, `maxQty`, `reserved`, `pickupFrom`, `linkUrl`). [`feeds/example-shop-feed.json`](feeds/example-shop-feed.json)
+  is a complete example. The post replaces that source's storefronts; a studio another source posted first stays that
+  source's and is listed under `skipped`, as are products and drops the apps couldn't read. Products, variants and drops
+  are updated in place, so the Notify me rows of a drop that stays survive a re-post. There is no studio dashboard: the
+  studio approves by email and the operator posts the feed.
+- `GET /shop?city=STO` (no login, cached five minutes) answers `{city, storefronts, products, drops}` for the city:
+  storefronts with at least one active product, those products with their variants, and the drops anyone may see (a
+  closed drop stays 30 days for the pickup). `GET /shop/studio/<id>` is the same for one studio page.
+- `PUT|DELETE /me/notify/<dropId>` switches Notify me for a drop (the login is stored, as joining a challenge stores it:
+  the push and the email need the row); `GET /me/shop` lists the member's drops on every device. Phase 3 sends the
+  "Drop open" push and email.
+- `POST /shop/tap` `{"productId"}` adds one to an anonymous daily counter per listing (table `taps`, no user id), the
+  KPI "item taps per studio-page view". `GET /shop/stats` with the feed token answers Notify me per drop and taps per
+  product and day for the last 90 days.
+
 ## Users and what is stored
 
 There is no shared key. The app signs in with the user's own Bruce login (`X-Access-Token` and `X-User-Id`
@@ -256,7 +284,8 @@ auto-book on or off).
 A 401 from Bruce deletes the row too (and pushes "Auto-book paused"; the app sends the new login on its next start).
 Challenge, participant and history tables: see "Challenges with friends" above; the `nudges` table (one row per user:
 the last skipped habit told and its push) under "Skipped a habit"; `user_races` under "Race reminders" and "Friends
-going"; crews (`challenges.race_id`, `challenges.weekly`, `crew_updates`) under "Race crews".
+going"; crews (`challenges.race_id`, `challenges.weekly`, `crew_updates`) under "Race crews"; the shop's `storefronts`,
+`products`, `variants`, `drops`, `notify` (user id and drop) and `taps` (no user id) under "Shop".
 
 ## Set up
 
@@ -268,7 +297,8 @@ npx wrangler secret put APNS_KEY               # contents of the APNs AuthKey_XX
 npx wrangler secret put APNS_KEY_ID            # its Key ID
 npx wrangler secret put APNS_TEAM_ID           # Apple team id
 npx wrangler secret put RESEND_API_KEY         # optional: Resend API key, for booking emails
-npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges, user_races, crews
+npx wrangler secret put SHOP_FEED_TOKEN        # optional: lets the operator post the shop catalogue (POST /shop/import)
+npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges, user_races, crews, shop
 npx wrangler deploy
 ```
 
@@ -307,6 +337,14 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | `GET /races/going?ids=` | | `{going:{raceId:[{userId,name}]}, sharing, mine}`: the caller's Bruce friends who marked an upcoming race going (`ids` optional, comma-separated); empty with `sharing: false` while the caller shares no race (see "Friends going") |
 | `GET /races` | | `{races:[catalog entries], sources, importedAt}`: the organiser feed, laid over `races.json` by the apps (see "Race feed"). No login |
 | `POST /races/import` | `{"source","races":[...]}` with `Authorization: Bearer <RACE_FEED_TOKEN>` | Replaces a source's feed races → `{ok, source, imported, skipped}`; 401 without the token, 503 with none configured, 409 over 200 |
+| `GET /shop?city=STO` | | `{city, storefronts:[{studioId,sellerName,city,webshopUrl,pickupNote,consentAt}], products:[{id,studioId,title,kind,description,priceOre,vatRate,fulfilment,linkUrl,variants:[{id,label,inStock}]}], drops:[{id,studioId,productId,challengeId,title,opensAt,closesAt,minQty,maxQty,reserved,pickupFrom,linkUrl}]}`: the city's catalogue (see "Shop"). No login, cached 5 minutes |
+| `GET /shop/studio/<id>` | | `{studioId, storefront, products, drops}` for one studio (`storefront` null without a listing). No login |
+| `POST /shop/tap` | `{"productId"}` | One to the listing's anonymous daily counter → `{ok}`; 404 for an unknown listing. No login |
+| `POST /shop/import` | `{"source","storefronts":[...]}` with `Authorization: Bearer <SHOP_FEED_TOKEN>` | Replaces a source's storefronts → `{ok, source, imported, skipped}`; 401 without the token, 503 with none configured, 409 over 100 |
+| `GET /shop/stats` | with `Authorization: Bearer <SHOP_FEED_TOKEN>` | `{notify:[{dropId,n}], taps:[{productId,day,n}]}`, the last 90 days of taps |
+| `PUT /me/notify/<dropId>` | | Notify me on for a drop → `{ok, notify: true, push, email}`; 404 for an unknown drop. Stores the login; creates the user's row if needed |
+| `DELETE /me/notify/<dropId>` | | Notify me off → `{ok, notify: false}` |
+| `GET /me/shop` | | `{notify:[dropId]}`: the drops the member asked to be told about |
 | `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}`, or a crew `{"title","raceId","weekly","end","invite"}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366) or a race crew (see "Race crews"; 409 when already in a crew for the race), invites friends by push → 201 `{challenge}` |
 | `GET /challenges` | | `{challenges:[…], usesBruce:[userId]}`: the caller's challenges and invites, and which friends use the server |
 | `GET /challenges/<id>` | | Participants: `{challenge, leaderboard:[{userId,name,status,rank,score,visits,classes,dropins,minutes,studios,topStudio,topClass,categories,together,lastVisit,done,daily,recent}], months:[{month,label,entries}], crew, updatedAt}` (`crew` for crews only); others: a preview `{challenge, joinable}` |

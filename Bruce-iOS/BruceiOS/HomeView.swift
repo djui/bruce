@@ -29,6 +29,7 @@ struct HomeView: View {
                     } else {
                         UpcomingRacesRow()
                         if !spotlight.isEmpty { spotlightSection }
+                        ShopHomeSection()
                         if !categoryItems.isEmpty { categoriesSection }
                         ForEach(studioSections, id: \.self) { s in studioRow(s) }
                     }

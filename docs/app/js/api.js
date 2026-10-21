@@ -125,6 +125,12 @@ export const Server = {
   going: () => server('GET', '/races/going'),
   /** The organiser feed: {races: [catalog entries], sources, importedAt}; laid over races.json (races.js mergeFeed). */
   races: () => server('GET', '/races'),
+  /** The studio shop (shop.js): the city's catalogue (public), Notify me on a drop, the drops the member watches, one
+   *  anonymous tap on a listing. */
+  shop: (city) => server('GET', '/shop?city=' + enc(city)),
+  notify: (dropId, on) => server(on ? 'PUT' : 'DELETE', '/me/notify/' + enc(dropId)),
+  myShop: () => server('GET', '/me/shop'),
+  tap: (productId) => server('POST', '/shop/tap', { productId }),
 };
 
 const yyyymmdd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');

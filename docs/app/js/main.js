@@ -1,5 +1,5 @@
 // Entry point: login, layout (tab bar on phones, sidebar and side-by-side panes on wide screens) and the router.
-// Routes: #/<tab>[/class|studio|challenge|race/<id>][?query], tab = home | explore | checkin | friends | mine.
+// Routes: #/<tab>[/class|studio|challenge|race|product|shop/<id>][?query], tab = home | explore | checkin | friends | mine.
 // Share links: #challenge/<id> opens the challenge in Friends (after logging in when needed).
 import { $, $$, esc, icon, setZone, ls } from './util.js';
 import { Bruce, session } from './api.js';
@@ -10,6 +10,7 @@ import { renderClass, renderStudio } from './detail.js';
 import { toast, fitTitle } from './ui.js';
 import { renderChallenge } from './challenges.js';
 import { renderRace } from './racesui.js';
+import { renderShop, renderProduct } from './shopui.js';
 import { challengeIdFromHash, challengeRoute } from './links.js';
 import { openNotifications, openMenu } from './sheets.js';
 
@@ -38,7 +39,7 @@ function parse() {
   const parts = path.split('/').filter(Boolean);
   const tab = TABS.some((t) => t[0] === parts[0]) ? parts[0] : null;
   const detail = parts[1] === 'class' || parts[1] === 'studio' ? { kind: parts[1], id: +parts[2] }
-    : (parts[1] === 'challenge' || parts[1] === 'race') && parts[2] ? { kind: parts[1], id: decodeURIComponent(parts[2]) } : null;
+    : (parts[1] === 'challenge' || parts[1] === 'race' || parts[1] === 'product' || parts[1] === 'shop') && parts[2] ? { kind: parts[1], id: decodeURIComponent(parts[2]) } : null;
   return { tab, detail, query: query || '', params: new URLSearchParams(query || '') };
 }
 
@@ -104,6 +105,8 @@ function route() {
     else if (r.detail && r.detail.kind === 'studio') renderStudio(el, r.detail.id, ctx);
     else if (r.detail && r.detail.kind === 'challenge') renderChallenge(el, r.detail.id, ctx);
     else if (r.detail && r.detail.kind === 'race') renderRace(el, r.detail.id, ctx);
+    else if (r.detail && r.detail.kind === 'shop') renderShop(el, ctx);
+    else if (r.detail && r.detail.kind === 'product') renderProduct(el, r.detail.id, ctx);
     else if (isWide()) placeholderPane(el, r.tab);
   }
   current = Object.assign(current, { tab: r.tab, query: r.query, detail: r.detail, hash: location.hash });

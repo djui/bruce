@@ -70,6 +70,8 @@ struct RootView: View {
         // For you, goals and challenges are iPhone-only for now.
         case .forYou, .goals, .challenge: PlaceholderPage(title: "Available in the iPhone app")
         case .race(let id): RaceDetailView(raceId: id)
+        case .shop: ShopView()
+        case .product(let id): ProductView(productId: id)
         }
     }
 }

@@ -17,6 +17,7 @@ import { reached as milestonesReached, fresh as freshMilestone, newToYou } from 
 import { visitsFrom } from './visits.js';
 import { raceChipsHTML, raceChipsClick, racesListHTML, filteredRaces, nextRaceHTML, upcomingRacesHTML, myRacesHTML, raceDayCardHTML, myEntries, openRaceEditor, planClick, refreshPlanGoals } from './racesui.js';
 import { upcoming as upcomingRaces } from './races.js';
+import { shopHomeHTML, shopClick } from './shopui.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
  *  Menu, which end every tab's header (on wide screens they live in the sidebar instead). */
@@ -59,11 +60,13 @@ export const Home = {
       if (dm) { const seen = ls.get('bruce.milestonesSeen', []); if (!seen.includes(dm.dataset.dismissMs)) ls.set('bruce.milestonesSeen', seen.concat(dm.dataset.dismissMs)); this.refresh(); return; }
       if (e.target.closest('[data-goals]')) { if (St.goals().length) openGoals(); else openGoalEditor(null); return; }
       if (planClick(e)) return;
+      if (shopClick(e, () => this.refresh())) return;
       forYouClick(e, (id) => link('home', 'class', id));
     });
     homeData().then(() => this.refresh()).catch((e) => { const b = $('#home-body', el); if (b) b.innerHTML = empty('info', e.message); });
     St.loadRaces().then(() => this.refresh());
     St.loadGoing().then(() => this.refresh());   // friends going (crews.js), only while the server is on
+    St.loadShop().then(() => this.refresh());    // the studio shop (shop.js), empty unless a studio listed something
   },
   refresh() {
     const b = $('#home-body', this.el);
@@ -93,6 +96,7 @@ export const Home = {
         sub: it.start_time ? fmt(it.start_time, { weekday: 'long' }) + ' | ' + fmt(it.start_time, { day: 'numeric', month: 'long' }) + ' | ' + time(it.start_time) : '',
       })).join('') + '</div>';
     }
+    html += shopHomeHTML('home');
     const cats = sec('CATEGORIES');
     if (cats && cats.items.length) {
       html += '<div class="sec-row"><h2 class="sec-title">CATEGORIES</h2><a class="btn glass sm" href="#/explore?tab=studios">Show all</a></div><div class="hscroll cats">' + cats.items.map((it) =>
@@ -325,7 +329,7 @@ export function placeholderPane(el, tab) {
     makeMap(el.firstChild, pts, { center: c ? [c.latitude, c.longitude] : [59.33, 18.07] });
     return;
   }
-  const hint = { home: 'Pick a class or studio to see it here.', explore: ex.tab === 'races' ? 'Pick a race to see it here.' : 'Pick a class to see it here.',
+  const hint = { home: 'Pick a class, studio or listing to see it here.', explore: ex.tab === 'races' ? 'Pick a race to see it here.' : 'Pick a class to see it here.',
     mine: 'Pick one of your classes or races to see it here.',
     friends: "Pick a friend's class to see it here.", checkin: 'Check in at a studio, or scan the door QR code.' }[tab];
   el.innerHTML = '<div class="pane-empty"><img src="icon-rounded.png" alt="" width="72" height="72"><p>' + esc(hint || '') + '</p></div>';

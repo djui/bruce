@@ -7,6 +7,7 @@ import { hero, classRow, glassBtn, underlineTabs, chip, empty, loading, avatar, 
 import { openRules, openSimilar, openInvite, openVisitLimit, openTicket, openReview, checkInFlow, openBookAgain } from './sheets.js';
 import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
 import { firstVisitInfo, recentRating, ratingTrend, visitedStudios, LATE_CHECK_IN, RECENT_DAYS } from './firstvisit.js';
+import { shopRailHTML } from './shopui.js';
 
 let token = 0;
 const closeBtn = (ctx) => glassBtn(ctx.wide ? 'close' : 'back', 'data-dact="back"', ctx.wide ? 'Close' : 'Back');
@@ -232,6 +233,8 @@ export async function renderStudio(el, id, ctx) {
   draw();
   loadSchedule();
   loadDay();
+  // The studio's listings arrive with the city's catalogue; the rail is drawn once it is there.
+  if (!S.shop) St.loadShop().then(() => { if (t === token && state.tab === 'info') draw(); });
 
   function draw() {
     const lite = St.studio(id) || {};
@@ -275,6 +278,8 @@ export async function renderStudio(el, id, ctx) {
       '<div id="hours"></div>' + notice(currentAlert(s.alerts)) + firstVisitCard(s, null, null) +
       ((s.integration_door_type || '').toLowerCase() === 'parakey' ? '<div class="card parakey">' + icon('door') + '<div class="grow"><b>Doors open with Parakey</b><p class="muted">Use the Parakey app at the door. It is linked to your Bruce account at check-in.</p></div><a class="btn glass sm" href="https://parakey.co" target="_blank" rel="noopener">Parakey</a></div>' : '') +
       (facilities.length ? '<div class="card facilities">' + facilities.map((f) => '<span>' + icon(f.toLowerCase().includes('shower') ? 'spa' : f.toLowerCase().includes('lock') ? 'door' : 'person') + esc(f) + '</span>').join('') + '</div>' : '') +
+      // "Shop at the desk" (shopui.js): what the studio sells, only when it approved a listing.
+      shopRailHTML(id, ctx.tab) +
       (s.description ? '<div class="rich">' + rich(s.description) + '</div>' : '') +
       (a && a.latitude ? '<div class="map small" id="studio-map"></div><p class="address">' + icon('pin') + '<span>' + esc([a.address, a.zip_code, a.city].filter(Boolean).join(', ')) + '</span>' +
         '<a href="https://maps.apple.com/?q=' + encodeURIComponent(s.name) + '&ll=' + a.latitude + ',' + a.longitude + '" target="_blank" rel="noopener">Apple Maps</a>' +

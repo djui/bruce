@@ -171,6 +171,34 @@ enum Copy {
     static let raceRemindPriceServer = "With the server on, as a push and an email; else a notification on this device."
     static func planStartsHint(_ day: String) -> String { "Your \(RaceDay.format(day, "d MMMM")) start counts back from race day. Until then, Explore and For you work as usual." }
 
+    // MARK: Studio shop (Shop.swift)
+
+    static let shopTitle = "Shop"
+    static let shopAtDesk = "Shop at the desk"
+    static let shopAskAtDesk = "Ask at the desk"
+    static let shopWebshop = "Webshop"
+    static let shopInclVAT = "incl. VAT"
+    static let shopDropTag = "Drop"
+    static let shopNotifyMe = "Notify me"
+    static let shopNotifyOn = "We'll tell you when the drop opens"
+    static let shopNotifyOff = "Notify me is off"
+    static let shopNotifyHint = "A push and an email from our server when the pre-order opens. Nothing is reserved for you."
+    static let shopNotifyNeedsServer = "Notify me goes through our server: switch it on in Menu › Auto-book › Let the server book for me."
+    static let shopTowelTitle = "Forgot your towel?"
+    static let shopNotAffiliated = "The studio is the seller: prices, stock and returns are theirs. Brüce lists what the studio approved and reminds you; it never holds money or your address."
+    static let shopCatalogFooter = "Products are listed with each studio's written approval, in kronor incl. 25% VAT. Pickup at the desk comes first; Brüce never holds money or addresses."
+    static let shopEmptyKind = "Nothing in this group right now."
+    /// "Sold by Ångan Bastu AB. Pay at the desk." / "Sold by Yogaloft Södermalm AB."
+    static func shopSoldBy(_ seller: String, desk: Bool) -> String { desk ? "Sold by \(seller). Pay at the desk." : "Sold by \(seller)." }
+    /// "Pick up at Kärnan Reformer".
+    static func shopPickup(_ studio: String) -> String { "Pick up at \(studio)" }
+    /// Under "Forgot your towel?": "Rent one at the desk, or take a bastu towel home for 449 kr."
+    static func shopTowelBody(_ towel: Product) -> String { "Rent one at the desk, or take a \(towel.title.lowercased()) home for \(towel.priceText)." }
+    /// A drop's line: "Pre-order until Sun 7 Feb · one print run · pickup from Sat 20 Feb".
+    static func shopDropLine(_ d: Drop) -> String {
+        (["Pre-order until \(BruceDate.format(d.closes, "EEE d MMM"))", "one print run", d.pickupDayText.map { "pickup from \($0)" }].compactMap { $0 }).joined(separator: " · ")
+    }
+
     /// Under "Book every week" on the Book again sheet (BookAgain.swift).
     static let bookEveryWeek = "Books this series every week the moment it opens and tells you each time (Menu › Auto-book lists it)."
 
