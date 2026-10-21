@@ -183,6 +183,15 @@ My classes tabs, with class and studio pages and account sheets.
   and in Past, gets a **race chapter in Wrapped** ("Your races": each race of the year with its time), and on the
   iPhone goes to **Apple Health** as an outdoor workout of the race's kind when Health export is on. Studios with an
   organiser's training status wear a **Training club** badge, and the race page lists them (names only).
+- **Studio shop** (iPhone, Mac and web; needs the [server](server/README.md#shop)): what a studio sells at its desk or
+  in its webshop, listed with the studio's written approval. A **"Shop at the desk"** rail on the studio page ("Sold by
+  Ångan Bastu AB. Pay at the desk." with Ask at the desk or Webshop), **Home › Shop** with the city's catalogue and
+  chips (Drops, Towels, Mats, Grip socks…), a **drop card** on Home for a pre-order run with its countdown, "31 of 40"
+  and **Notify me** (a push and an email from the server when the pre-order opens), and **"Forgot your towel?"** on the
+  ticket after a check-in at a sauna or spa that lists one. Prices are in kronor incl. 25% VAT. The studio is the
+  seller: Brüce lists, reminds and never holds money or an address, no product carries a Bruce or Brüce mark, and the
+  whole feature stays hidden where nothing is listed. Production starts with an empty catalogue; the demo has three
+  fictional studios.
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.
@@ -273,6 +282,8 @@ selected, Explore shows the city's studios on a map next to the list.
   This week and Book (no Book every week: the web has no weekly auto-book), monthly goals from the plan, the race-day
   ticket, and race-week and price-step reminders sent by the server while it is on. **Friends going** (the toggle and faces), **crews** (Start a crew, the
   crew page with the week, invites, Leave) and results and the recovery week after the race.
+- **Shop**: the Shop section on Home with the drop card and Notify me, Home › Shop with chips, product pages with
+  "Ask at the desk" or the studio's webshop, the "Shop at the desk" rail on studio pages and the towel card on the ticket.
 - **Friends** (their upcoming classes), **My classes** (bookings, waitlist, bookmarks under Classes; your races under
   Races) and **Notifications**.
 - **Account menu**: plan, visit meters and strikes, statistics (visits per month and the visits behind each bar),
@@ -498,7 +509,9 @@ specific screen (`explore`, `classes`, `studio`, `detail`, `checkin`, `friends`,
 (add a race by hand), `trainforit` (a race page with Train for it), `planstart` (the plan sheet before starting),
 `raceplan` (the plan sheet in week 3 of 10), `racegoing` (a race page with two friends going), `racefriends` (its With
 friends card: Show friends I'm going and Start a crew), `crewrace` (a race page with a crew), `crew` (the crew page),
-`newcrew` (Start a crew), `racedone` (a race that is over, with See results), `myracespast` (My races › Past), …; the full list is in
+`newcrew` (Start a crew), `racedone` (a race that is over, with See results), `myracespast` (My races › Past), `shop`
+(Home › Shop), `shopdrops` (its Drops chip), `product` (the bastu towel), `drop` (the race-day tee), `studioshop` (the
+sauna's Shop at the desk rail), `towel` (the ticket with Forgot your towel?), `homeshop` (Home's Shop section), …; the full list is in
 [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)). Demo Home shows the Next race card with the plan's week.
 Demo mode is not reachable from the UI.
 

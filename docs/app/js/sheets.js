@@ -10,6 +10,7 @@ import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
 import { openWrapped } from './wrapped.js';
 import { cancelStrikes, cancelCost, POLICY, STRIKES_TO_BLOCK, BLOCK_DAYS, STRIKE_EXPIRY_DAYS, NO_SHOW_STRIKES } from './rules.js';
 import { templateOf, candidateDays, pick } from './bookagain.js';
+import { towelCardHTML } from './shopui.js';
 
 // ---------------------------------------------------------------- booking rules (book / cancel)
 
@@ -131,7 +132,9 @@ export function openTicket(bookingId) {
   const sid = b.studio_id || (b.class && b.class.studio_id);
   sheet('Ticket', '<div class="ticket">' + '<div class="ticket-head">' + avatar(S.user || {}, 64) + '<div><h2>' + esc(fullName(S.user) || 'Member') + '</h2><p class="muted">' + esc(fmt(b.checked_in_at, { weekday: 'long', day: 'numeric', month: 'long' })) + '</p></div></div>' +
     '<div class="ticket-main">' + icon('checkSeal', 'seal') + '<div class="grow"><b>' + esc((b.class && b.class.title) || 'Solo training') + '</b><p class="muted">' + esc(St.studioName(sid)) + '</p></div>' +
-    '<div class="ticket-time"><small>CHECKED IN</small><b>' + esc(time(b.checked_in_at)) + '</b></div></div><div class="ticket-live"><i></i>' + esc(St.studioName(sid)) + ' · Brüce</div></div>', { cls: 'tall' });
+    '<div class="ticket-time"><small>CHECKED IN</small><b>' + esc(time(b.checked_in_at)) + '</b></div></div><div class="ticket-live"><i></i>' + esc(St.studioName(sid)) + ' · Brüce</div></div>' +
+    // After a check-in at a sauna or spa that lists a towel (shopui.js).
+    towelCardHTML(sid), { cls: 'tall' });
 }
 
 let checkInBusy = false;

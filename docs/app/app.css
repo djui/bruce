@@ -971,3 +971,49 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .ch-card.crew { background: linear-gradient(150deg, #13303a, #1f5a52); }
 .rcard .going .avatar, .race-banner .going .avatar, .rcard .going-more { background: rgba(255, 255, 255, 0.9); color: #1d1d1f; }
 .card.crew-race { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+
+/* ---------------------------------------------------------------- Studio shop (shop.js, shopui.js; ShopViews.swift) */
+
+:root { --t-towel: #f1e7d6; --t-mat: #e1ead8; --t-socks: #dde9f1; --t-apparel: #eef8c4; --t-sauna: #f3e1dd; --t-other: #e8e8ec; --drop-a: #1f6f78; --drop-b: #0f2f36; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --t-towel: #3b3227; --t-mat: #283223; --t-socks: #1f2c35; --t-apparel: #2f3613; --t-sauna: #3a2724; --t-other: #2c2c2e; } }
+:root[data-theme="dark"] { --t-towel: #3b3227; --t-mat: #283223; --t-socks: #1f2c35; --t-apparel: #2f3613; --t-sauna: #3a2724; --t-other: #2c2c2e; }
+.part { display: grid; place-items: center; aspect-ratio: 2 / 1; border-radius: 14px; color: var(--label); }
+.part .i { width: 36px; height: 36px; opacity: 0.55; stroke-width: 1.4; }
+.part.small { width: 46px; height: 46px; aspect-ratio: 1; border-radius: 12px; flex: none; }
+.part.small .i { width: 22px; height: 22px; }
+.k-towel { background: var(--t-towel); } .k-mat { background: var(--t-mat); } .k-socks { background: var(--t-socks); }
+.k-apparel { background: var(--t-apparel); } .k-sauna { background: var(--t-sauna); } .k-other { background: var(--t-other); }
+.ptile { display: grid; gap: 2px; min-width: 0; color: var(--label); text-decoration: none; }
+.ptile > b { margin-top: 4px; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ptile > span { font-size: 12px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ptile > span em { font-style: normal; font-weight: 800; color: var(--label); }
+.ptile.compact .part { aspect-ratio: 4 / 3; }
+.hscroll.shop-row .ptile { flex: none; width: 150px; }
+.shop-rail .hscroll.shop-row .ptile { width: 116px; }
+.shop-grid { display: grid; gap: 16px 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+.mtag { display: inline-block; padding: 3px 8px; border-radius: 9px; background: var(--lime); color: var(--on-lime); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.drop-card { display: grid; gap: 10px; margin: 12px 0; padding: 16px; border-radius: 24px; color: #fff; background: linear-gradient(140deg, var(--drop-a), var(--drop-b)); }
+.drop-card .drop-body { display: grid; gap: 6px; color: inherit; text-decoration: none; }
+.drop-card .drop-body > b { font: 900 18px/1.15 var(--display); }
+.drop-card .drop-body > span { font-size: 13px; opacity: 0.85; }
+.drop-glyph { width: 44px; height: 44px; opacity: 0.35; stroke-width: 1.2; }
+.drop-meta { display: flex; justify-content: space-between; gap: 6px; font-size: 12px; font-weight: 700; opacity: 1 !important; }
+.drop-meta span { display: inline-flex; gap: 4px; align-items: center; }
+.drop-meta .i { width: 14px; height: 14px; }
+.drop-card .meter { background: rgba(255, 255, 255, 0.22); margin-top: 0; }
+.drop-card .row-between > b { font-size: 15px; font-weight: 800; }
+.drop-card .btn.glass.on { background: rgba(255, 255, 255, 0.22); color: #fff; }
+.card.drop-block { display: grid; gap: 8px; background: color-mix(in srgb, var(--lime) 14%, var(--bg-2)); }
+.card.drop-block p { font-size: 14px; }
+.card.drop-block .meter { margin-top: 0; }
+.card.drop-block .toggle { padding-top: 8px; }
+.product-hero { aspect-ratio: 16 / 10; max-height: 300px; display: grid; place-items: center; color: var(--label); }
+.product-glyph { width: 96px; height: 96px; opacity: 0.5; stroke-width: 1.1; }
+.product-title { margin: 12px 0 4px; font: 900 24px/1.1 var(--display); text-transform: uppercase; }
+.price-row { display: flex; align-items: baseline; gap: 8px; margin: 10px 0 8px; }
+.price-row b { font-size: 24px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.chip.off { color: var(--label-3); }
+.card.shop-rail { display: grid; gap: 10px; }
+.card.shop-rail .section-head { margin: 0; }
+.card.shop-rail .seller { align-items: center; }
+.card.towel-card { margin-top: 14px; }

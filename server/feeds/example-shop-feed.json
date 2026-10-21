@@ -1,0 +1,25 @@
+{
+  "source": "example-operator",
+  "notice": "A shop feed for POST /shop/import (server/README.md, section Shop). One entry per studio that approved its listing by email (consentAt). The studio is the seller; Brüce lists, reminds and never holds money. Example data: a fictional studio, no Bruce or Brüce marks on anything.",
+  "storefronts": [
+    {
+      "studioId": 9850,
+      "sellerName": "Example Bastu AB",
+      "city": "STO",
+      "webshopUrl": "https://shop.example.org/example-bastu",
+      "pickupNote": "At the desk, every day 07–22",
+      "consentAt": "2026-11-09",
+      "products": [
+        { "id": "example-bastu-towel", "title": "Bastu towel", "kind": "towel", "description": "Organic cotton · 90 × 180 cm", "priceOre": 44900, "vatRate": 25, "fulfilment": "desk",
+          "linkUrl": "https://shop.example.org/example-bastu/towel", "variants": [{ "id": "natural", "label": "Natural" }, { "id": "charcoal", "label": "Charcoal" }] },
+        { "id": "example-felt-hat", "title": "Felt sauna hat", "kind": "sauna", "description": "100% wool felt", "priceOre": 29900, "fulfilment": "desk" },
+        { "id": "example-race-tee", "title": "Example Race Day tee", "kind": "apparel", "description": "Organic cotton, printed in the EU", "priceOre": 34900, "fulfilment": "pod",
+          "variants": [{ "id": "xs", "label": "XS", "podSku": "tee-xs" }, { "id": "s", "label": "S", "podSku": "tee-s" }, { "id": "m", "label": "M", "podSku": "tee-m" }, { "id": "l", "label": "L", "podSku": "tee-l" }, { "id": "xl", "label": "XL", "podSku": "tee-xl" }] }
+      ],
+      "drops": [
+        { "id": "example-race-day-2027", "productId": "example-race-tee", "title": "Example Race Day tee", "opensAt": "2027-01-25T08:00:00Z", "closesAt": "2027-02-07T22:00:00Z",
+          "minQty": 25, "maxQty": 40, "reserved": 31, "pickupFrom": "2027-02-20", "linkUrl": "https://shop.example.org/example-bastu/race-day-tee" }
+      ]
+    }
+  ]
+}

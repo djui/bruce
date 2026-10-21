@@ -149,6 +149,8 @@ extension View {
             case .goals: GoalsView()
             case .challenge(let id): ChallengeView(challengeId: id)
             case .race(let id): RaceDetailView(raceId: id)
+            case .shop: ShopView()
+            case .product(let id): ProductView(productId: id)
             }
         }
     }

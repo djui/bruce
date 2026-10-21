@@ -793,6 +793,8 @@ struct StudioDetailView: View {
                 LimeButton(title: "Buy ticket for SEK \(price)") { m.present(.checkout(studioId)) }
             }
             if studio?.hasOpenings == true || m.schedules[studioId]?.isEmpty == false { openingHours }
+            // "Shop at the desk" (Shop.swift): what the studio sells, only when it approved a listing.
+            ShopRail(studioId: studioId)
             if hasClasses {
                 Button { withAnimation { tab = 1 } } label: {
                     InfoRow(title: "Show classes", subtitle: m.studioClasses[studioId] == nil ? "Loading…" : "\(classes.count) classes in the next \(m.studioClassDays[studioId] ?? 0) days").padding(16)
@@ -983,6 +985,8 @@ struct TicketSheet: View {
                     }
                     .padding(18)
                     .glassEffect(.regular.tint(Theme.lime.opacity(0.18)), in: .rect(cornerRadius: 26))
+                    // After a check-in at a sauna or spa that lists a towel (Shop.swift).
+                    if let towel = m.towelPrompt(studioId: sid) { TowelCard(towel: towel) }
                     // Animated stripe so staff can tell it is a live screen, not a screenshot.
                     TimelineView(.animation) { t in
                         let x = CGFloat(t.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2) / 2)

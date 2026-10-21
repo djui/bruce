@@ -25,6 +25,9 @@ enum Route: Hashable {
     case challenge(String)
     /// A race page by catalog id, or "custom-<uuid>" for a race added by hand (Races.swift).
     case race(String)
+    /// Home › Shop: the city's catalogue (Shop.swift), and a product page by its id.
+    case shop
+    case product(String)
 }
 
 enum SheetRoute: Hashable {
@@ -104,6 +107,8 @@ final class AppModel {
     /// Demo: participant detail to open on the challenge page / Wrapped card to start at (99 = the last).
     var demoChallengeMember: Int?
     var demoWrappedCard = 0
+    /// Demo: the Shop screen's chip to start on ("drops", a ProductKind), then cleared.
+    var demoShopKind: String?
 
     // Session & safety
     var session: Session? = AppModel.demo ? nil : TokenStore.resolve()
@@ -257,6 +262,13 @@ final class AppModel {
     @ObservationIgnored var raceGoingTask: Task<Void, Never>?
     /// Explore switches to this segment when set (0 Studios, 1 Classes, 2 Races), then clears it.
     var exploreTabRequest: Int?
+    /// Studio shop (Shop.swift): the city's catalogue from our server (nil until read, empty when nothing is listed), the
+    /// drops the member asked to be told about, and the listings already counted this run.
+    var shop: ShopCatalog?
+    var shopNotify: Set<String> = []
+    var shopLoading = false
+    @ObservationIgnored var shopFetchedAt: Date?
+    @ObservationIgnored var shopTapped: Set<String> = []
     /// Challenges with friends (Challenges.swift), from the auto-book server.
     var challenges: [ChallengeSummary] = []
     var challengeDetails: [String: ChallengeDetail] = [:]
@@ -608,7 +620,7 @@ final class AppModel {
         guard id != cityId else { dismissSheets(); return }
         cityId = id; customArea = false; classesByDay = [:]
         dismissSheets()
-        Task { await loadHome() }
+        Task { await loadHome(); await loadShop(force: true) }
     }
     func isBookmarked(_ classId: Int) -> Bool { bookmarks.contains { $0.class?.id == classId } }
     /// POST /v52/bookmark, DELETE /v52/bookmark/<bookmark id> [c3:73, 77]. Demo: local only.
@@ -745,6 +757,7 @@ final class AppModel {
         Task { await loadRaces() }   // public catalog file (Races.swift), also logged out
         guard tokenUsable else { return }   // logged out: welcome screen; sneak peek loads public data
         if let c = try? await BruceAPI.fetchCities(token: token), !c.isEmpty { cities = c }
+        Task { await loadShop() }    // the city's studio shop (Shop.swift), from our server
         async let a: Void = loadStudios()
         async let b: Void = loadHome()
         async let c: Void = loadMine()

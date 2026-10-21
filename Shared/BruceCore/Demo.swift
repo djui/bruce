@@ -188,6 +188,7 @@ extension AppModel {
         loadDemoInsights()
         visitHistory = Self.demoVisits
         loadDemoRaces()   // after the history: Train for it adds this week's check-ins
+        loadDemoShop()    // the three shop studios and the catalogue (DemoShop.swift)
         Task { await refreshRecommendations() }
 
         // BRUCE_SCREEN=<name> opens a screen directly (for screenshots).
@@ -229,6 +230,15 @@ extension AppModel {
         case "newcrew": tab = .explore; demoExploreTab = 2; push(.race("tough-viking-stadion-2027")); present(.newCrew("tough-viking-stadion-2027"))
         case "racedone": tab = .myClasses; showRacesInMyClasses = true; push(.race("midnattsloppet-stockholm-2026"))
         case "myracespast": tab = .myClasses; showRacesInMyClasses = true; demoScrollBottom = true
+        // Studio shop (Shop.swift): Home › Shop, a product page, the sauna's "Shop at the desk" rail, the ticket with
+        // "Forgot your towel?" after a check-in at the sauna, and the race-day tee drop.
+        case "shop": push(.shop)
+        case "shopdrops": push(.shop); demoShopKind = "drops"
+        case "product": push(.product("angan-bastu-towel"))
+        case "studioshop": push(.studio(ShopCatalog.demoAngan)); demoScrollBottom = true
+        case "towel": push(.studio(ShopCatalog.demoAngan)); loadDemoSaunaCheckIn(); present(.ticket(5002))
+        case "drop": push(.product("karnan-race-day-tee"))
+        case "homeshop": tab = .home; demoScrollBottom = true
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
         case "detail": push(.classDetail(9001))

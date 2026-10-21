@@ -149,6 +149,8 @@ struct StudioDetailView: View {
             }
             .padding(.horizontal, Theme.gutter).padding(.top, 18)
             openingHours.padding(.top, 22)
+            // "Shop at the desk" (Shop.swift): what the studio sells, only when it approved a listing.
+            ShopRail(studioId: studioId)
             if hasClasses { classesRow }
             StudioInfoBlock(studio: studio, showMoreAbout: false)
         }
@@ -410,6 +412,8 @@ struct TicketSheet: View {
                     Image(systemName: "checkmark.circle").font(.system(size: 30, weight: .light))
                 }
                 .padding(.horizontal, Theme.gutter).padding(.top, 20)
+                // After a check-in at a sauna or spa that lists a towel (Shop.swift).
+                if let towel = m.towelPrompt(studioId: b.studioId ?? b.class?.studioId ?? 0) { TowelCard(towel: towel).padding(.top, 16) }
                 Spacer()
                 VStack(spacing: 18) {
                     Avatar(fileId: m.user?.photo, initials: m.user?.initials ?? "", size: 180)

@@ -51,6 +51,24 @@ const studios = [
     studio_categories: [cat(19, 'Pilates')], studio_addresses: addr('Example street 30', '111 57', 59.3352, 18.0628),
     visit_limit: { items: [{ label: 'BASE', limit: 0 }, { label: 'BLACK', limit: 0 }, { label: 'EPIC', limit: 0 }] },
     description: 'A placeholder reformer pilates studio for the offline demo.' },
+  // The studio shop's three fictional studios (shop.js; DemoShop.swift): a yoga studio, a reformer studio and a sauna.
+  { id: 9830, name: 'Yogaloft Södermalm', status: 'LIVE', vicinity: 'Södermalm', city_id: 1, qr_code_id: '9830',
+    photo: null, rating: { total: 210, average: 485 }, has_classes: true,
+    studio_categories: [cat(2, 'Yoga')], studio_addresses: addr('Example street 12', '118 46', 59.314, 18.071),
+    visit_limit: { items: [{ label: 'BASE', limit: 4 }, { label: 'BLACK', limit: 8 }, { label: 'EPIC', limit: 0 }] },
+    studio_facilities: [{ facility: { code: 'changing', title: 'Changing room' } }, { facility: { code: 'shower', title: 'Shower' } }],
+    description: 'A fictional yoga studio used for the offline demo. Mats and straps at the desk.' },
+  { id: 9840, name: 'Kärnan Reformer', status: 'LIVE', vicinity: 'Hornstull', city_id: 1, qr_code_id: '9840',
+    photo: null, rating: { total: 96, average: 479 }, has_classes: true,
+    studio_categories: [cat(22, 'Reformer')], studio_addresses: addr('Example square 3', '117 33', 59.3156, 18.033),
+    visit_limit: { items: [{ label: 'BASE', limit: 2 }, { label: 'BLACK', limit: 4 }, { label: 'EPIC', limit: 8 }] },
+    description: 'A fictional reformer studio used for the offline demo. Grip socks at the desk; the race-day tee is a pre-order.' },
+  { id: 9850, name: 'Ångan Bastu', status: 'LIVE', vicinity: 'Hornstull', city_id: 1, qr_code_id: '9850', label: 'WELLNESS', has_openings: true,
+    photo: null, rating: { total: 150, average: 480, distribution: { 1: 0, 2: 2, 3: 6, 4: 32, 5: 110 } },
+    studio_categories: [cat(24, 'Sauna')], studio_addresses: addr('Example quay 7', '117 33', 59.317, 18.029),
+    visit_limit: { items: [{ label: 'BASE', limit: -1 }, { label: 'BLACK', limit: 4 }, { label: 'EPIC', limit: 8 }] },
+    studio_facilities: [{ facility: { code: 'changing', title: 'Changing room' } }, { facility: { code: 'shower', title: 'Shower' } }, { facility: { code: 'sauna', title: 'Sauna' } }],
+    description: 'A fictional sauna used for the offline demo. Towels for rent at the desk.' },
 ];
 const templates = [
   [1489, 'Morning Flow', 7, 0, 60, 'Instructor D', 14, [2]],
@@ -543,7 +561,55 @@ export function handleServer(method, path, body) {
       sharing: true, mine: demoGoingMine });
   }
   if (path === '/me' && method === 'GET') return ok2({ waitlist: [] });
+  // The studio shop (shop.js): the demo catalogue, Notify me and the tap counter (counted nowhere).
+  if (path.startsWith('/shop?city=') && method === 'GET') return ok2(path.endsWith('=STO') ? DEMO_SHOP() : { city: path.slice(11), storefronts: [], products: [], drops: [] });
+  if ((m = path.match(/^\/shop\/studio\/(\d+)$/)) && method === 'GET') {
+    const c = DEMO_SHOP(), sid = +m[1];
+    return ok2({ studioId: sid, storefront: c.storefronts.find((s) => s.studioId === sid) || null, products: c.products.filter((p) => p.studioId === sid), drops: c.drops.filter((d) => d.studioId === sid) });
+  }
+  if (path === '/shop/tap' && method === 'POST') return ok2({ ok: true });
+  if ((m = path.match(/^\/me\/notify\/([a-z0-9-]+)$/))) {
+    if (!DEMO_SHOP().drops.some((d) => d.id === m[1])) return fail(404, 'drop not found');
+    if (method === 'PUT') demoNotify.add(m[1]); else demoNotify.delete(m[1]);
+    return ok2({ ok: true, notify: method === 'PUT', push: false, email: null });
+  }
+  if (path === '/me/shop' && method === 'GET') return ok2({ notify: [...demoNotify].sort() });
   return fail(404, 'Not available in the demo: ' + path);
+}
+
+// ---------------------------------------------------------------- the studio shop (shop.js)
+
+const demoNotify = new Set();
+/** The demo catalogue (DemoShop.swift): three fictional studios with the listings from the Studio Merch mockups and a
+ *  race-day tee drop that closes in two and a half days. No product carries a Bruce or Brüce mark; the webshop is made up.
+ *  Production starts with an empty catalogue. */
+export function DEMO_SHOP(now) {
+  const t = now || Date.now();
+  const day = (n) => new Date(t + n * 86400000).toISOString().slice(0, 10);
+  return {
+    city: 'STO',
+    storefronts: [
+      { studioId: 9830, sellerName: 'Yogaloft Södermalm AB', city: 'STO', webshopUrl: 'https://shop.example.org/yogaloft', pickupNote: 'At the desk, every day 07–21', consentAt: '2026-11-10' },
+      { studioId: 9840, sellerName: 'Kärnan Reformer AB', city: 'STO', webshopUrl: null, pickupNote: 'At the desk, weekdays 06–20', consentAt: '2026-11-12' },
+      { studioId: 9850, sellerName: 'Ångan Bastu AB', city: 'STO', webshopUrl: 'https://shop.example.org/angan-bastu', pickupNote: 'At the desk, every day 07–22', consentAt: '2026-11-09' },
+    ],
+    products: [
+      { id: 'yogaloft-cork-mat', studioId: 9830, title: 'Cork yoga mat', kind: 'mat', description: 'Natural cork on rubber · 183 × 61 cm · 4 mm', priceOre: 79500, vatRate: 25, fulfilment: 'link', linkUrl: 'https://shop.example.org/yogaloft/cork-mat', variants: [] },
+      { id: 'yogaloft-strap', studioId: 9830, title: 'Cotton yoga strap', kind: 'other', description: '2.5 m, metal buckle', priceOre: 14900, vatRate: 25, fulfilment: 'desk', linkUrl: null, variants: [] },
+      { id: 'karnan-grip-socks', studioId: 9840, title: 'Grip socks', kind: 'socks', description: 'Cotton with silicone grip · 2-pack', priceOre: 14900, vatRate: 25, fulfilment: 'desk', linkUrl: null,
+        variants: [{ id: 's-m', label: 'S/M', inStock: true }, { id: 'l-xl', label: 'L/XL', inStock: true }] },
+      { id: 'karnan-race-day-tee', studioId: 9840, title: 'Hornstull Race Day tee', kind: 'apparel', description: 'Organic cotton, printed in the EU · unisex', priceOre: 34900, vatRate: 25, fulfilment: 'pod', linkUrl: null,
+        variants: ['xs', 's', 'm', 'l', 'xl'].map((s) => ({ id: s, label: s.toUpperCase(), inStock: true })) },
+      { id: 'angan-bastu-towel', studioId: 9850, title: 'Bastu towel', kind: 'towel', description: 'Organic cotton · 90 × 180 cm', priceOre: 44900, vatRate: 25, fulfilment: 'desk', linkUrl: 'https://shop.example.org/angan-bastu/towel',
+        variants: [{ id: 'natural', label: 'Natural', inStock: true }, { id: 'charcoal', label: 'Charcoal', inStock: true }] },
+      { id: 'angan-felt-hat', studioId: 9850, title: 'Felt sauna hat', kind: 'sauna', description: '100% wool felt', priceOre: 29900, vatRate: 25, fulfilment: 'desk', linkUrl: null, variants: [] },
+      { id: 'angan-seat-cover', studioId: 9850, title: 'Linen seat cover', kind: 'sauna', description: 'Washed linen · 50 × 150 cm', priceOre: 19900, vatRate: 25, fulfilment: 'desk', linkUrl: null, variants: [] },
+    ],
+    drops: [
+      { id: 'hornstull-race-day-2027', studioId: 9840, productId: 'karnan-race-day-tee', challengeId: null, title: 'Hornstull Race Day tee', opensAt: t - 5 * 86400000, closesAt: t + 2 * 86400000 + 14 * 3600000,
+        minQty: 25, maxQty: 40, reserved: 31, pickupFrom: day(12), linkUrl: 'https://shop.example.org/karnan/race-day-tee' },
+    ],
+  };
 }
 
 // ---------------------------------------------------------------- races (races.js)

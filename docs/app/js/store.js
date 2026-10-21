@@ -9,6 +9,7 @@ import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRace
 import { makePlan, count as planCount, category as planCategory } from './raceplan.js';
 import { DEMO_RACES, DEMO_MY_RACES, DEMO_TRAINING_CLUBS } from './demo.js';
 import { sharesGoing } from './crews.js';
+import { decode as decodeShop } from './shop.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
 const RACES_CACHE_MS = 6 * 3600 * 1000;
@@ -41,6 +42,7 @@ export const S = {
   races: null, racesError: null, racesLoading: null,   // the race catalog (races.js), null until read
   trainingClubs: [],                                   // studios with an organiser's training status (the catalog's trainingClubs)
   raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0, raceGoingLoading: null,   // friends going (crews.js)
+  shop: null, shopAt: 0, shopLoading: null, shopNotify: new Set(), shopTapped: new Set(),       // the studio shop (shop.js), null until read
 };
 
 export const emit = () => S.listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
@@ -68,7 +70,7 @@ export function setAuth(a) {
 }
 export function clearData() {
   ['studios', 'studioDetails', 'classDetails', 'bookings', 'standbys', 'watches', 'openings', 'bookmarks', 'favorites', 'classCache'].forEach((k) => S[k].clear());
-  Object.assign(S, { raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0 });
+  Object.assign(S, { raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0, shop: null, shopAt: 0, shopNotify: new Set(), shopTapped: new Set() });
   Object.assign(S, { history: null, historyLoading: null, challenges: null, friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null, limits: [], user: null, membership: null, block: null, home: null, studiosLoading: null });
 }
 
@@ -90,14 +92,15 @@ export function homeCountry() { const c = city().country && city().country.code;
 
 /** Switches the city (Settings and the Explore filter): drops city caches and tells the app. */
 export function selectCity(id) {
-  S.settings.cityId = +id; saveSettings(); S.classCache.clear(); S.home = null;
+  S.settings.cityId = +id; saveSettings(); S.classCache.clear(); S.home = null; S.shop = null; S.shopAt = 0;
   window.dispatchEvent(new Event('bruce:city'));
 }
 
 export function loadStudios(onProgress) {
   if (S.studiosLoading) return S.studiosLoading;
   const key = 'bruce.studios.' + (isDemo() ? 'demo' : country());
-  const cached = ls.get(key, null);
+  // The demo answers in the browser at once, and its list changes with the app: never a cached copy.
+  const cached = isDemo() ? null : ls.get(key, null);
   if (cached && Date.now() - cached.at < STUDIO_CACHE_MS && cached.studios.length) {
     cached.studios.forEach((s) => S.studios.set(s.id, s));
     S.studiosLoading = Promise.resolve();
@@ -181,6 +184,7 @@ export async function bootstrap() {
   loadReviewable();
   loadAccount();
   loadStudios().catch(() => {});
+  loadShop();
 }
 
 // ---------------------------------------------------------------- derived state
@@ -494,6 +498,36 @@ function raceDevice() {
   if (!d) { d = 'web-' + Math.random().toString(36).slice(2, 12); ls.set('bruce.raceDevice', d); }
   return d;
 }
+// ---------------------------------------------------------------- the studio shop (shop.js, shopui.js)
+
+/** The city's catalogue from our server (GET /shop?city=), at most every 10 minutes unless `force`; the demo answers in the
+ *  browser. With the server off nothing is listed. A failed read keeps whatever is shown. */
+export function loadShop(force) {
+  if (!serverOn() && !isDemo()) { S.shop = decodeShop(null); return Promise.resolve(S.shop); }
+  if (S.shopLoading) return S.shopLoading;
+  const code = city().code || 'STO';
+  if (!force && S.shop && S.shop.city === code && Date.now() - S.shopAt < 600000) return Promise.resolve(S.shop);
+  S.shopLoading = Server.shop(code).then(async (json) => {
+    S.shop = decodeShop(json); S.shopAt = Date.now();
+    if (loggedIn()) await Server.myShop().then((r) => { S.shopNotify = new Set(r.notify || []); }).catch(() => {});
+  }).catch(() => { if (!S.shop) S.shop = decodeShop(null); })
+    .then(() => { S.shopLoading = null; emit(); return S.shop; });
+  return S.shopLoading;
+}
+/** Notify me on a drop: a push (to the iPhone app) and an email from our server when the pre-order opens. */
+export async function setNotify(d, on) {
+  if (!serverOn() && !isDemo()) throw new Error('Notify me goes through our server, which is off in Settings.');
+  await Server.notify(d.id, on);
+  if (on) S.shopNotify.add(d.id); else S.shopNotify.delete(d.id);
+  emit();
+}
+/** One to the day's anonymous counter when a listing is opened; never in the demo, once per listing and visit. */
+export function tapProduct(id) {
+  if (isDemo() || !serverOn() || S.shopTapped.has(id)) return;
+  S.shopTapped.add(id);
+  Server.tap(id).catch(() => {});
+}
+
 /** Deletes a monthly goal; one made from a Train for it plan stays deleted (raceplan.js planGoals `skip`). */
 export function deleteGoal(g) {
   if (g.raceKey) {
