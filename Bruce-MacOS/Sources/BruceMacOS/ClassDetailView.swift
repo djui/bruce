@@ -127,6 +127,8 @@ struct ClassDetailView: View {
                                 .frame(maxWidth: .infinity).frame(height: 54).background(Capsule().fill(Theme.chipGrey)).padding(.top, 24)
                         }
                         limitNotice.padding(.top, 16)
+                    } else if m.offersOpeningWatch(c), let opens = c.bookingOpens {
+                        OpeningWatchBar(c: c, opens: opens).padding(.top, 24)
                     } else {
                         LimeButton(title: "Book") { m.present(.bookingRules(c.id)) }.padding(.top, 24)
                     }

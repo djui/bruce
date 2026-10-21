@@ -68,6 +68,9 @@ extension AppModel {
           "instructor":"Instructor F","alert":"Placeholder notice: this class is held in the outdoor area.","description":"A placeholder functional class for the offline demo.","bookable_latest_time":"\(at(0, 23, 15))","unbookable_latest_time":"\(at(0, 11, 25))","early_check_in_minutes":60,"late_check_in_minutes":10,
           "class_categories":[{"category_id":12,"main":true}]},
          {"id":9006,"studio_id":1489,"title":"Morning Flow","start_time":"\(at(1, 7, 0))","end_time":"\(at(1, 8, 0))","instructor":"Instructor D","available_spots":6,"class_categories":[{"category_id":2,"main":true}]},
+         {"id":9011,"studio_id":9520,"title":"Sound Bath Workshop","start_time":"\(at(10, 14, 0))","end_time":"\(at(10, 15, 30))","instructor":"Instructor G","spots":12,"available_spots":12,
+          "bookable_earliest_time":"\(at(3, 14, 0))","bookable_latest_time":"\(at(10, 13, 50))","unbookable_latest_time":"\(at(10, 2, 0))","unbookable_latest":43200,"early_check_in_minutes":30,"late_check_in_minutes":5,
+          "description":"A placeholder one-off workshop for the offline demo. Listed two weeks ahead, bookable from a week before.","class_categories":[{"category_id":5,"main":true}]},
          {"id":9009,"studio_id":9520,"title":"Salt Cave","start_time":"\(at(0, 22, 30))","end_time":"\(at(0, 23, 15))","instructor":"**Instructor G - English speaking","spots":6,"available_spots":4},
          {"id":9010,"studio_id":1489,"title":"Deleted Placeholder","start_time":"\(at(0, 22, 45))","end_time":"\(at(0, 23, 30))","instructor":"Instructor H","available_spots":5,"deleted":true,"deleted_at":"\(at(0, 8, 0))"},
          {"id":9007,"studio_id":1489,"title":"Morning Meditation","start_time":"\(at(1, 9, 0))","end_time":"\(at(1, 9, 45))","instructor":"Instructor E","available_spots":9,"class_categories":[{"category_id":2,"main":true}]}]
@@ -300,6 +303,8 @@ extension AppModel {
             if let t = BookAgainTemplate(studioId: 1489, masterId: nil, title: "Morning Flow", start: classDetails[9006]?.start.flatMap { cal.date(byAdding: .day, value: -7, to: $0) }, instructor: "Instructor D") {
                 sheets = [.statistics, .bookAgain(t)]
             }
+        case "bookwhenopens": push(.classDetail(9011))
+        case "bookwhenopenswatching": if let w = classDetails[9011].flatMap(OpeningWatch.init) { openingWatches = [w] }; push(.classDetail(9011))
         case "firstvisit": push(.classDetail(9009))   // Example Salt Spa: no check-in in the demo history
         case "firstvisitstudio": push(.studio(9800))   // Example Climbing Hall: never visited in the demo
         case "detailmap": push(.classDetail(9001)); demoScrollBottom = true

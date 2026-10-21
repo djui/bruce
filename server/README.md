@@ -67,6 +67,16 @@ class that only opens or is only found after its free cancellation ("Open for bo
 late)"). Booking pushes (category `AUTOBOOK_BOOKED`, a **Cancel booking** button in the iPhone app) say what cancelling
 costs now: "Free cancel until 06:00." or "Cancel before 15:00: 1 strike. Before 17:00: 2. After that, or a no-show: 3."
 
+## Book when booking opens: one-off classes
+
+Classes are listed about two weeks ahead but open for booking seven days ahead (`bookable_earliest_time`). "Book every
+week" covers a weekly series; a one-off class (a workshop, a special) gets **Book when booking opens** on its class
+page instead: `PUT /me/opening/<classId>` reads the class once, stores its open moment, and the minute cron books it
+exactly like a weekly occurrence: one try at the open moment with the same 20-second retries, the same late-spot rule
+(a class that only opens after its free cancellation is offered, not booked) and the same "Booked" push and email.
+At most 5 classes per user can wait this way, and nothing is polled in between. The app can also do it without the
+server: a local notification with a Book button at the open moment, as for weekly classes.
+
 ## Challenges with friends
 
 Bruce does not show friends' past visits, so challenges need the server: each participant's row holds their login,
@@ -170,10 +180,12 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | Request | Body | Effect |
 |---|---|---|
 | `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true,"lateSpots":"ask"}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes, `nudgeDays` (1-7, default 4) sets their quiet days; `lateSpots` (optional, `ask` or `book`, default `ask`) is what happens to a spot 3-12 h before the class (see "Late spots") |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots}` |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], opening:[{classId,title,start,opens}], maxOpening, log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots}` |
 | `DELETE /me` | | Deletes the user's row and history; in a challenge it keeps the login and clears rules, watches and goals |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |
+| `PUT /me/opening/<classId>` | | Books a listed class that is not bookable yet once, the moment its window opens (404 if the class is gone or started, 409 if it is already open or over 5 pending). Stores the login; creates the user's row if needed |
+| `DELETE /me/opening/<classId>` | | Stops waiting for it |
 | `POST /me/test-push` | | Sends a test push to the user's devices and a test email |
 | `PUT /me/email` | `{"enabled":false}` | Stops (or with `true` restarts) the booking emails → `{email}`: the address used, or null |
 | `GET /email/off?u=<userId>&t=<token>` | | The unsubscribe link in each email (no login needed; `POST` for one-click) |

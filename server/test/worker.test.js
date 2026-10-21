@@ -326,3 +326,48 @@ test("late spots: PUT /me stores the choice, GET /me returns it (default ask)", 
   await worker.fetch(req("PUT", "/me", { rules: [rule], lateSpots: "nonsense" }), { DB }, ctx);
   assert.equal((await (await worker.fetch(req("GET", "/me"), { DB }, ctx)).json()).lateSpots, "book");
 });
+
+// MARK: Book when booking opens (one-off classes)
+
+test("HTTP API: a one-off class waits for its open moment, capped at 5, refused once open", async () => {
+  const DB = memoryDB();
+  const ctx = { waitUntil() {} };
+  const start = (d) => new Date(Date.now() + d * 86400_000).toISOString();
+  const classId = (url) => +(new URL(url).pathname.match(/\/v52\/class\/(\d+)$/) ?? [])[1];
+  fakeFetch((url) => (url.includes("/v52/user/42") ? ok({ user: { id: 42 } })
+                    : classId(url) >= 10 && classId(url) <= 19 ? ok({ class: { id: classId(url), title: "Workshop", studio_id: 6614, start_time: start(10), bookable_earliest_time: start(3) } })
+                    : classId(url) === 20 ? ok({ class: { id: 20, title: "Open", studio_id: 6614, start_time: start(2), bookable_earliest_time: start(-5) } })
+                    : new Response("", { status: 404 })));
+  const req = (method, path) => new Request(`https://x${path}`, { method, headers: { "X-Access-Token": "t", "X-User-Id": "42" } });
+  assert.equal((await worker.fetch(req("PUT", "/me/opening/10"), { DB }, ctx)).status, 200);
+  assert.equal((await worker.fetch(req("PUT", "/me/opening/10"), { DB }, ctx)).status, 200);   // idempotent
+  assert.equal((await worker.fetch(req("PUT", "/me/opening/20"), { DB }, ctx)).status, 409);   // already open
+  assert.equal((await worker.fetch(req("PUT", "/me/opening/99"), { DB }, ctx)).status, 404);
+  for (const id of [11, 12, 13, 14]) assert.equal((await worker.fetch(req("PUT", `/me/opening/${id}`), { DB }, ctx)).status, 200);
+  assert.equal((await worker.fetch(req("PUT", "/me/opening/15"), { DB }, ctx)).status, 409);   // cap of 5
+  const s = await (await worker.fetch(req("GET", "/me"), { DB }, ctx)).json();
+  assert.deepEqual(s.opening.map((o) => o.classId), [10, 11, 12, 13, 14]);
+  assert.equal(s.maxOpening, 5);
+  assert.ok(s.opening[0].opens);
+  for (const id of [10, 11, 12, 13, 14]) await worker.fetch(req("DELETE", `/me/opening/${id}`), { DB }, ctx);
+  assert.equal(DB.t.size, 0);   // nothing left to do: the row is gone
+});
+
+test("a one-off class is booked once at its open moment and the push says so; a late opening is offered", async () => {
+  const start = wl.start + 3 * 86400_000, opens = start - 7 * 86400_000;
+  const booked = [];
+  const u = { userId: 42, session: { access_token: "t", user_id: 42 }, rules: [], devices: [],
+              state: { upcoming: [], handled: {}, log: [], lastScan: null, watches: [], goals: [], goalPings: {},
+                       opens: [{ classId: 70, title: "Workshop", studioId: 6614, start, opens, freeUntil: start - 12 * H, once: true }] } };
+  await tickUser({}, u, opens - 30_000, { bookFn: async (session, o) => { booked.push(o.classId); return "Booked"; } });
+  assert.deepEqual(booked, [70]);
+  assert.equal(u.state.log[0].outcome, "Booked (one-off)");
+  assert.equal(u.state.opens.length, 0);          // tried once, then forgotten
+  assert.equal(u.state.handled[70], start);
+  await tickUser({}, u, opens + 60_000, { bookFn: async () => assert.fail("booked twice") });
+  // A class that only opens after the free cancellation is offered instead of booked.
+  const late = { classId: 71, title: "Late", studioId: 6614, start: wl.start, opens: wl.start - 2 * H, freeUntil: wl.start - 12 * H, once: true };
+  const v = { ...u, state: { ...u.state, handled: {}, log: [], opens: [late] } };
+  await tickUser({}, v, late.opens, { bookFn: async () => assert.fail("booked a late one-off") });
+  assert.equal(v.state.log[0].outcome, "Offered (opened late, one-off)");
+});

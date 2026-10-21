@@ -73,6 +73,8 @@ const uid = () => session.userId;
  *  It takes the user's own Bruce login in the same headers and answers CORS, so the page calls it directly. */
 export const AUTOBOOK_SERVER = 'https://bruce-autobook.uwe-af1.workers.dev';
 const demoWatches = new Set();
+const demoOpenings = new Set();
+export const MAX_OPENINGS = 5;
 async function autobook(method, path, base, body) {
   const headers = { 'X-Access-Token': session.token, 'X-User-Id': String(uid()) };
   if (body) headers['Content-Type'] = 'application/json';
@@ -84,8 +86,14 @@ async function autobook(method, path, base, body) {
   return json;
 }
 export const Autobook = {
-  /** Class ids the server watches for a free waitlist spot. */
-  watching: (base) => session.demo ? Promise.resolve([...demoWatches]) : autobook('GET', '/me', base).then((r) => (r.waitlist || []).map((w) => w.classId)),
+  /** Class ids the server watches: `waitlist` (a free spot) and `opening` (a one-off class whose window opens). */
+  status: (base) => session.demo ? Promise.resolve({ waitlist: [...demoWatches], opening: [...demoOpenings] })
+    : autobook('GET', '/me', base).then((r) => ({ waitlist: (r.waitlist || []).map((w) => w.classId), opening: (r.opening || []).map((o) => o.classId) })),
+  /** "Book when booking opens": the server books a listed, not yet bookable class once at its open moment. */
+  opening: (classId, on, base) => {
+    if (session.demo) { on ? demoOpenings.add(classId) : demoOpenings.delete(classId); return Promise.resolve({ ok: true, opens: demoOpenings.size }); }
+    return autobook(on ? 'PUT' : 'DELETE', '/me/opening/' + classId, base);
+  },
   watch: (classId, on, base) => {
     if (session.demo) { on ? demoWatches.add(classId) : demoWatches.delete(classId); return Promise.resolve({ ok: true }); }
     return autobook(on ? 'PUT' : 'DELETE', '/me/waitlist/' + classId, base);

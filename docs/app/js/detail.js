@@ -1,6 +1,6 @@
 // Class and studio pages (DetailViews.swift). On wide screens they open in the right-hand pane next to the list.
 import { $, esc, icon, rich, fmt, time, dayKey, todayKey, addDays, dayChip, dayHeader, classDateLine, instructor, isListed, rating, slug, money, byStart, onDay } from './util.js';
-import { Bruce } from './api.js';
+import { Bruce, MAX_OPENINGS } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import { hero, classRow, glassBtn, underlineTabs, chip, empty, loading, avatar, stars, toast, run, confirmSheet, makeMap } from './ui.js';
@@ -94,6 +94,15 @@ export async function renderClass(el, id, ctx) {
         : '<button class="btn glass" disabled>Visit limit reached</button>';
     } else if (r.bookUntil < now) {
       actions = '<button class="btn glass" disabled>Booking has closed</button>';
+    } else if (opensAt(c) > now) {
+      // Listed but not bookable yet: a one-off "Book when booking opens" (the server books it once at the open moment).
+      const opens = fmt(opensAt(c), { weekday: 'short', day: 'numeric', month: 'short' }) + ', ' + time(opensAt(c));
+      const watching = S.openings.has(c.id);
+      actions = '<p class="center small ' + (watching ? 'teal' : 'muted') + '">' + (watching ? icon('check') + ' Watching · Brüce tries once at ' + esc(time(opensAt(c))) + ' on ' + esc(fmt(opensAt(c), { day: 'numeric', month: 'short' })) + ' and tells you how it went.'
+          : icon('clock') + ' Booking opens ' + esc(opens) + ' · One-off class, not a weekly series') + '</p>' +
+        (watching ? '<div class="row-between"><span class="muted small">' + S.openings.size + ' of ' + MAX_OPENINGS + ' one-off watches used</span><button class="btn glass sm" data-dact="unwatchopen">Stop watching</button></div>'
+          : St.serverOn() ? '<button class="btn lime" data-dact="watchopen">' + icon('clock') + ' Book when booking opens</button>'
+          : '<button class="btn glass" disabled>Booking opens ' + esc(opens) + '</button><p class="muted small center">Switch on our server in Settings to have it booked the moment it opens.</p>');
     } else {
       actions = '<button class="btn lime" data-dact="book">Book</button>';
     }
@@ -177,6 +186,13 @@ export async function renderClass(el, id, ctx) {
       });
       else if (a === 'book') openRules(c, 'book', async () => { await Bruce.book(c.id); toast('Booked ' + c.title); await after(); });
       else if (a === 'again') openBookAgain(c, c.studio_id, ctx.link);
+      else if (a === 'watchopen' || a === 'unwatchopen') run(b, async () => {
+        const on = a === 'watchopen';
+        if (on && S.openings.size >= MAX_OPENINGS) { toast('At most ' + MAX_OPENINGS + ' classes can wait to open.'); return; }
+        await St.setOpening(c.id, on);
+        toast(on ? 'Will book it the moment booking opens' : 'Stopped watching');
+        await after();
+      });
       else if (a === 'calendar') { const f = St.calendarFile(c); addToCalendar(f.text, f.fileName); toast('Event file ready. ' + ONE_OFF_NOTE); }
       else if (a === 'cancel') openRules(c, 'cancel', async () => { await Bruce.cancel(booking.id); toast('Booking cancelled'); await after(); });
       else if (a === 'join') run(b, async () => { await Bruce.joinWaitlist(c.id); toast("You're on the waitlist. You'll get a notification if a spot opens up."); await after(); });
@@ -340,4 +356,11 @@ function firstVisitCard(studio, c, r) {
   const row = (ic, text, note) => '<div>' + icon(ic) + '<div><b>' + esc(text) + '</b>' + (note ? '<p class="muted small">' + esc(note) + '</p>' : '') + '</div></div>';
   return '<div class="card first-visit"><div class="row-between"><b>' + icon('spark') + ' First visit here?</b>' + (c ? '<span class="muted small">' + esc(c.title) + ' ' + esc(time(c.start_time)) + '</span>' : '') + '</div>' +
     row('checkin', info.checkIn, info.checkInNote) + (info.door ? row('door', info.door) : '') + (info.facilities.length ? row('spa', info.facilities.join(' · ')) : '') + row('strike', LATE_CHECK_IN) + '</div>';
+}
+
+/** When booking opens (`bookable_earliest_time`, else start - bookable_earliest, else start - 7 days). */
+function opensAt(c) {
+  if (c.bookable_earliest_time) return Date.parse(c.bookable_earliest_time);
+  const s = Date.parse(c.start_time);
+  return s - (c.bookable_earliest != null ? c.bookable_earliest : 7 * 86400) * 1000;
 }

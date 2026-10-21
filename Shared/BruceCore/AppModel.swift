@@ -163,6 +163,8 @@ final class AppModel {
     var autoBookServerNote: String?
     /// Waitlisted classes the server books as soon as a spot frees up (see AutoBook.swift).
     var watchedWaitlists: Set<Int> = AppModel.demo ? [] : AutoBook.watchedWaitlists
+    /// One-off classes to book the moment their window opens (AutoBook.swift `OpeningWatch`).
+    var openingWatches: [OpeningWatch] = AppModel.demo ? [] : AutoBook.openingWatches
     @ObservationIgnored var autoBookTask: Task<Void, Never>?
     var standbys: [BruceAPI.ClassHolder] = []
     /// Waitlist entries that turned into bookings. The API drops a promoted entry from `GET /v52/standby` (its
@@ -788,6 +790,7 @@ final class AppModel {
         }
         bookmarks = (try? await BruceAPI.fetchBookmarks(token: token, userId: uid)) ?? []
         await loadReviewable()
+        pruneOpeningWatches()
         if !AppModel.demo { await CancelReminders.sync(bookings: bookings, studioName: studioName) }
     }
 

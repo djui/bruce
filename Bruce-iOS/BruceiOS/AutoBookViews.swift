@@ -26,6 +26,16 @@ struct AutoBookView: View {
                 .onDelete { idx in idx.map { m.autoBookRules[$0] }.forEach(m.removeAutoBook) }
             } header: { Text("Every week") } footer: { Text(AutoBookCopy.howItWorks) }
 
+            if !m.openingWatches.isEmpty {
+                Section {
+                    ForEach(m.openingWatches) { w in
+                        InfoRow(title: w.title, subtitle: "\(BruceDate.format(w.start, "EEE d MMM, HH:mm")) · \(m.studioName(w.studioId))",
+                                footnote: Copy.bookingOpens(w.opens), chevron: false)
+                    }
+                    .onDelete { idx in idx.map { m.openingWatches[$0] }.forEach(m.removeOpeningWatch) }
+                } header: { Text("Waiting for booking to open") } footer: { Text(AutoBookCopy.openings) }
+            }
+
             Section {
                 Toggle("Let the server book for me", isOn: Binding(get: { booksForMe }, set: { on in
                     booksForMe = on
@@ -132,6 +142,7 @@ enum AutoBookCopy {
     static func habitNudges(days: Int) -> String {
         "Did a class 3 weeks in a row, then skipped it and booked nothing for \(days) days? You get a morning notification with classes picked from your history."
     }
+    static let openings = "One-off classes booked once the moment their window opens, with the same retries and late-spot rule as weekly classes. At most \(AutoBook.maxOpenings) at a time. Swipe to stop waiting."
     static let lateSpots = "Cancelling then costs a strike. Ask me first sends a notification with a Book button instead. Under 3 h before, when cancelling costs 2 strikes (3 under 1 h, as much as a no-show), you're always asked; 12 h or more before, it's always booked."
     static let server = "Books even when your phone is locked or offline: the server checks every five minutes, and every minute shortly before a class opens. While this is on, it keeps your Bruce login to book with; switching it off removes your login and classes from the server."
 }
@@ -157,6 +168,43 @@ struct AutoBookToggle: View {
         guard let r = m.autoBookRule(for: c) ?? AutoBookRule(c) else { return "" }
         let days = Int(((c.bookableEarliest.map(Double.init) ?? AutoBook.defaultWindow) / 86_400).rounded())
         return "\(r.label), booked \(days) day\(days == 1 ? "" : "s") ahead when it opens"
+    }
+}
+
+/// Class page action bar for a listed class whose booking window has not opened yet: "Book when booking opens"
+/// (a one-off watch, AutoBook.swift `OpeningWatch`) in place of the Book button; "Book every week" stays above.
+struct OpeningWatchBar: View {
+    @Environment(AppModel.self) var m
+    let c: BruceAPI.BruceClass
+    let opens: Date
+    @State private var working = false
+    var watching: Bool { m.isWatchingOpening(c.id) }
+    var body: some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: watching ? "checkmark.circle.fill" : "clock").font(.system(size: 12, weight: .semibold))
+                Text(watching ? "Watching · \(Copy.openingWatching(opens))" : "\(Copy.bookingOpens(opens)) · \(Copy.oneOffClass)")
+                    .font(.system(size: 13, weight: .medium)).lineLimit(2).multilineTextAlignment(.center)
+            }
+            .foregroundStyle(watching ? Theme.teal : Theme.secondary)
+            if watching {
+                HStack(spacing: 10) {
+                    Text(Copy.openingUsed(m.openingWatches.count)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    Spacer()
+                    Button(working ? "Stopping…" : "Stop watching") { toggle(false) }
+                        .font(.system(size: 15, weight: .semibold)).buttonStyle(.glass).controlSize(.regular).disabled(working)
+                }
+            } else {
+                LimeButton(title: working ? "Saving…" : "Book when booking opens", systemImage: "bolt.badge.clock") { toggle(true) }
+                    .disabled(working)
+            }
+        }
+        .padding(12)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+    }
+    func toggle(_ on: Bool) {
+        working = true
+        Task { await m.setWatchOpening(on, for: c); working = false }
     }
 }
 
