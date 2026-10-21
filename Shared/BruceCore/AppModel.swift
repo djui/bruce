@@ -65,6 +65,8 @@ final class AppModel {
     var currentlyOpen = false
     var soloOnly = false
     var hideFull = false
+    /// Classes tab: time of day, duration, sort, bookable now (ClassFilters.swift).
+    var classFilters = ClassFilterState()
     /// Saved custom areas (Areas.swift) and the one used as the Explore "Area" filter.
     var areas: [SavedArea] = []
     var selectedAreaId: UUID?
@@ -554,10 +556,12 @@ final class AppModel {
 
     var activeFilterCount: Int {
         accessTiers.count + exploreCategories.count + [favoritesOnly, currentlyOpen, soloOnly, hideFull, customArea].filter { $0 }.count
+            + classFilters.activeCount
     }
     func clearFilters() {
         accessTiers = []; exploreCategories = []
         favoritesOnly = false; currentlyOpen = false; soloOnly = false; hideFull = false; customArea = false
+        classFilters = ClassFilterState()
     }
     func selectCity(_ id: Int) {
         guard id != cityId else { dismissSheets(); return }

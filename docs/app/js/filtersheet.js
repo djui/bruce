@@ -3,7 +3,7 @@ import { $, esc, icon } from './util.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import { sheet, chip, toast, confirmSheet, makeMap } from './ui.js';
-import { ex, saveEx, areas, saveAreas, cityAreas, selectedArea, TIERS, activeCount, clearFilters, rectangle, studioInArea } from './filters.js';
+import { ex, saveEx, areas, saveAreas, cityAreas, selectedArea, TIERS, activeCount, clearFilters, rectangle, studioInArea, SLOTS, SLOT_TITLES, DURS, DUR_TITLES, SORTS, SORT_TITLES } from './filters.js';
 
 const gl = (label, on, attrs) => chip(label, on, attrs).replace('class="chip"', 'class="chip glassy"');
 const FEW = 9;
@@ -22,6 +22,9 @@ export function openFilters(view) {
     s.body.innerHTML =
       '<h3 class="sec-title">STUDIO ACCESS</h3><div class="chips wrap">' + TIERS.map((t) => gl(t, ex.tiers.includes(t), 'data-tier="' + t + '"')).join('') + '</div>' +
       '<h3 class="sec-title">DISPLAY OPTIONS</h3><div class="chips wrap">' + gl('Favorite studios', ex.favs, 'data-opt="favs"') + gl('Solo training only', ex.solo, 'data-opt="solo"') + gl('Hide full classes', ex.free, 'data-opt="free"') + '</div>' +
+      '<h3 class="sec-title">CLASSES: TIME OF DAY</h3><div class="chips wrap">' + SLOTS.map((k) => gl(SLOT_TITLES[k], ex.slots.includes(k), 'data-slot="' + k + '"')).join('') + '</div>' +
+      '<h3 class="sec-title">CLASSES: DURATION</h3><div class="chips wrap">' + DURS.map((k) => gl(DUR_TITLES[k], ex.durs.includes(k), 'data-dur="' + k + '"')).join('') + '</div>' +
+      '<h3 class="sec-title">CLASSES: SORT BY</h3><div class="chips wrap">' + SORTS.map((k) => gl(SORT_TITLES[k], ex.sort === k, 'data-sort="' + k + '"')).join('') + gl('Bookable now', ex.bookable, 'data-opt="bookable"') + '</div>' +
       '<div class="sec-row"><h3 class="sec-title">AREA <small>' + esc(St.city().name) + '</small></h3><button class="link" data-city>Change city</button></div>' +
       '<div class="chips wrap">' + gl('Entire ' + esc(St.city().name), !cur, 'data-area=""') + mine.map((a) => gl(icon('map') + esc(a.name), cur && cur.id === a.id, 'data-area="' + esc(a.id) + '"')).join('') +
       gl(icon('plus') + 'New area', false, 'data-newarea') + '</div>' +
@@ -32,10 +35,13 @@ export function openFilters(view) {
   };
   const covered = (a) => St.cityStudios().filter((x) => x.lat && x.lon && studioInArea(x, a)).length;
   s.body.addEventListener('click', async (e) => {
-    const t = e.target.closest('[data-tier],[data-opt],[data-area],[data-cat],[data-all],[data-city],[data-newarea],[data-delarea]');
+    const t = e.target.closest('[data-tier],[data-opt],[data-area],[data-cat],[data-all],[data-city],[data-newarea],[data-delarea],[data-slot],[data-dur],[data-sort]');
     if (!t) return;
     const d = t.dataset;
     if ('tier' in d) ex.tiers = ex.tiers.includes(d.tier) ? ex.tiers.filter((x) => x !== d.tier) : ex.tiers.concat(d.tier);
+    else if ('slot' in d) ex.slots = ex.slots.includes(d.slot) ? ex.slots.filter((x) => x !== d.slot) : ex.slots.concat(d.slot);
+    else if ('dur' in d) ex.durs = ex.durs.includes(d.dur) ? ex.durs.filter((x) => x !== d.dur) : ex.durs.concat(d.dur);
+    else if ('sort' in d) ex.sort = d.sort;
     else if ('opt' in d) ex[d.opt] = !ex[d.opt];
     else if ('area' in d) ex.areaId = d.area && ex.areaId !== d.area ? d.area : null;
     else if ('all' in d) { all = !all; draw(); return; }

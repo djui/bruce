@@ -13,6 +13,8 @@ let package = Package(
                 .unsafeFlags(["-Xlinker", "-sectcreate", "-Xlinker", "__TEXT", "-Xlinker", "__info_plist",
                               "-Xlinker", "Support/Info.plist"]),
             ]
-        )
+        ),
+        // Unit tests for the shared logic (Shared/BruceCore via the Shared symlink): `swift test`.
+        .testTarget(name: "BruceCoreTests", dependencies: ["BruceMacOS"], path: "Tests/BruceCoreTests"),
     ]
 )
