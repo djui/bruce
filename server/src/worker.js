@@ -31,17 +31,18 @@
 // challenge with `race_id` and `weekly` that ends on race day; the minute cron tells its members on Sunday at 19:00 how
 // many hit their sessions that week (table `crew_updates`, once per crew and week).
 //
-// Studio shop (tables from migration 0007): a catalogue of products the studios approved, posted by the operator
-// (`POST /shop/import`), served per city and studio (`GET /shop`, `GET /shop/studio/<id>`), with Notify me for planned
-// drops (`PUT /me/notify/<dropId>`) and anonymous daily tap counters. The studio sells; nothing here takes money. The
-// pure logic is in ./shop.js.
+// Studio shop (tables from migrations 0007 and 0008): a catalogue of products the studios approved, posted by the
+// operator (`POST /shop/import`), served per city and studio (`GET /shop`, `GET /shop/studio/<id>`), with Notify me for
+// planned drops (`PUT /me/notify/<dropId>`) and anonymous daily tap counters. The minute cron sends "Drop open" and
+// "Ready for pickup" by push and email to a drop's Notify me list; a drop tied to a challenge is shown only to that
+// challenge's finishers (`GET /me/shop`). The studio sells; nothing here takes money. The pure logic is in ./shop.js.
 
 import {
   localDay, addDays, monthStart, visitsFromBookings, dailyRows, fromDetail, goalReminders, challengePeriod, challengeStats,
   cleanChallenge, cohortValues, percentiles, PERCENTILE_METRICS, crewWeeks, crewMessage, mondayOf,
 } from "./insights.js";
 import { brokenHabit, recommendClasses, nudgeMessage, cleanLapseDays, HABIT_LOOKBACK_DAYS, RECOMMEND_DAYS, LAPSE_DAYS } from "./habits.js";
-import { cleanStorefront, MAX_STOREFRONTS } from "./shop.js";
+import { cleanStorefront, MAX_STOREFRONTS, isFinisher, dropOpenMessage, readyMessage } from "./shop.js";
 
 const API = "https://api.bruce.app";
 const USER_AGENT = "Bruce/14.4.2_538 (iOS27.0.0; Apple)";
@@ -640,6 +641,7 @@ export async function tick(env, now) {
   await sendNudges(env, now).catch((e) => console.log("nudges failed:", e.message));
   await sendRaceReminders(env, now).catch((e) => console.log("race reminders failed:", e.message));
   await sendCrewUpdates(env, now).catch((e) => console.log("crew updates failed:", e.message));
+  await sendDropNotices(env, now).catch((e) => console.log("drop notices failed:", e.message));
 }
 
 /** Pushes the skipped-habit recommendations planned by the daily run whose time has come. */
@@ -1051,14 +1053,33 @@ const rowToProduct = (r, variants) => ({ id: r.id, studioId: r.studio_id, title:
   priceOre: r.price_ore, vatRate: r.vat_rate, fulfilment: r.fulfilment, linkUrl: r.link_url ?? null, variants });
 const rowToDrop = (r) => ({ id: r.id, studioId: r.studio_id, productId: r.product_id, challengeId: r.challenge_id ?? null, title: r.title,
   opensAt: r.opens_at, closesAt: r.closes_at, minQty: r.min_qty, maxQty: r.max_qty ?? null, reserved: r.reserved, pickupFrom: r.pickup_from ?? null,
-  linkUrl: r.link_url ?? null });
+  linkUrl: r.link_url ?? null, ready: r.ready_at != null });
+/** The drops' "Drop open" and "Ready for pickup" pushes: category SHOP_DROP, payload {dropId, productId} (opens the product page). */
+const SHOP_PUSH = "SHOP_DROP";
+const PRODUCT_URL = "https://djui.github.io/bruce/app/#/home/product/";
+/** A "Drop open" more than this late (the cron missed it, the feed set an opening in the past) is only marked. */
+const DROP_LATE_MS = 12 * 3600_000;
 /** A variant's id in the table is "<product id>:<variant id>"; the apps see the short one. */
 const variantKey = (productId, id) => `${productId}:${id}`;
 
+/** Products with their variants, as the apps need them. */
+async function productsWithVariants(DB, products) {
+  const { results: variants } = await DB.prepare("SELECT * FROM variants WHERE product_id IN (SELECT value FROM json_each(?)) ORDER BY sort, id")
+    .bind(JSON.stringify(products.map((p) => p.id))).all();
+  const byProduct = new Map();
+  for (const v of variants) {
+    const list = byProduct.get(v.product_id) ?? [];
+    list.push({ id: v.id.slice(v.product_id.length + 1), label: v.label, inStock: !!v.in_stock });
+    byProduct.set(v.product_id, list);
+  }
+  return products.map((p) => rowToProduct(p, byProduct.get(p.id) ?? []));
+}
+
 /**
  * The catalogue of a city (`city`) or one studio (`studioId`): storefronts with at least one active product, those
- * products with their variants, and the drops anyone may see (a drop tied to a challenge is only in `GET /me/shop`).
- * Storefronts without an active product are left out, so the apps show no shop where nothing is listed.
+ * products with their variants, and the drops anyone may see. A drop tied to a challenge, and the product that exists
+ * for it, are only in `GET /me/shop` for that challenge's finishers. Storefronts without an active product are left
+ * out, so the apps show no shop where nothing is listed.
  */
 export async function catalogue(DB, { city, studioId }, now = Date.now()) {
   const { results: fronts } = await DB.prepare(`SELECT * FROM storefronts WHERE ${studioId ? "studio_id = ?" : "city = ?"} ORDER BY studio_id`)
@@ -1066,22 +1087,75 @@ export async function catalogue(DB, { city, studioId }, now = Date.now()) {
   const empty = { storefronts: [], products: [], drops: [] };
   if (!fronts.length) return empty;
   const ids = JSON.stringify(fronts.map((f) => f.studio_id));
-  const { results: products } = await DB.prepare(`SELECT * FROM products WHERE active = 1 AND studio_id IN (SELECT value FROM json_each(?))
-      ORDER BY studio_id, sort, id`).bind(ids).all();
+  const { results: products } = await DB.prepare(`SELECT * FROM products p WHERE active = 1 AND studio_id IN (SELECT value FROM json_each(?))
+      AND NOT EXISTS (SELECT 1 FROM drops d WHERE d.product_id = p.id AND d.challenge_id IS NOT NULL) ORDER BY studio_id, sort, id`).bind(ids).all();
   if (!products.length) return empty;
-  const { results: variants } = await DB.prepare("SELECT * FROM variants WHERE product_id IN (SELECT value FROM json_each(?)) ORDER BY sort, id")
-    .bind(JSON.stringify(products.map((p) => p.id))).all();
   const { results: drops } = await DB.prepare(`SELECT d.* FROM drops d JOIN products p ON p.id = d.product_id WHERE d.challenge_id IS NULL AND p.active = 1
       AND d.closes_at > ? AND d.studio_id IN (SELECT value FROM json_each(?)) ORDER BY d.opens_at, d.id`).bind(now - DROP_LINGER_MS, ids).all();
-  const byProduct = new Map();
-  for (const v of variants) {
-    const list = byProduct.get(v.product_id) ?? [];
-    list.push({ id: v.id.slice(v.product_id.length + 1), label: v.label, inStock: !!v.in_stock });
-    byProduct.set(v.product_id, list);
-  }
   const listed = new Set(products.map((p) => p.studio_id));
-  return { storefronts: fronts.filter((f) => listed.has(f.studio_id)).map(rowToStorefront),
-           products: products.map((p) => rowToProduct(p, byProduct.get(p.id) ?? [])), drops: drops.map(rowToDrop) };
+  return { storefronts: fronts.filter((f) => listed.has(f.studio_id)).map(rowToStorefront), products: await productsWithVariants(DB, products), drops: drops.map(rowToDrop) };
+}
+
+/** Whether a member finished a challenge (shop.js `isFinisher`): their leaderboard entry, from the stored per-visit detail. */
+async function finishedChallenge(DB, challengeId, userId, today) {
+  const l = await loadChallenge(DB, challengeId);
+  if (!l) return false;
+  const me = l.participants.find((p) => p.userId === userId);
+  if (!me || me.status !== "accepted") return false;
+  if (l.ch.metric !== "target") return isFinisher(l.ch, me, today);
+  const accepted = l.participants.filter((p) => p.status === "accepted").map((p) => p.userId);
+  const visits = await crewVisits(DB, accepted, l.ch.start, today);
+  const stats = challengeStats(l.ch, l.participants, visits, userId, today);
+  return isFinisher(l.ch, stats.leaderboard.find((e) => e.userId === userId), today);
+}
+
+/**
+ * The member's unlocked drops (`GET /me/shop`): the drops tied to a challenge they finished, with the drops' products,
+ * so the apps can lay them over the public catalogue.
+ */
+async function unlockedDrops(DB, userId, today, now = Date.now()) {
+  const { results: rows } = await DB.prepare(`SELECT d.* FROM drops d JOIN products p ON p.id = d.product_id WHERE d.challenge_id IS NOT NULL AND p.active = 1
+      AND d.closes_at > ? ORDER BY d.opens_at, d.id`).bind(now - DROP_LINGER_MS).all();
+  const drops = [];
+  const done = new Map();
+  for (const r of rows) {
+    if (!done.has(r.challenge_id)) done.set(r.challenge_id, await finishedChallenge(DB, r.challenge_id, userId, today));
+    if (done.get(r.challenge_id)) drops.push(r);
+  }
+  if (!drops.length) return { drops: [], products: [] };
+  const { results: products } = await DB.prepare("SELECT * FROM products WHERE id IN (SELECT value FROM json_each(?)) ORDER BY studio_id, sort, id")
+    .bind(JSON.stringify([...new Set(drops.map((d) => d.product_id))])).all();
+  return { drops: drops.map((r) => ({ ...rowToDrop(r), unlocked: true })), products: await productsWithVariants(DB, products) };
+}
+
+/**
+ * The minute cron's drop notices, each once: "Drop open" to a drop's Notify me list when its window opens (marked first;
+ * more than DROP_LATE_MS late it is only marked), and "Ready for pickup" once the operator marked the drop ready. Push
+ * (category SHOP_DROP) and email, with a link to the product page in the web app. The studio sells: the notice only reminds.
+ */
+export async function sendDropNotices(env, now) {
+  const DB = await db(env);
+  const { results } = await DB.prepare(`SELECT d.*, p.title AS product_title, p.price_ore, s.seller_name, s.pickup_note FROM drops d
+      JOIN products p ON p.id = d.product_id JOIN storefronts s ON s.studio_id = d.studio_id
+      WHERE (d.opens_at <= ?1 AND d.opened_sent_at IS NULL) OR (d.ready_at IS NOT NULL AND d.ready_sent_at IS NULL)`).bind(now).all();
+  for (const d of results) {
+    for (const kind of ["opened", "ready"]) {
+      if (kind === "opened" ? !(d.opens_at <= now && d.opened_sent_at == null) : !(d.ready_at != null && d.ready_sent_at == null)) continue;
+      // Marked first and only once (overlapping runs).
+      const mine = await DB.prepare(`UPDATE drops SET ${kind}_sent_at = ? WHERE id = ? AND ${kind}_sent_at IS NULL RETURNING id`).bind(now, d.id).first();
+      if (!mine || (kind === "opened" && now >= d.opens_at + DROP_LATE_MS)) continue;
+      const front = { sellerName: d.seller_name, pickupNote: d.pickup_note };
+      const msg = kind === "opened" ? dropOpenMessage(rowToDrop(d), { priceOre: d.price_ore }, front) : readyMessage(d.title, front);
+      const { results: who } = await DB.prepare("SELECT user_id FROM notify WHERE drop_id = ?").bind(d.id).all();
+      for (const { user_id } of who) {
+        const u = await getUser(env, user_id);
+        if (!u) continue;
+        const [gone] = await Promise.all([push(env, u.devices, msg.title, msg.body, { dropId: d.id, productId: d.product_id }, SHOP_PUSH),
+                                          email(env, u, msg.title, msg.body, null, { link: PRODUCT_URL + encodeURIComponent(d.product_id), linkText: "Open the listing" })]);
+        if (gone.length) { u.devices = u.devices.filter((x) => !gone.includes(x.token)); await saveUser(env, u); }
+      }
+    }
+  }
 }
 
 /**
@@ -1157,10 +1231,13 @@ export async function shopRoute(request, env, path) {
     }
     stmts.push(DB.prepare("DELETE FROM drops WHERE studio_id = ? AND id NOT IN (SELECT value FROM json_each(?))").bind(f.studioId, JSON.stringify(f.drops.map((d) => d.id))));
     for (const d of f.drops) {
-      stmts.push(DB.prepare(`INSERT INTO drops (id, studio_id, product_id, challenge_id, title, opens_at, closes_at, min_qty, max_qty, reserved, pickup_from, link_url, updated_at)
-          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13) ON CONFLICT(id) DO UPDATE SET studio_id = ?2, product_id = ?3, challenge_id = ?4, title = ?5,
-          opens_at = ?6, closes_at = ?7, min_qty = ?8, max_qty = ?9, reserved = ?10, pickup_from = ?11, link_url = ?12, updated_at = ?13`)
-        .bind(d.id, f.studioId, d.productId, d.challengeId, d.title, d.opensAt, d.closesAt, d.minQty, d.maxQty, d.reserved, d.pickupFrom, d.linkUrl, at));
+      // `ready: true` marks the drop ready for pickup (once; the cron then sends "Ready for pickup"); `false` takes it back.
+      stmts.push(DB.prepare(`INSERT INTO drops (id, studio_id, product_id, challenge_id, title, opens_at, closes_at, min_qty, max_qty, reserved, pickup_from, link_url, updated_at, ready_at)
+          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, CASE WHEN ?14 = 1 THEN ?15 ELSE NULL END)
+          ON CONFLICT(id) DO UPDATE SET studio_id = ?2, product_id = ?3, challenge_id = ?4, title = ?5,
+          opens_at = ?6, closes_at = ?7, min_qty = ?8, max_qty = ?9, reserved = ?10, pickup_from = ?11, link_url = ?12, updated_at = ?13,
+          ready_at = CASE WHEN ?14 = 1 THEN COALESCE(drops.ready_at, ?15) ELSE NULL END, ready_sent_at = CASE WHEN ?14 = 1 THEN drops.ready_sent_at ELSE NULL END`)
+        .bind(d.id, f.studioId, d.productId, d.challengeId, d.title, d.opensAt, d.closesAt, d.minQty, d.maxQty, d.reserved, d.pickupFrom, d.linkUrl, at, d.ready ? 1 : 0, Date.now()));
     }
   }
   await DB.batch(stmts);
@@ -1170,14 +1247,14 @@ export async function shopRoute(request, env, path) {
 /**
  * `PUT|DELETE /me/notify/<dropId>`: Notify me on or off for a drop (the push and email when it opens go to the row's
  * devices and address, so switching it on stores the login like joining a challenge does); `GET /me/shop`: the drops
- * the member watches, on every device.
+ * the member watches, on every device, and the drops unlocked by a challenge they finished, with those drops' products.
  */
 export async function notifyRoute(request, env, dropId) {
   const auth = await authenticate(request, env);
   if (!auth) return json({ error: "unauthorized" }, 401);
   const DB = await db(env);
   const mine = async () => (await DB.prepare("SELECT drop_id FROM notify WHERE user_id = ? ORDER BY drop_id").bind(auth.userId).all()).results.map((r) => r.drop_id);
-  if (!dropId) return json({ notify: await mine() });
+  if (!dropId) return json({ notify: await mine(), ...(await unlockedDrops(DB, auth.userId, localDay(Date.now()))) });
   const known = await getUser(env, auth.userId);
   if (request.method === "DELETE") {
     await DB.prepare("DELETE FROM notify WHERE user_id = ? AND drop_id = ?").bind(auth.userId, dropId).run();

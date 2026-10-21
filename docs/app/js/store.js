@@ -9,7 +9,7 @@ import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRace
 import { makePlan, count as planCount, category as planCategory } from './raceplan.js';
 import { DEMO_RACES, DEMO_MY_RACES, DEMO_TRAINING_CLUBS } from './demo.js';
 import { sharesGoing } from './crews.js';
-import { decode as decodeShop } from './shop.js';
+import { decode as decodeShop, merge as mergeShop } from './shop.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
 const RACES_CACHE_MS = 6 * 3600 * 1000;
@@ -509,7 +509,8 @@ export function loadShop(force) {
   if (!force && S.shop && S.shop.city === code && Date.now() - S.shopAt < 600000) return Promise.resolve(S.shop);
   S.shopLoading = Server.shop(code).then(async (json) => {
     S.shop = decodeShop(json); S.shopAt = Date.now();
-    if (loggedIn()) await Server.myShop().then((r) => { S.shopNotify = new Set(r.notify || []); }).catch(() => {});
+    // Notify me on every device, and the drops a finished challenge unlocked, laid over the catalogue.
+    if (loggedIn()) await Server.myShop().then((r) => { S.shopNotify = new Set(r.notify || []); S.shop = mergeShop(S.shop, r); }).catch(() => {});
   }).catch(() => { if (!S.shop) S.shop = decodeShop(null); })
     .then(() => { S.shopLoading = null; emit(); return S.shop; });
   return S.shopLoading;

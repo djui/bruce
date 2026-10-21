@@ -194,6 +194,25 @@ enum Copy {
     static func shopPickup(_ studio: String) -> String { "Pick up at \(studio)" }
     /// Under "Forgot your towel?": "Rent one at the desk, or take a bastu towel home for 449 kr."
     static func shopTowelBody(_ towel: Product) -> String { "Rent one at the desk, or take a \(towel.title.lowercased()) home for \(towel.priceText)." }
+    // Phase 3: drops.
+    static let shopUnlocked = "Unlocked"
+    static let shopReadyTitle = "Ready for pickup"
+    static let shopDropClosed = "The pre-order has closed."
+    static let shopReserveHint = "Reserve opens the studio's own checkout. The studio sells it and hands it out at the desk; Brüce only links and reminds."
+    static let shopReserveAtDesk = "Reserve at the desk: the studio takes the pre-order itself."
+    static let shopFinisherHint = "Only for people who finished this challenge."
+    /// "Reserve · 349 kr".
+    static func shopReserve(_ price: String) -> String { "Reserve · \(price)" }
+    /// "Only for people who hit 20. One print run, picked up at Kärnan Reformer. Pre-order until Sun 7 Feb."
+    static func shopFinisherBody(_ c: ChallengeSummary, studio: String, drop: Drop) -> String {
+        let who = c.metric == "target" ? "Only for people who hit \(c.target ?? 0)." : "Only for people who took part to the end."
+        return "\(who) One print run, picked up at \(studio). Pre-order until \(BruceDate.format(drop.closes, "EEE d MMM"))."
+    }
+    /// "Ready at the desk: Kärnan Reformer AB, weekdays 06–20."
+    static func shopReadyBody(_ front: Storefront?) -> String {
+        guard let front else { return "Ready at the desk." }
+        return "Ready at the desk: \(front.sellerName)" + (front.pickupNote.map { ", \($0.prefix(1).lowercased() + $0.dropFirst())" } ?? "") + "."
+    }
     /// A drop's line: "Pre-order until Sun 7 Feb · one print run · pickup from Sat 20 Feb".
     static func shopDropLine(_ d: Drop) -> String {
         (["Pre-order until \(BruceDate.format(d.closes, "EEE d MMM"))", "one print run", d.pickupDayText.map { "pickup from \($0)" }].compactMap { $0 }).joined(separator: " · ")

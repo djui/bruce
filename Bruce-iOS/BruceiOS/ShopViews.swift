@@ -54,9 +54,20 @@ struct ProductTile: View {
     var shortStudio: String { String(m.studioName(product.studioId).split(separator: " ").first ?? "") }
 }
 
-/// A drop (mockup 1): "DROP" tag, the title, where to pick it up, the countdown, "31 of 40" and a meter, with Notify me.
+/// "DROP" or "UNLOCKED" as a lime tag.
+struct DropTag: View {
+    var unlocked = false
+    var body: some View {
+        Text((unlocked ? Copy.shopUnlocked : Copy.shopDropTag).uppercased()).bruceFont(10, weight: .heavy, width: .expanded).foregroundStyle(.black)
+            .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.lime, in: .capsule)
+    }
+}
+
+/// A drop (mockup 1): "DROP" tag, the title, where to pick it up, the countdown, "31 of 40" and a meter, with Notify me
+/// before it opens, Reserve while it is open (the studio's own checkout) and "Ready for pickup" once it is at the desk.
 struct DropCard: View {
     @Environment(AppModel.self) var m
+    @Environment(\.openURL) private var openURL
     let drop: Drop
     var body: some View {
         let product = m.shopProduct(drop.productId)
@@ -64,8 +75,7 @@ struct DropCard: View {
         NavigationLink(value: Route.product(drop.productId)) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top) {
-                    Text(Copy.shopDropTag.uppercased()).bruceFont(10, weight: .heavy, width: .expanded).foregroundStyle(.black)
-                        .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.lime, in: .capsule)
+                    DropTag(unlocked: drop.unlocked)
                     Spacer()
                     Image(systemName: product?.kind.symbol ?? "tshirt").font(.system(size: 44, weight: .ultraLight)).foregroundStyle(.white.opacity(0.35))
                 }
@@ -88,14 +98,20 @@ struct DropCard: View {
                 HStack(spacing: 10) {
                     if let product { Text(product.priceText).bruceFont(15, weight: .heavy) }
                     Spacer()
-                    Button { Task { await m.setNotify(drop, !on) } } label: {
-                        Label(on ? "Notifying" : Copy.shopNotifyMe, systemImage: on ? "bell.fill" : "bell").bruceFont(14, weight: .bold)
-                            .foregroundStyle(on ? .white : .black)
-                            .padding(.horizontal, 14).frame(height: 34)
-                            .background(on ? Color.white.opacity(0.22) : Theme.lime, in: .capsule)
+                    switch drop.state() {
+                    case .open:
+                        if let u = drop.reserveURL() {
+                            Button { openURL(u) } label: { cardButton("Reserve", "arrow.up.right.square", lime: true) }.buttonStyle(.plain)
+                        } else {
+                            Button { Task { await m.setNotify(drop, !on) } } label: { cardButton(on ? "Notifying" : Copy.shopNotifyMe, on ? "bell.fill" : "bell", lime: !on) }
+                                .buttonStyle(.plain).accessibilityLabel(on ? "Notify me is on" : Copy.shopNotifyMe)
+                        }
+                    case .upcoming:
+                        Button { Task { await m.setNotify(drop, !on) } } label: { cardButton(on ? "Notifying" : Copy.shopNotifyMe, on ? "bell.fill" : "bell", lime: !on) }
+                            .buttonStyle(.plain).accessibilityLabel(on ? "Notify me is on" : Copy.shopNotifyMe)
+                    case .ready: cardButton(Copy.shopReadyTitle, "checkmark.seal.fill", lime: true)
+                    case .closed: cardButton("Closed", "clock", lime: false)
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(on ? "Notify me is on" : Copy.shopNotifyMe)
                 }
             }
             .foregroundStyle(.white)
@@ -108,6 +124,13 @@ struct DropCard: View {
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Drop: \(drop.title), \(drop.countdownText()), \(drop.progressText) reserved, \(Copy.shopPickup(m.studioName(drop.studioId)))")
+    }
+
+    func cardButton(_ title: String, _ symbol: String, lime: Bool) -> some View {
+        Label(title, systemImage: symbol).bruceFont(14, weight: .bold)
+            .foregroundStyle(lime ? .black : .white)
+            .padding(.horizontal, 14).frame(height: 34)
+            .background(lime ? Theme.lime : Color.white.opacity(0.22), in: .capsule)
     }
 }
 
@@ -260,17 +283,26 @@ struct ProductView: View {
         }
     }
 
-    /// The drop's window: "Pre-order until Sun 7 Feb · one print run", the countdown, "31 of 40" and Notify me.
+    /// The drop's window: "Pre-order until Sun 7 Feb · one print run", the countdown, "31 of 40" and Notify me; "Ready for
+    /// pickup" once the studio has it at the desk, "The pre-order has closed" after the window.
     func dropBlock(_ d: Drop, _ p: Product, _ studio: String) -> some View {
         let on = m.isNotified(d.id)
+        let state = d.state()
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(Copy.shopDropTag.uppercased()).bruceFont(10, weight: .heavy, width: .expanded).foregroundStyle(.black)
-                    .padding(.horizontal, 8).padding(.vertical, 4).background(Theme.lime, in: .capsule)
+                DropTag(unlocked: d.unlocked)
                 Spacer()
-                Label(d.countdownText(), systemImage: "clock").bruceFont(13, weight: .bold)
+                Label(d.countdownText(), systemImage: state == .ready ? "checkmark.seal.fill" : "clock").bruceFont(13, weight: .bold)
             }
-            Text(Copy.shopDropLine(d)).bruceFont(14).fixedSize(horizontal: false, vertical: true)
+            if state == .ready {
+                Text(Copy.shopReadyBody(m.shopStorefront(d.studioId))).bruceFont(14).fixedSize(horizontal: false, vertical: true)
+            } else if state == .closed {
+                Text(Copy.shopDropClosed).bruceFont(14)
+            } else if d.unlocked {
+                Text(Copy.shopFinisherHint + " " + Copy.shopDropLine(d) + ".").bruceFont(14).fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text(Copy.shopDropLine(d)).bruceFont(14).fixedSize(horizontal: false, vertical: true)
+            }
             HStack {
                 Text(Copy.shopPickup(studio)).bruceFont(13).foregroundStyle(Theme.secondary)
                 Spacer()
@@ -284,21 +316,53 @@ struct ProductView: View {
             }
             .frame(height: 6)
             .accessibilityHidden(true)
-            Toggle(isOn: Binding(get: { on }, set: { v in Task { await m.setNotify(d, v) } })) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(Copy.shopNotifyMe).bruceFont(16, weight: .semibold)
-                    Text(Copy.shopNotifyHint).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            if state == .upcoming || state == .open {
+                Toggle(isOn: Binding(get: { on }, set: { v in Task { await m.setNotify(d, v) } })) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(Copy.shopNotifyMe).bruceFont(16, weight: .semibold)
+                        Text(state == .open ? "A push and an email when it is ready for pickup." : Copy.shopNotifyHint).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                    }
                 }
+                .tint(Theme.limeInk)
             }
-            .tint(Theme.limeInk)
         }
         .padding(16)
         .glassEffect(.regular.tint(Theme.lime.opacity(0.12)), in: .rect(cornerRadius: 22))
     }
 
-    /// Phase 2: no checkout. The desk, the product's own page or the studio's webshop.
+    /// No checkout yet. A drop's Reserve opens the studio's own checkout while the window is open; else the desk, the
+    /// product's own page or the studio's webshop.
     @ViewBuilder func actions(_ p: Product, _ front: Storefront?, _ drop: Drop?) -> some View {
-        if let u = p.url ?? front?.webshop, p.fulfilment != .desk || p.url != nil {
+        if let drop, drop.state() == .open {
+            if let u = drop.reserveURL() {
+                VStack(spacing: 6) {
+                    Button { openURL(u) } label: {
+                        Label(Copy.shopReserve(p.priceText), systemImage: "arrow.up.right.square").bruceFont(17, weight: .bold).foregroundStyle(.black)
+                            .frame(maxWidth: .infinity).frame(height: 40)
+                    }
+                    .buttonStyle(.glassProminent).tint(Theme.lime).controlSize(.large)
+                    Text(Copy.shopReserveHint).bruceFont(11).foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
+                }
+            } else {
+                Label(Copy.shopReserveAtDesk, systemImage: "person.wave.2").bruceFont(15, weight: .semibold)
+                    .frame(maxWidth: .infinity).frame(height: 40)
+                    .glassEffect(.regular, in: .capsule)
+            }
+        } else if let drop, drop.state() == .ready {
+            Label(Copy.shopReadyTitle, systemImage: "checkmark.seal.fill").bruceFont(17, weight: .bold).foregroundStyle(.black)
+                .frame(maxWidth: .infinity).frame(height: 40)
+                .glassEffect(.regular.tint(Theme.lime), in: .capsule)
+        } else if let drop, drop.state() == .upcoming {
+            let on = m.isNotified(drop.id)
+            if on {
+                Button { Task { await m.setNotify(drop, false) } } label: {
+                    Label("Notify me is on", systemImage: "bell.fill").bruceFont(17, weight: .bold).frame(maxWidth: .infinity).frame(height: 40)
+                }
+                .buttonStyle(.glass).controlSize(.large)
+            } else {
+                LimeButton(title: Copy.shopNotifyMe, systemImage: "bell") { Task { await m.setNotify(drop, true) } }
+            }
+        } else if let u = p.url ?? front?.webshop, p.fulfilment != .desk || p.url != nil {
             Button { openURL(u) } label: {
                 Label(p.url != nil ? "Open in the webshop" : Copy.shopWebshop, systemImage: "arrow.up.right.square").bruceFont(17, weight: .bold).foregroundStyle(.black)
                     .frame(maxWidth: .infinity).frame(height: 40)

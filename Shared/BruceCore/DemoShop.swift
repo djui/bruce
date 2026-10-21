@@ -23,6 +23,9 @@ extension ShopCatalog {
                     variants: [ProductVariant(id: "s-m", label: "S/M"), ProductVariant(id: "l-xl", label: "L/XL")]),
             Product(id: "karnan-race-day-tee", studioId: demoKarnan, title: "Hornstull Race Day tee", kind: .apparel, description: "Organic cotton, printed in the EU · unisex", priceOre: 34900, fulfilment: .pod,
                     variants: ["xs", "s", "m", "l", "xl"].map { ProductVariant(id: $0, label: $0.uppercased()) }),
+            // The finisher tee: tied to the demo's finished challenge (Challenges.swift "demoDone"), unlocked for the demo member.
+            Product(id: "karnan-finisher-tee", studioId: demoKarnan, title: "Finisher tee", kind: .apparel, description: "Organic cotton, printed in the EU · unisex", priceOre: 34900, fulfilment: .pod,
+                    variants: ["xs", "s", "m", "l", "xl"].map { ProductVariant(id: $0, label: $0.uppercased()) }),
             Product(id: "angan-bastu-towel", studioId: demoAngan, title: "Bastu towel", kind: .towel, description: "Organic cotton · 90 × 180 cm", priceOre: 44900, fulfilment: .desk,
                     linkUrl: "https://shop.example.org/angan-bastu/towel", variants: [ProductVariant(id: "natural", label: "Natural"), ProductVariant(id: "charcoal", label: "Charcoal")]),
             Product(id: "angan-felt-hat", studioId: demoAngan, title: "Felt sauna hat", kind: .sauna, description: "100% wool felt", priceOre: 29900, fulfilment: .desk),
@@ -32,7 +35,11 @@ extension ShopCatalog {
         let closes = now.addingTimeInterval(2 * 86_400 + 14 * 3600)
         let drops = [Drop(id: "hornstull-race-day-2027", studioId: demoKarnan, productId: "karnan-race-day-tee", title: "Hornstull Race Day tee",
                           opensAt: ms(now.addingTimeInterval(-5 * 86_400)), closesAt: ms(closes), minQty: 25, maxQty: 40, reserved: 31,
-                          pickupFrom: RaceDay.adding(12, to: RaceDay.today(now)), linkUrl: "https://shop.example.org/karnan/race-day-tee")]
+                          pickupFrom: RaceDay.adding(12, to: RaceDay.today(now)), linkUrl: "https://shop.example.org/karnan/race-day-tee"),
+                     // Unlocked by the finished challenge: a pre-order week that closes next Sunday, one run of 30, picked up from mid-month.
+                     Drop(id: "finisher-tee-2026", studioId: demoKarnan, productId: "karnan-finisher-tee", challengeId: "demoDone", title: "Finisher tee",
+                          opensAt: ms(now.addingTimeInterval(-2 * 86_400)), closesAt: ms(now.addingTimeInterval(6 * 86_400)), minQty: 20, maxQty: 30, reserved: 12,
+                          pickupFrom: RaceDay.adding(16, to: RaceDay.today(now)), linkUrl: "https://shop.example.org/karnan/finisher-tee", unlocked: true)]
         return ShopCatalog(city: "STO", storefronts: fronts, products: products, drops: drops)
     }
 }

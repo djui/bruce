@@ -176,18 +176,143 @@ test("HTTP: Notify me stores the login, lists on every device, keeps the row whi
   assert.ok(DB.t.get(42), "the login is stored: the push and email need the row");
   await call(env, "PUT", "/me/notify/second");
   await call(env, "PUT", "/me/notify/second");
-  assert.deepEqual((await call(env, "GET", "/me/shop")).body, { notify: ["race-day", "second"] });
+  assert.deepEqual((await call(env, "GET", "/me/shop")).body, { notify: ["race-day", "second"], drops: [], products: [] });
   const stats = await call(env, "GET", "/shop/stats", null, { authorization: "Bearer shop-secret" });
   assert.deepEqual(stats.body.notify, [{ dropId: "race-day", n: 1 }, { dropId: "second", n: 1 }]);
   // A re-post keeps the rows of drops that stay and drops the rows of drops that went.
   await post(env, { source: "op", storefronts: [{ ...front, drops: [{ ...drop, reserved: 35 }] }] });
-  assert.deepEqual((await call(env, "GET", "/me/shop")).body, { notify: ["race-day"] });
+  assert.deepEqual((await call(env, "GET", "/me/shop")).body.notify, ["race-day"]);
   const off = await call(env, "DELETE", "/me/notify/race-day");
   assert.deepEqual(off.body, { ok: true, notify: false });
-  assert.deepEqual((await call(env, "GET", "/me/shop")).body, { notify: [] });
+  assert.deepEqual((await call(env, "GET", "/me/shop")).body.notify, []);
   assert.equal(DB.t.get(42), undefined, "nothing left to do: the row goes");
   // DELETE /me clears the notify rows too.
   await call(env, "PUT", "/me/notify/race-day");
   await call(env, "DELETE", "/me");
   assert.equal(DB.rows("notify").length, 0);
+});
+
+// ---------------------------------------------------------------- phase 3: drops
+
+import { isFinisher } from "../src/shop.js";
+import { sendDropNotices } from "../src/worker.js";
+
+const device = { token: "ab".repeat(32), env: "production" };
+/** A challenge that is already over (the route refuses to create one) with its participants, straight into the tables. */
+function pastChallenge(DB, id, { owner, metric, target = null, members }) {
+  DB.sql.prepare(`INSERT INTO challenges (id, owner_id, title, metric, target, start_day, end_day, repeat_monthly, created_at)
+      VALUES (?, ?, 'Past', ?, ?, '2026-09-01', '2026-09-30', 0, '2026-09-01T00:00:00Z')`).run(id, owner, metric, target);
+  for (const [uid, status] of Object.entries(members)) {
+    DB.sql.prepare("INSERT INTO participants (challenge_id, user_id, name, status, invited_by, joined_at) VALUES (?, ?, 'P', ?, NULL, '2026-09-01T00:00:00Z')").run(id, +uid, status);
+  }
+}
+
+test("a finisher: reached the target of an 'everyone hits N' challenge, or took part in any other to its end", () => {
+  const target = { metric: "target", target: 20, end: "2027-01-31" };
+  assert.equal(isFinisher(target, { status: "accepted", done: true }, "2027-01-28"), true, "done before the end counts");
+  assert.equal(isFinisher(target, { status: "accepted", done: false }, "2027-02-10"), false);
+  assert.equal(isFinisher(target, { status: "invited", done: true }, "2027-02-10"), false);
+  assert.equal(isFinisher(target, null, "2027-02-10"), false);
+  const most = { metric: "classes", end: "2027-01-31" };
+  assert.equal(isFinisher(most, { status: "accepted" }, "2027-01-31"), false, "still running");
+  assert.equal(isFinisher(most, { status: "accepted" }, "2027-02-01"), true);
+});
+
+/** A fake Bruce for users 42 and 7 (tokens t42, t7), friends of each other; APNs and Resend record what was sent. */
+function fakePeople() {
+  const sent = { pushes: [], emails: [] };
+  globalThis.fetch = async (url, init = {}) => {
+    url = String(url);
+    if (url.startsWith("https://api.push.apple.com/")) { sent.pushes.push(JSON.parse(init.body)); return ok({}); }
+    if (url === "https://api.resend.com/emails") { sent.emails.push(JSON.parse(init.body)); return ok({ id: "e" }); }
+    const uid = +String(init.headers?.["X-Access-Token"] ?? "").replace(/^t/, "");
+    if (![42, 7].includes(uid)) return new Response("", { status: 401 });
+    const u = new URL(url);
+    if (u.pathname.startsWith("/v52/user/")) return ok({ user: { id: uid, email: `${uid}@b.se`, first_name: uid === 42 ? "Uwe" : "Robin" } });
+    if (u.pathname === "/v52/friend") return ok({ friends: [{ id: 1, friend_user: { id: uid === 42 ? 7 : 42, first_name: "F" } }] });
+    if (u.pathname === "/v52/booking") return ok({ bookings: [], metadata: {} });
+    return ok({ classes: [], metadata: {} });
+  };
+  return sent;
+}
+const as = (uid, env, method, path, body) => worker.fetch(new Request(`https://x${path}`, { method, headers: { "X-Access-Token": `t${uid}`, "X-User-Id": String(uid) },
+  body: body && JSON.stringify(body) }), env, { waitUntil() {} }).then(async (r) => ({ status: r.status, body: await r.json() }));
+
+test("HTTP: a drop tied to a challenge, and its product, show only to that challenge's finishers", async () => {
+  const DB = d1();
+  const env = { DB, SHOP_FEED_TOKEN: "shop-secret" };
+  fakePeople();
+  // 42 started "Everyone hits 2" last month and hit it; 7 accepted but did not. A finisher tee drop hangs on it.
+  const chId = "hits2";
+  pastChallenge(DB, chId, { owner: 42, metric: "target", target: 2, members: { 42: "accepted", 7: "accepted" } });
+  const detail = (ids) => JSON.stringify(ids.map((id) => ({ at: "2026-09-10T16:00:00Z", k: "c", id, t: "Reformer", s: 9840, m: 50, c: ["22"], ci: true })));
+  DB.sql.prepare("INSERT INTO daily_counts (user_id, day, visits, classes, detail) VALUES (42, '2026-09-10', 2, 2, ?), (7, '2026-09-10', 1, 1, ?)").run(detail([1, 2]), detail([3]));
+  const finisher = { ...drop, id: "finisher-tee", productId: "finisher", title: "Finisher tee", challengeId: chId };
+  const product = { ...tee, id: "finisher", title: "Finisher tee" };
+  await post(env, { source: "op", storefronts: [{ ...front, products: [towel, tee, product], drops: [drop, finisher] }] });
+  const city = await call(env, "GET", "/shop?city=STO");
+  assert.deepEqual(city.body.products.map((p) => p.id), ["towel", "tee"], "the finisher tee is not in the public catalogue");
+  assert.deepEqual(city.body.drops.map((d) => d.id), ["race-day"]);
+  assert.equal(city.body.drops[0].ready, false);
+  const mine = await as(42, env, "GET", "/me/shop");
+  assert.deepEqual(mine.body.drops.map((d) => [d.id, d.unlocked, d.challengeId]), [["finisher-tee", true, chId]]);
+  assert.deepEqual(mine.body.products.map((p) => p.id), ["finisher"]);
+  const theirs = await as(7, env, "GET", "/me/shop");
+  assert.deepEqual([theirs.body.drops, theirs.body.products], [[], []], "7 did not reach the target");
+  // A "most classes" challenge unlocks its drop for everyone who took part, once it is over.
+  pastChallenge(DB, "most", { owner: 7, metric: "classes", members: { 7: "accepted", 42: "invited" } });
+  await post(env, { source: "op", storefronts: [{ ...front, products: [towel, tee, product], drops: [drop, { ...finisher, challengeId: "most" }] }] });
+  assert.equal((await as(7, env, "GET", "/me/shop")).body.drops.length, 1);
+  assert.equal((await as(42, env, "GET", "/me/shop")).body.drops.length, 0, "invited, never accepted");
+  assert.equal((await as(42, env, "PUT", "/me/notify/finisher-tee")).status, 200, "Notify me works on an unlocked drop too");
+});
+
+test("cron: 'Drop open' once when the window opens (push and email to the Notify me list), 'Ready for pickup' once the feed says so", async () => {
+  const DB = d1([{ user_id: 42, access_token: "t42", rules: "[]", devices: JSON.stringify([device]), state: JSON.stringify({ email: "42@b.se" }) }]);
+  const env = await (async () => {
+    const { privateKey } = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
+    const pem = Buffer.from(await crypto.subtle.exportKey("pkcs8", privateKey)).toString("base64");
+    return { DB, SHOP_FEED_TOKEN: "shop-secret", APNS_KEY: `-----BEGIN PRIVATE KEY-----\n${pem}\n-----END PRIVATE KEY-----`, APNS_KEY_ID: "K", APNS_TEAM_ID: "T",
+             APNS_TOPIC: "net.dauernheim.bruce", RESEND_API_KEY: "re_test", EMAIL_FROM: "Brüce <autobook@example.com>" };
+  })();
+  const sent = fakePeople();
+  await post(env, { source: "op", storefronts: [front] });
+  await as(42, env, "PUT", "/me/notify/race-day");
+  await as(7, env, "PUT", "/me/notify/race-day");   // no device, no stored email beyond Bruce's: email only
+  const at = (s) => Date.parse(s);
+  await sendDropNotices(env, at("2027-01-25T07:59:00Z"));
+  assert.equal(sent.pushes.length + sent.emails.length, 0, "not open yet");
+  await sendDropNotices(env, at("2027-01-25T08:00:30Z"));
+  assert.equal(sent.pushes.length, 1, "42's device");
+  assert.deepEqual(sent.pushes[0].aps.alert, { title: "Drop open: Race Day tee", body: "Pre-order 349 kr until Sun 7 Feb. Pick up at Example Bastu AB. The studio sells it; Brüce only reminds you." });
+  assert.equal(sent.pushes[0].aps.category, "SHOP_DROP");
+  assert.deepEqual([sent.pushes[0].dropId, sent.pushes[0].productId], ["race-day", "tee"]);
+  assert.equal(sent.emails.length, 2, "both by email");
+  assert.match(sent.emails[0].text, /Open the listing: https:\/\/djui\.github\.io\/bruce\/app\/#\/home\/product\/tee/);
+  await sendDropNotices(env, at("2027-01-25T08:01:00Z"));
+  assert.equal(sent.pushes.length, 1, "once");
+  assert.ok(DB.rows("drops")[0].opened_sent_at);
+  // The operator marks it ready: "Ready for pickup" to the list, once; a re-post with ready keeps it sent.
+  await post(env, { source: "op", storefronts: [{ ...front, drops: [{ ...drop, ready: true }] }] });
+  assert.ok(DB.rows("drops")[0].ready_at);
+  assert.equal((await call(env, "GET", "/shop?city=STO")).body.drops[0].ready, true);
+  await sendDropNotices(env, at("2027-02-20T09:00:00Z"));
+  assert.equal(sent.pushes.length, 2);
+  assert.deepEqual(sent.pushes[1].aps.alert, { title: "Ready for pickup: Race Day tee", body: "Collect it at Example Bastu AB, At the desk." });
+  assert.equal(sent.emails.length, 4);
+  await post(env, { source: "op", storefronts: [{ ...front, drops: [{ ...drop, ready: true }] }] });
+  await sendDropNotices(env, at("2027-02-20T09:01:00Z"));
+  assert.equal(sent.pushes.length, 2, "still once");
+  // Taken back and marked ready again: told again.
+  await post(env, { source: "op", storefronts: [{ ...front, drops: [{ ...drop, ready: false }] }] });
+  assert.equal(DB.rows("drops")[0].ready_at, null);
+  await post(env, { source: "op", storefronts: [{ ...front, drops: [{ ...drop, ready: true }] }] });
+  await sendDropNotices(env, at("2027-02-21T09:00:00Z"));
+  assert.equal(sent.pushes.length, 3);
+  // A window that opened more than 12 hours before the cron saw it is only marked.
+  await post(env, { source: "op", storefronts: [{ ...front, drops: [drop, { ...drop, id: "late", opensAt: "2027-01-01T08:00:00Z" }] }] });
+  await as(42, env, "PUT", "/me/notify/late");
+  await sendDropNotices(env, at("2027-01-02T08:00:00Z"));
+  assert.equal(sent.pushes.length, 3);
+  assert.ok(DB.rows("drops", "id = 'late'")[0].opened_sent_at);
 });

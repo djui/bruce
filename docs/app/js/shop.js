@@ -28,8 +28,16 @@ export function decode(json) {
   const pids = new Set(products.map((p) => p.id));
   const drops = ((json && json.drops) || []).filter((d) => d && typeof d.id === 'string' && pids.has(d.productId) && typeof d.title === 'string'
     && Number.isFinite(d.opensAt) && Number.isFinite(d.closesAt) && d.closesAt > d.opensAt)
-    .map((d) => Object.assign({ challengeId: null, minQty: 0, maxQty: null, reserved: 0, pickupFrom: null, linkUrl: null }, d));
+    .map((d) => Object.assign({ challengeId: null, minQty: 0, maxQty: null, reserved: 0, pickupFrom: null, linkUrl: null, ready: false, unlocked: false }, d));
   return { city: (json && json.city) || '', storefronts: fronts, products, drops };
+}
+/** The member's unlocked drops and their products (GET /me/shop) laid over the public catalogue, by id. */
+export function merge(c, mine) {
+  const out = { city: c.city, storefronts: c.storefronts.slice(), products: c.products.slice(), drops: c.drops.slice() };
+  const extra = decode({ storefronts: c.storefronts, products: (mine && mine.products) || [], drops: (mine && mine.drops) || [] });
+  for (const p of extra.products) if (!out.products.some((x) => x.id === p.id)) out.products.push(p);
+  for (const d of extra.drops) { const i = out.drops.findIndex((x) => x.id === d.id); if (i >= 0) out.drops[i] = d; else out.drops.push(d); }
+  return out;
 }
 export const EMPTY = { city: '', storefronts: [], products: [], drops: [] };
 
@@ -45,15 +53,20 @@ export const filtered = (c, kind) => (c ? (kind ? c.products.filter((p) => p.kin
 /** A studio lists a towel (the "Forgot your towel?" card after a check-in at a Wellness studio). */
 export const towelFor = (c, studioId) => productsFor(c, studioId).find((p) => p.kind === 'towel') || null;
 
-/** "upcoming" before the window, "open" in it, "closed" after. */
+/** "upcoming" before the window, "open" in it, "closed" after, "ready" once the studio has it at the desk. */
 export function dropState(d, now) {
+  if (d.ready) return 'ready';
   if (now < d.opensAt) return 'upcoming';
   return now < d.closesAt ? 'open' : 'closed';
 }
-/** Drops not over yet, soonest closing first. */
+/** Drops not over yet (or ready at the desk), soonest closing first. */
 export const liveDrops = (c, now) => (c ? c.drops.filter((d) => dropState(d, now) !== 'closed').sort((a, b) => a.closesAt - b.closesAt) : []);
-/** Home's drop card: the live drop closing first. */
-export const homeDrop = (c, now) => liveDrops(c, now)[0] || null;
+/** Home's drop card: an unlocked drop first (it is the member's), else the live drop closing first. */
+export const homeDrop = (c, now) => liveDrops(c, now).find((d) => d.unlocked) || liveDrops(c, now)[0] || null;
+/** The drop a finished challenge unlocked, if the member has it. */
+export const dropForChallenge = (c, id) => (c ? c.drops.find((d) => d.challengeId === id && d.unlocked) || null : null);
+/** Reserve (phase 3): the studio's own checkout, while the window is open. The studio sells; Brüce only links. */
+export const reserveUrl = (d, now) => (dropState(d, now) === 'open' ? httpsUrl(d.linkUrl) : null);
 /** The run's goal: its size, else the minimum; "31 of 40", or "31 reserved" without a goal. */
 export const dropGoal = (d) => d.maxQty || d.minQty || 0;
 export const progressText = (d) => (dropGoal(d) > 0 ? d.reserved + ' of ' + dropGoal(d) : d.reserved + ' reserved');
@@ -68,13 +81,28 @@ export function untilText(ms, now) {
   if (h > 0) return h + ' h';
   return Math.max(1, m) + ' min';
 }
-/** "Closes in 2 d 14 h", "Opens in 5 d 3 h", "Closed". */
+/** "Closes in 2 d 14 h", "Opens in 5 d 3 h", "Closed", "Ready for pickup". */
 export function countdownText(d, now) {
   const s = dropState(d, now);
   if (s === 'upcoming') return 'Opens in ' + untilText(d.opensAt, now);
   if (s === 'open') return 'Closes in ' + untilText(d.closesAt, now);
-  return 'Closed';
+  return s === 'ready' ? READY : 'Closed';
 }
+export const READY = 'Ready for pickup';
+/** "Ready at the desk: Kärnan Reformer AB, at the desk, weekdays 06–20." */
+export function readyBody(front) {
+  if (!front) return 'Ready at the desk.';
+  return 'Ready at the desk: ' + front.sellerName + (front.pickupNote ? ', ' + front.pickupNote[0].toLowerCase() + front.pickupNote.slice(1) : '') + '.';
+}
+/** "Only for people who hit 20. One print run, picked up at Kärnan Reformer. Pre-order until Sun 7 Feb." */
+export function finisherBody(c, studio, d) {
+  const who = c.metric === 'target' ? 'Only for people who hit ' + c.target + '.' : 'Only for people who took part to the end.';
+  return who + ' One print run, picked up at ' + studio + '. Pre-order until ' + shortDay(d.closesAt) + '.';
+}
+export const FINISHER_HINT = 'Only for people who finished this challenge.';
+export const RESERVE_HINT = "Reserve opens the studio's own checkout. The studio sells it and hands it out at the desk; Brüce only links and reminds.";
+export const RESERVE_DESK = 'Reserve at the desk: the studio takes the pre-order itself.';
+export const DROP_CLOSED = 'The pre-order has closed.';
 const shortDay = (ms) => new Date(ms).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Stockholm' });
 const dayOf = (key) => new Date(key + 'T12:00:00Z').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
 /** "Pre-order until Sun 7 Feb · one print run · pickup from Sat 20 Feb". */

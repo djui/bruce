@@ -1017,3 +1017,10 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .card.shop-rail .section-head { margin: 0; }
 .card.shop-rail .seller { align-items: center; }
 .card.towel-card { margin-top: 14px; }
+.card.reward-card { display: grid; gap: 10px; }
+.reward-top { display: flex; align-items: center; gap: 12px; }
+.reward-top .grow { display: grid; gap: 4px; justify-items: start; }
+.reward-top a { font-size: 16px; text-decoration: none; color: var(--label); }
+.chips.sizes .chip { min-width: 44px; justify-content: center; }
+.chips.sizes .chip[aria-pressed="true"] { background: var(--label); color: var(--bg); }
+.drop-card .btn.sm { text-decoration: none; }

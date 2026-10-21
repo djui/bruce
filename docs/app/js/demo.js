@@ -404,6 +404,8 @@ function monthPeriod(offset) {
   const today = offset ? 0 : new Date().getDate();
   return { start: key(1), end: key(days), label: d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }), day: today, days, daysLeft: offset ? days : days - today };
 }
+/** Last month, over: every day is behind us. */
+function pastMonthPeriod() { const p = monthPeriod(-1); return Object.assign(p, { day: p.days, daysLeft: 0 }); }
 /** A fixed period (a crew runs from its start to race day). */
 function rangePeriod(start, end) {
   const s = new Date(start + 'T12:00:00Z'), e = new Date(end + 'T12:00:00Z'), now = new Date();
@@ -427,6 +429,9 @@ const demoChallenges = [
     status: { 1: 'accepted', 21: 'accepted', 22: 'accepted', 23: 'accepted' }, base: { 21: 13, 1: 11, 22: 9, 23: 6 } },
   { id: 'demoHits12x2', title: 'Everyone hits 12', metric: 'target', target: 12, category: null, categoryTitle: null, repeatMonthly: false, ownerId: 22,
     status: { 22: 'accepted', 1: 'invited', 23: 'accepted' }, base: { 22: 8, 23: 12, 1: 0 } },
+  // Last month's "Everyone hits 20", finished: the demo member hit 20 (mockup 4), which unlocked the finisher tee (DEMO_FINISHER).
+  { id: 'demoDone', title: '20 classes in ' + new Date(new Date().setDate(0)).toLocaleDateString('en-GB', { month: 'long' }), metric: 'target', target: 20, category: null, categoryTitle: null, repeatMonthly: false, ownerId: 22,
+    status: { 22: 'accepted', 1: 'accepted', 21: 'accepted' }, base: {}, fixed: { 22: 23, 1: 20, 21: 17 }, period: pastMonthPeriod() },
 ];
 const demoUsesBruce = [21, 22];
 function summaryOf(c) {
@@ -447,7 +452,8 @@ const STUDIO_ROT = [[3002, 'Reformer'], [1724, 'Full Body Strength'], [1489, 'Ha
 function entryFor(c, id, period) {
   const accepted = c.status[id] === 'accepted';
   const scale = Math.max(1, period.day) / 14;
-  const visits = accepted ? Math.max(0, Math.round((c.base[id] || 0) * scale)) : 0;
+  // `fixed`: the final numbers of a challenge that is over; else the base grows with the days gone.
+  const visits = accepted ? (c.fixed && c.fixed[id] != null ? c.fixed[id] : Math.max(0, Math.round((c.base[id] || 0) * scale))) : 0;
   const classes = Math.max(0, visits - (id % 3));
   const [sid, title] = STUDIO_ROT[id % STUDIO_ROT.length];
   const days = Math.max(1, period.day);
@@ -573,13 +579,25 @@ export function handleServer(method, path, body) {
     if (method === 'PUT') demoNotify.add(m[1]); else demoNotify.delete(m[1]);
     return ok2({ ok: true, notify: method === 'PUT', push: false, email: null });
   }
-  if (path === '/me/shop' && method === 'GET') return ok2({ notify: [...demoNotify].sort() });
+  if (path === '/me/shop' && method === 'GET') return ok2(Object.assign({ notify: [...demoNotify].sort() }, DEMO_FINISHER()));
   return fail(404, 'Not available in the demo: ' + path);
 }
 
 // ---------------------------------------------------------------- the studio shop (shop.js)
 
 const demoNotify = new Set();
+/** GET /me/shop's unlocked part in the demo: the finisher tee of the finished challenge (demoDone), a pre-order week that
+ *  closes in six days, one run of 30, picked up at Kärnan Reformer. Not in the public catalogue. */
+export function DEMO_FINISHER(now) {
+  const t = now || Date.now();
+  const day = (n) => new Date(t + n * 86400000).toISOString().slice(0, 10);
+  return {
+    drops: [{ id: 'finisher-tee-2026', studioId: 9840, productId: 'karnan-finisher-tee', challengeId: 'demoDone', title: 'Finisher tee', opensAt: t - 2 * 86400000, closesAt: t + 6 * 86400000,
+      minQty: 20, maxQty: 30, reserved: 12, pickupFrom: day(16), linkUrl: 'https://shop.example.org/karnan/finisher-tee', ready: false, unlocked: true }],
+    products: [{ id: 'karnan-finisher-tee', studioId: 9840, title: 'Finisher tee', kind: 'apparel', description: 'Organic cotton, printed in the EU · unisex', priceOre: 34900, vatRate: 25, fulfilment: 'pod', linkUrl: null,
+      variants: ['xs', 's', 'm', 'l', 'xl'].map((s) => ({ id: s, label: s.toUpperCase(), inStock: true })) }],
+  };
+}
 /** The demo catalogue (DemoShop.swift): three fictional studios with the listings from the Studio Merch mockups and a
  *  race-day tee drop that closes in two and a half days. No product carries a Bruce or Brüce mark; the webshop is made up.
  *  Production starts with an empty catalogue. */
@@ -607,7 +625,7 @@ export function DEMO_SHOP(now) {
     ],
     drops: [
       { id: 'hornstull-race-day-2027', studioId: 9840, productId: 'karnan-race-day-tee', challengeId: null, title: 'Hornstull Race Day tee', opensAt: t - 5 * 86400000, closesAt: t + 2 * 86400000 + 14 * 3600000,
-        minQty: 25, maxQty: 40, reserved: 31, pickupFrom: day(12), linkUrl: 'https://shop.example.org/karnan/race-day-tee' },
+        minQty: 25, maxQty: 40, reserved: 31, pickupFrom: day(12), linkUrl: 'https://shop.example.org/karnan/race-day-tee', ready: false },
     ],
   };
 }

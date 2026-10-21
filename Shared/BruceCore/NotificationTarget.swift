@@ -94,9 +94,12 @@ enum PushTarget: Equatable {
     case recommendation(Int?)
     /// A race reminder (local notification, Races.swift, or the server's race-week push), payload `raceId`.
     case race(String)
+    /// A drop's "Drop open" or "Ready for pickup" (`SHOP_DROP`, Shop.swift), payload `productId`: the listing's page.
+    case product(String)
 
     init?(userInfo: [AnyHashable: Any]) {
         if let id = userInfo["challengeId"] as? String, !id.isEmpty { self = .challenge(id); return }
+        if let id = userInfo["productId"] as? String, !id.isEmpty { self = .product(id); return }
         if let id = userInfo["raceId"] as? String, !id.isEmpty { self = .race(id); return }
         if userInfo["goalId"] != nil { self = .goals; return }
         if let ids = userInfo["recommend"] as? [Any] { self = .recommendation((ids.first as? NSNumber)?.intValue); return }
@@ -123,6 +126,11 @@ extension AppModel {
             // The race page on top of My classes › Races.
             showMyRaces()
             stacks[.myClasses] = [.race(id)]
+        case .product(let id):
+            // The listing on top of Home › Shop.
+            showShop()
+            stacks[.home] = [.shop, .product(id)]
+            Task { await loadShop(force: true) }
         }
     }
 }

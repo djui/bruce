@@ -354,8 +354,11 @@ extension AppModel {
         let b = demoChallenge(id: "demoHits", title: "Everyone hits 12", metric: "target", target: 12, owner: (12, "Sam"), mine: "invited",
                               people: [(12, "Sam", "accepted"), (11, "Alex", "accepted"), (0, "Demo", "invited")])
         let (crew, crewDetail) = demoCrewChallenge()
-        challenges = [b, crew, a]
+        // Last month's "Everyone hits 20", finished: the demo member hit 20 on the 28th (mockup 4), which unlocked the finisher tee (DemoShop.swift).
+        let done = demoDoneChallenge()
+        challenges = [b, crew, a, done.0]
         challengeDetails[crew.id] = crewDetail
+        challengeDetails[done.0.id] = done.1
         let day = a.period?.day ?? 14
         func daily(_ pattern: [Int]) -> [Int] { (0..<day).map { pattern[$0 % pattern.count] } }
         let iso = ISO8601DateFormatter()
@@ -399,6 +402,28 @@ extension AppModel {
             ChallengeEntry(userId: 11, name: "Alex", status: "accepted", rank: 2, score: 6, visits: 7, classes: 6, lastVisit: ago(6.2), daily: daily([1, 0, 0, 0, 1])),
             ChallengeEntry(userId: 0, name: "Demo", status: "invited"),
         ], months: [])
+    }
+
+    /// "20 classes in September": a target challenge over last month that the demo member finished (rank 2: Maja 23, Demo 20, Elin 17).
+    func demoDoneChallenge() -> (ChallengeSummary, ChallengeDetail) {
+        let cal = BruceDate.calendar
+        let start = cal.date(byAdding: .month, value: -1, to: cal.dateInterval(of: .month, for: Date())!.start)!
+        let days = cal.range(of: .day, in: .month, for: start)!.count
+        let end = cal.date(byAdding: .day, value: days - 1, to: start)!
+        let month = BruceDate.format(start, "MMMM")
+        let people: [(Int, String)] = [(9, "Maja"), (0, "Demo"), (13, "Elin")]
+        let c = ChallengeSummary(id: "demoDone", title: "20 classes in \(month)", metric: "target", target: 20, start: Challenge.dayString(start), end: Challenge.dayString(end),
+                                 repeatMonthly: false, ownerId: 9, ownerName: "Maja", myStatus: "accepted",
+                                 participants: people.map { ChallengeParticipant(userId: $0.0, name: $0.1, status: "accepted") },
+                                 period: ChallengePeriod(start: Challenge.dayString(start), end: Challenge.dayString(end), label: BruceDate.format(start, "MMMM yyyy"), day: days, days: days, daysLeft: 0),
+                                 shareUrl: Challenge.shareURL("demoDone").absoluteString)
+        let iso = ISO8601DateFormatter()
+        func daily(_ n: Int) -> [Int] { (0..<days).map { i in i % 3 == 0 && n > i / 3 ? 1 : (i % 7 == 5 && n > days / 3 + i / 7 ? 1 : 0) } }
+        let board = [(9, "Maja", 23, 1), (0, "Demo", 20, 2), (13, "Elin", 17, 3)].map { id, name, n, rank in
+            ChallengeEntry(userId: id, name: name, status: "accepted", rank: rank, score: n, visits: n, classes: n, dropins: 0, minutes: n * 50, studios: 3,
+                           topClass: .init(title: "Reformer", count: n / 2), together: id == 0 ? 0 : 6, lastVisit: iso.string(from: end), done: n >= 20, daily: daily(n))
+        }
+        return (c, ChallengeDetail(challenge: c, leaderboard: board, months: [], updatedAt: iso.string(from: end)))
     }
 
     func demoChallenge(id: String, title: String, metric: String, target: Int?, owner: (Int, String), mine: String,

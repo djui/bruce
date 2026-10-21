@@ -9,6 +9,7 @@ import { sheet, toast, run, empty, loading, avatar, confirmSheet, glassBtn, chip
 import { challengeShareUrl, challengeRoute } from './links.js';
 import { fromRace, keyOf, countdownShort, shortDay } from './races.js';
 import { isCrew, weeklyText, thisWeekText, lastWeekText, doneThisWeekText, crewName, defaultWeekly, WEEKLY } from './crews.js';
+import { rewardCardHTML, shopClick } from './shopui.js';
 
 const CREW_PRIVACY = 'Friends in this crew see your visits: sessions each week, class types and studios. Each friend accepts separately. Leave anytime; your numbers are deleted.';
 const CREW_INTRO = 'A crew trains for the race together: a challenge until race day where everyone aims for the same sessions a week. On Sundays the Brüce iPhone app tells you how the crew did.';
@@ -123,6 +124,8 @@ export async function renderChallenge(el, id, ctx) {
   if (t !== token) return;
   if (d.joinable !== undefined) { preview(d); return; }
   draw(d);
+  // The finisher tee (shopui.js, mockup 4): only once the server unlocked it for this member.
+  St.loadShop().then(() => { if (t === token && el.isConnected && !d.crew) draw(d); });
 
   function preview(d) {
     const c = d.challenge;
@@ -173,7 +176,7 @@ export async function renderChallenge(el, id, ctx) {
         return '<button class="lbrow' + (isMe ? ' me' : '') + (r.status !== 'accepted' ? ' pending' : '') + '" data-p="' + r.userId + '">' +
           '<span class="rk">' + (r.rank || '–') + '</span>' + avatar(userFor(r.userId, r.name), 38) +
           '<span class="nm"><b>' + esc(isMe ? 'You' : r.name) + (r.done ? ' ' + icon('checkSeal') : '') + '</b><small>' + esc(lineFor(r, c, accepted)) + '</small></span><span class="sc">' + (r.status === 'accepted' ? score(r) : '') + '</span></button>';
-      }).join('') + '</div>' +
+      }).join('') + '</div>' + rewardCardHTML(c, 'friends') +
       (mine && mine.status === 'accepted' ? '<h2 class="sec-title">Your days <small class="muted">' + mine.score + ' ' + unit(c) + ' in ' + days.length + ' days</small></h2>' +
         '<div class="card"><div class="spark">' + days.map((n, i) => '<i class="' + (n ? 'on' : '') + '" style="height:' + (n ? Math.max(12, Math.round(100 * n / maxDay)) : 4) + '%" title="' + (i + 1) + ': ' + n + '"></i>').join('') + '</div>' +
         '<div class="row-between muted small"><span>' + esc(shortDate(c.period.start)) + '</span><span>Today</span></div></div>' : '') +
@@ -183,6 +186,7 @@ export async function renderChallenge(el, id, ctx) {
       '<div class="row2"><button class="btn glass" data-cact="share">' + icon('share') + ' Share link</button><button class="btn glass red-text" data-cact="leave">Leave</button></div></div>';
     el.querySelectorAll('[data-p]').forEach((b) => b.addEventListener('click', () => openParticipant(board.find((r) => r.userId === +b.dataset.p), c)));
     el.onclick = (e) => {
+      if (shopClick(e, () => draw(d))) return;
       const b = e.target.closest('[data-cact]');
       if (!b) return;
       const a = b.dataset.cact;

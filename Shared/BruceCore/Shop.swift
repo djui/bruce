@@ -110,11 +110,16 @@ struct Drop: Codable, Hashable, Identifiable {
     var pickupFrom: String? = nil
     /// The studio's own payment link for Reserve (phase 3).
     var linkUrl: String? = nil
+    /// The operator marked it ready for pickup (the feed's `ready`; the server sent "Ready for pickup").
+    var ready = false
+    /// Tied to a challenge the member finished (`GET /me/shop`): only they see it.
+    var unlocked = false
 
     init(id: String, studioId: Int, productId: String, challengeId: String? = nil, title: String, opensAt: Int, closesAt: Int, minQty: Int = 0, maxQty: Int? = nil,
-         reserved: Int = 0, pickupFrom: String? = nil, linkUrl: String? = nil) {
+         reserved: Int = 0, pickupFrom: String? = nil, linkUrl: String? = nil, ready: Bool = false, unlocked: Bool = false) {
         self.id = id; self.studioId = studioId; self.productId = productId; self.challengeId = challengeId; self.title = title; self.opensAt = opensAt
         self.closesAt = closesAt; self.minQty = minQty; self.maxQty = maxQty; self.reserved = reserved; self.pickupFrom = pickupFrom; self.linkUrl = linkUrl
+        self.ready = ready; self.unlocked = unlocked
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -130,24 +135,31 @@ struct Drop: Codable, Hashable, Identifiable {
         reserved = try c.decodeIfPresent(Int.self, forKey: .reserved) ?? 0
         pickupFrom = try c.decodeIfPresent(String.self, forKey: .pickupFrom)
         linkUrl = try c.decodeIfPresent(String.self, forKey: .linkUrl)
+        ready = try c.decodeIfPresent(Bool.self, forKey: .ready) ?? false
+        unlocked = try c.decodeIfPresent(Bool.self, forKey: .unlocked) ?? false
     }
 
-    enum State { case upcoming, open, closed }
+    /// Before the window, in it, after it, and once the studio has it at the desk.
+    enum State { case upcoming, open, closed, ready }
 
     var opens: Date { Date(timeIntervalSince1970: Double(opensAt) / 1000) }
     var closes: Date { Date(timeIntervalSince1970: Double(closesAt) / 1000) }
     func state(now: Date = Date()) -> State {
+        if ready { return .ready }
         if now < opens { return .upcoming }
         return now < closes ? .open : .closed
     }
-    /// "Closes in 2 d 14 h", "Opens in 5 d 3 h", "Closed".
+    /// "Closes in 2 d 14 h", "Opens in 5 d 3 h", "Closed", "Ready for pickup".
     func countdownText(now: Date = Date()) -> String {
         switch state(now: now) {
         case .upcoming: return "Opens in \(ShopClock.until(opens, now: now))"
         case .open: return "Closes in \(ShopClock.until(closes, now: now))"
         case .closed: return "Closed"
+        case .ready: return Copy.shopReadyTitle
         }
     }
+    /// Reserve (phase 3): the studio's own checkout, while the window is open. The studio sells; Brüce only links.
+    func reserveURL(now: Date = Date()) -> URL? { state(now: now) == .open ? url : nil }
     /// The run's goal: its size, else the minimum; 0 without either.
     var goal: Int { maxQty ?? minQty }
     /// "31 of 40", or "31 reserved" without a goal.
@@ -206,10 +218,22 @@ struct ShopCatalog: Codable, Hashable {
     func filtered(kind: ProductKind?) -> [Product] { kind.map { k in products.filter { $0.kind == k } } ?? products }
     /// A studio lists a towel (the "Forgot your towel?" card after a check-in at a Wellness studio).
     func towel(for studioId: Int) -> Product? { products(for: studioId).first { $0.kind == .towel } }
-    /// Drops not over yet, soonest closing first.
+    /// Drops not over yet (or ready at the desk), soonest closing first.
     func liveDrops(now: Date = Date()) -> [Drop] { drops.filter { $0.state(now: now) != .closed }.sorted { $0.closesAt < $1.closesAt } }
-    /// Home's drop card: the live drop closing first.
-    func homeDrop(now: Date = Date()) -> Drop? { liveDrops(now: now).first }
+    /// Home's drop card: an unlocked drop first (it is the member's), else the live drop closing first.
+    func homeDrop(now: Date = Date()) -> Drop? { liveDrops(now: now).first { $0.unlocked } ?? liveDrops(now: now).first }
+    /// The drop a finished challenge unlocked, if the member has it (phase 3).
+    func drop(forChallenge id: String) -> Drop? { drops.first { $0.challengeId == id && $0.unlocked } }
+
+    /// The member's unlocked drops and their products (`GET /me/shop`) laid over the public catalogue, by id.
+    func merging(drops mine: [Drop], products theirs: [Product]) -> ShopCatalog {
+        var c = self
+        for p in theirs where !c.products.contains(where: { $0.id == p.id }) { c.products.append(p) }
+        for d in mine {
+            if let i = c.drops.firstIndex(where: { $0.id == d.id }) { c.drops[i] = d } else { c.drops.append(d) }
+        }
+        return c
+    }
 
     /// Decodes a catalogue, skipping entries this version can't read (a new kind, say) instead of failing the whole answer.
     static func decode(_ data: Data) throws -> ShopCatalog {
@@ -284,10 +308,21 @@ enum ShopServer {
     static func notify(_ on: Bool, dropId: String, session: Session) async throws {
         try await BruceAPI.send(AutoBookServer.request(on ? "PUT" : "DELETE", "me/notify/\(dropId)", session: session))
     }
-    /// `GET /me/shop`: the drops the member watches, on every device.
-    static func mine(session: Session) async throws -> [String] {
-        struct R: Decodable { let notify: [String]? }
-        return try JSONDecoder().decode(R.self, from: try await BruceAPI.send(AutoBookServer.request("GET", "me/shop", session: session))).notify ?? []
+    /// `GET /me/shop`: the drops the member watches, on every device, and the drops a finished challenge unlocked.
+    struct Mine: Decodable {
+        var notify: [String] = []
+        var drops: [Drop] = []
+        var products: [Product] = []
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            notify = try c.decodeIfPresent([String].self, forKey: .notify) ?? []
+            drops = ((try? c.decodeIfPresent([LossyItem<Drop>].self, forKey: .drops)) ?? nil)?.compactMap(\.value) ?? []
+            products = ((try? c.decodeIfPresent([LossyItem<Product>].self, forKey: .products)) ?? nil)?.compactMap(\.value) ?? []
+        }
+        enum CodingKeys: String, CodingKey { case notify, drops, products }
+    }
+    static func mine(session: Session) async throws -> Mine {
+        try JSONDecoder().decode(Mine.self, from: try await BruceAPI.send(AutoBookServer.request("GET", "me/shop", session: session)))
     }
     /// `POST /shop/tap`: one to the day's counter for a listing; no user id goes with it.
     static func tap(productId: String) async {
@@ -316,8 +351,15 @@ extension AppModel {
         shopLoading = true
         defer { shopLoading = false }
         if let c = try? await ShopServer.catalogue(city: code) { shop = c; shopFetchedAt = Date() }
-        if tokenUsable, let s = session, AutoBookServer.booksForMe, let mine = try? await ShopServer.mine(session: s) { shopNotify = Set(mine) }
+        // Notify me on every device, and the drops a finished challenge unlocked, laid over the catalogue.
+        if tokenUsable, let s = session, AutoBookServer.booksForMe, let mine = try? await ShopServer.mine(session: s) {
+            shopNotify = Set(mine.notify)
+            if let c = shop { shop = c.merging(drops: mine.drops, products: mine.products) }
+        }
     }
+
+    /// The reward of a finished challenge (phase 3): its drop, only once the server unlocked it for the member.
+    func rewardDrop(forChallenge id: String) -> Drop? { shop?.drop(forChallenge: id) }
 
     func shopStorefront(_ studioId: Int) -> Storefront? { shop?.storefront(studioId) }
     func shopProducts(for studioId: Int) -> [Product] { shop?.products(for: studioId) ?? [] }
