@@ -151,6 +151,11 @@ My classes tabs, with class and studio pages and account sheets.
   Screen *Check in* button, plus a Control Center control. They read a snapshot the app writes into an App Group;
   no login or token ever enters the widget extension, and the button and control only **open** the quick check-in
   sheet, where check-in stays confirmed and location-aware. Every face says "Brüce (unofficial)".
+- **Live Activity for today's class** (iPhone): from 90 minutes before a booked class the Lock Screen and Dynamic
+  Island show "Leave by 17:42 · 12 min by bike" (MapKit travel time from where you are, or from home, by your
+  commute mode), then "Check-in open until 18:10" with a **Check in** button that opens the app, then the checked-in
+  ticket. Started and updated while the app runs (no push); the countdowns tick on their own. Nothing is checked in
+  from the Lock Screen.
 - **Apple Health** (iPhone): Settings › Apple Health saves every class you attended as a workout, with the
   workout type guessed from the class and its category (Hyrox as HIIT, yoga, cycling, swimming…), start and end
   time and estimated active calories (MET value × duration × your weight from Health, else 75 kg). Solo gym visits

@@ -115,6 +115,29 @@ struct CheckInControl: ControlWidget {
     }
 }
 
+/// Live Activity for today's class (Shared/BruceWidgetKit/ClassActivity.swift), started by the app.
+struct ClassActivityWidget: Widget {
+    var body: some WidgetConfiguration {
+        ActivityConfiguration(for: ClassActivityAttributes.self) { context in
+            ClassActivityLockView(attributes: context.attributes, state: context.state)
+                .activityBackgroundTint(Color(.systemBackground).opacity(0.9))
+        } dynamicIsland: { context in
+            DynamicIsland {
+                DynamicIslandExpandedRegion(.bottom) {
+                    ClassActivityLockView(attributes: context.attributes, state: context.state)
+                }
+            } compactLeading: {
+                ClassActivityCompactLeading(state: context.state)
+            } compactTrailing: {
+                ClassActivityCompactTrailing(attributes: context.attributes, state: context.state)
+            } minimal: {
+                ClassActivityCompactLeading(state: context.state)
+            }
+            .widgetURL(context.state.phase == .checkedIn ? WidgetSnapshot.ticketURL(context.attributes.bookingId) : WidgetSnapshot.checkInURL)
+        }
+    }
+}
+
 @main
 struct BruceWidgetsBundle: WidgetBundle {
     var body: some Widget {
@@ -122,5 +145,6 @@ struct BruceWidgetsBundle: WidgetBundle {
         VisitsLeftWidget()
         CheckInWidget()
         CheckInControl()
+        ClassActivityWidget()
     }
 }

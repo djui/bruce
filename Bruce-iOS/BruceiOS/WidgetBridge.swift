@@ -21,6 +21,7 @@ extension AppModel {
         let total = monthly?.total.flatMap { $0 > 0 ? $0 : nil }
         let snap = WidgetSnapshot(next: next, visitsUsed: monthly?.used, visitsTotal: total, month: BruceDate.format(now, "MMMM"),
                                   loggedIn: isLoggedIn, updatedAt: now)
+        Task { await ClassLiveActivity.sync(self) }
         guard snap != WidgetSnapshot.load() else { return }
         snap.save()
         WidgetCenter.shared.reloadAllTimelines()
@@ -34,6 +35,7 @@ extension AppModel {
         case "checkin": dismissSheets(); if isLoggedIn { present(.quickCheckIn) } else { present(.login) }
         case "visits": dismissSheets(); present(isLoggedIn ? .visits : .login)
         case "class": if parts.count > 1, let id = Int(parts[1]) { dismissSheets(); push(.classDetail(id)) }
+        case "ticket": if parts.count > 1, let id = Int(parts[1]) { dismissSheets(); present(.ticket(id)) }
         default: break
         }
     }
@@ -57,6 +59,15 @@ struct WidgetsPreviewSheet: View {
                     face(NextClassView(snapshot: s, now: Date(), family: .accessoryRectangular), w: 172, h: 76, lock: true)
                     face(VisitsLeftView(snapshot: s, family: .accessoryCircular), w: 76, h: 76, lock: true)
                     face(CheckInButtonView(), w: 76, h: 76, lock: true)
+                }
+                Text("Live Activity for today's class").font(.system(size: 16, weight: .bold)).padding(.top, 8)
+                let a = ClassLiveActivity.demoAttributes
+                ForEach(Array([ClassActivityAttributes.ContentState(phase: .leave, leaveBy: a.start.addingTimeInterval(-33 * 60), travelMinutes: 12, mode: "bike", checkedInAt: nil),
+                               .init(phase: .checkIn, leaveBy: nil, travelMinutes: nil, mode: nil, checkedInAt: nil),
+                               .init(phase: .checkedIn, leaveBy: nil, travelMinutes: nil, mode: nil, checkedInAt: a.start.addingTimeInterval(-19 * 60))].enumerated()), id: \.offset) { _, st in
+                    ClassActivityLockView(attributes: a, state: st).frame(maxWidth: .infinity)
+                        .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                        .environment(\.colorScheme, .dark)
                 }
                 Text(WidgetTheme.brand).font(.system(size: 12)).foregroundStyle(Theme.secondary)
             }
