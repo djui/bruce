@@ -89,7 +89,7 @@ export function openGoals() {
       const del = e.target.closest('[data-gdel]');
       if (del) {
         const g = St.goals()[+del.dataset.gdel];
-        confirmSheet('Delete this goal?', title(g) + ': ' + g.target + ' a month.', 'Delete goal').then((yes) => { if (yes) St.saveGoals(St.goals().filter((x) => x.id !== g.id)); });
+        confirmSheet('Delete this goal?', title(g) + ': ' + g.target + ' a month.', 'Delete goal').then((yes) => { if (yes) St.deleteGoal(g); });
         return;
       }
       openGoalEditor(St.goals()[+c.dataset.gi]);
@@ -135,7 +135,7 @@ export function openGoalEditor(goal) {
       draw();
     }));
     const del = s.body.querySelector('[data-delete]');
-    if (del) del.addEventListener('click', () => { St.saveGoals(St.goals().filter((x) => x.id !== g.id)); s.close(); toast('Goal deleted'); });
+    if (del) del.addEventListener('click', () => { St.deleteGoal(g); s.close(); toast('Goal deleted'); });
     s.body.querySelector('[data-save]').addEventListener('click', save);
   }
   function save() {

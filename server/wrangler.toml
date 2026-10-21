@@ -14,7 +14,7 @@ crons = ["* * * * *", "30 2 * * *"]
 binding = "DB"
 database_name = "bruce-autobook"
 database_id = "39f77894-b4c9-4842-b8be-256aa1e353c4"
-# challenges, participants, daily_counts, nudges: npx wrangler d1 migrations apply bruce-autobook --remote
+# challenges, participants, daily_counts, nudges, user_races: npx wrangler d1 migrations apply bruce-autobook --remote
 migrations_dir = "migrations"
 
 [vars]

@@ -280,11 +280,11 @@ export const keyOf = (m) => m.raceId || CUSTOM + m.id;
 export function resolve(m, catalog) {
   const r = m.raceId && (catalog || []).find((x) => x.id === m.raceId);
   if (r) return r;
-  return { id: keyOf(m), name: m.name, type: m.type || 'running', date: m.date, endDate: m.endDate || undefined, city: m.city || '',
+  return { id: keyOf(m), name: m.name, type: m.type || 'running', sport: m.sport || undefined, date: m.date, endDate: m.endDate || undefined, city: m.city || '',
     country: '', distancesKm: [], signupUrl: m.url || '', status: 'checkSite', checkedOn: '' };
 }
 export function fromRace(r) {
-  return { id: newId(), raceId: r.id, name: r.name, date: r.date, endDate: r.endDate || null, city: r.city, url: r.signupUrl, type: r.type, addedAt: new Date().toISOString() };
+  return { id: newId(), raceId: r.id, name: r.name, date: r.date, endDate: r.endDate || null, city: r.city, url: r.signupUrl, type: r.type, sport: r.sport || null, addedAt: new Date().toISOString() };
 }
 export const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 export const entries = (mine, catalog) => (mine || []).map((m) => ({ mine: m, race: resolve(m, catalog), day: m.day || resolve(m, catalog).date }));

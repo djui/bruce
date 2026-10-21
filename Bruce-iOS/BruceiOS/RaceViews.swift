@@ -210,6 +210,7 @@ struct RaceDetailView: View {
                     if let u = r.url { signupButton(r, u) }
                     if !r.isCustom && !r.checkedOn.isEmpty { feeCard(r) }
                     if r.opensLater() { signupCard(r) }
+                    if let e = m.myRaceEntries.first(where: { $0.mine.key == raceId }), let plan = m.racePlan(for: e) { planCard(e, plan) }
                     if let mine { yourRace(r, mine) }
                     footnotes(r)
                 }
@@ -313,6 +314,30 @@ struct RaceDetailView: View {
         .accessibilityHint("Opens the race's own page in Safari")
     }
 
+    /// Train for it on the race page: where the block stands; opens the plan.
+    func planCard(_ e: MyRaceEntry, _ plan: RacePlan) -> some View {
+        Button { m.present(.racePlan(raceId)) } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(alignment: .firstTextBaseline) {
+                    Label(Copy.planTrainForIt, systemImage: "figure.run").bruceFont(16, weight: .semibold)
+                    Spacer()
+                    Image(systemName: "chevron.right").foregroundStyle(Theme.tertiary)
+                }
+                HStack(alignment: .firstTextBaseline) {
+                    Text(plan.headline()).bruceFont(15, weight: .medium)
+                    Spacer()
+                    if let st = m.planWeekStatus(e, plan) { Text(st.progressText).bruceFont(14).foregroundStyle(Theme.secondary) }
+                }
+                PlanPhaseStrip(plan: plan, onGradient: false)
+            }
+            .foregroundStyle(Theme.ink)
+            .padding(16)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(.regular, in: .rect(cornerRadius: 24))
+    }
+
     func yourRace(_ r: Race, _ mine: MyRace) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("YOUR RACE").bruceHeading(16)
@@ -336,7 +361,19 @@ struct RaceDetailView: View {
                 .bruceFont(16)
                 .padding(.horizontal, 14).frame(height: 44)
                 .background(Theme.chipGrey, in: RoundedRectangle(cornerRadius: 14))
+            if !r.isPast(day: mine.day) {
+                Toggle(isOn: Binding(get: { mine.remindWeek }, set: { m.setRaceReminder(r, week: $0) })) {
+                    Label(Copy.planRemindWeek, systemImage: "bell").bruceFont(15)
+                }
+                Toggle(isOn: Binding(get: { mine.remindEve }, set: { m.setRaceReminder(r, eve: $0) })) {
+                    Label(Copy.planRemindEve, systemImage: "moon").bruceFont(15)
+                }
+            }
             HStack(spacing: 10) {
+                Button { calendarOpen = true } label: {
+                    Label("Add to Calendar", systemImage: "calendar.badge.plus").bruceFont(15, weight: .semibold).padding(.horizontal, 12).frame(height: 34)
+                }
+                .buttonStyle(.glass)
                 if r.isCustom {
                     Button { m.present(.editRace(mine.id)) } label: {
                         Label("Edit", systemImage: "pencil").bruceFont(15, weight: .semibold).padding(.horizontal, 12).frame(height: 34)
@@ -365,12 +402,26 @@ struct RaceDetailView: View {
         .padding(.top, 4)
     }
 
+    /// Train for it is the race page's own action (sign-up is the race's page); Add to My races or Calendar next to it.
     @ViewBuilder func actionBar(_ r: Race) -> some View {
-        Group {
-            if mine == nil {
-                LimeButton(title: "Add to My races", systemImage: "plus") { m.addToMyRaces(r) }
+        HStack(spacing: 10) {
+            if r.isPast(day: mine?.day) {
+                if mine == nil { LimeButton(title: "Add to My races", systemImage: "plus") { m.addToMyRaces(r) } }
             } else {
-                LimeButton(title: "Add to Calendar", systemImage: "calendar.badge.plus") { calendarOpen = true }
+                LimeButton(title: mine?.plan == nil ? Copy.planTrainForIt : "Your plan", systemImage: "figure.run") { m.present(.racePlan(raceId)) }
+                if mine == nil {
+                    Button { m.addToMyRaces(r) } label: {
+                        Image(systemName: "plus").bruceFont(18, weight: .semibold).frame(width: 44, height: 40)
+                    }
+                    .buttonStyle(.glass).controlSize(.large)
+                    .accessibilityLabel("Add to My races")
+                } else {
+                    Button { calendarOpen = true } label: {
+                        Image(systemName: "calendar.badge.plus").bruceFont(18, weight: .semibold).frame(width: 44, height: 40)
+                    }
+                    .buttonStyle(.glass).controlSize(.large)
+                    .accessibilityLabel("Add to Calendar")
+                }
             }
         }
         .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
@@ -435,8 +486,11 @@ struct MyRacesSection: View {
                 }
             }
             if let next = up.first {
-                NavigationLink(value: Route.race(next.race.id)) { NextRaceBanner(entry: next) }.buttonStyle(.plain)
+                NavigationLink(value: Route.race(next.race.id)) { NextRaceBanner(entry: next, plan: m.racePlan(for: next)) }.buttonStyle(.plain)
+                if m.racePlan(for: next) == nil, (next.daysToGo() ?? 0) > 0 { TrainForItPrompt(entry: next) }
             }
+            // This week of the running plan (the next race's, or a race just done in its recovery week).
+            if let (e, plan) = m.activePlan { PlanWeekSection(entry: e, plan: plan).padding(.top, 6) }
             if up.count > 1 {
                 header("Later", up.count - 1 == 1 ? "1 race" : "\(up.count - 1) races")
                 rows(Array(up.dropFirst()))
@@ -474,9 +528,10 @@ struct MyRacesSection: View {
     }
 }
 
-/// My classes › Races: the next race, big.
+/// My classes › Races: the next race, big; with a plan, its week and phases.
 struct NextRaceBanner: View {
     let entry: MyRaceEntry
+    var plan: RacePlan? = nil
     var body: some View {
         let r = entry.race
         VStack(alignment: .leading, spacing: 6) {
@@ -494,6 +549,10 @@ struct NextRaceBanner: View {
             if let h = entry.hint() {
                 Label(h, systemImage: entry.mine.remindSignup || entry.mine.remindPrice ? "bell.fill" : "info.circle")
                     .bruceFont(14, weight: .semibold).padding(.top, 6)
+            }
+            if let plan, plan.isRunning() {
+                PlanPhaseStrip(plan: plan).padding(.top, 10)
+                Text(plan.headline()).bruceFont(14, weight: .semibold)
             }
         }
         .foregroundStyle(.white)
@@ -545,6 +604,7 @@ struct NextRaceCard: View {
         if let e = m.nextMyRace {
             let r = e.race
             let days = e.daysToGo() ?? 0
+            let plan = m.racePlan(for: e)
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("NEXT RACE").bruceHeading(19)
@@ -567,7 +627,9 @@ struct NextRaceCard: View {
                             }
                             Spacer(minLength: 0)
                         }
-                        if let h = e.hint() {
+                        if let plan, plan.isRunning() {
+                            PlanHomeLine(entry: e, plan: plan)
+                        } else if let h = e.hint() {
                             Label(h, systemImage: e.mine.remindSignup || e.mine.remindPrice ? "bell.fill" : "info.circle")
                                 .bruceFont(14, weight: .semibold)
                                 .padding(.horizontal, 12).padding(.vertical, 8)
@@ -587,9 +649,11 @@ struct NextRaceCard: View {
                     .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel("Next race: \(r.name), \(r.countdownText(day: e.mine.day))")
+                .accessibilityLabel("Next race: \(r.name), \(r.countdownText(day: e.mine.day))" + (plan.map { ", " + $0.headline() } ?? ""))
+                if let plan, let next = m.planWeekStatus(e, plan)?.nextToBook { PlanNextClassRow(suggestion: next) }
             }
             .padding(.horizontal, Theme.gutter).padding(.top, 26)
+            .task(id: plan != nil) { if plan != nil { await m.loadPlanWeekClasses() } }
         }
     }
 }

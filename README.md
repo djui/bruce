@@ -151,7 +151,16 @@ My classes tabs, with class and studio pages and account sheets.
   with your day of a multi-day event and your start ("Doubles Open"); Home shows the **next race** with its countdown
   above Spotlight. **Add to Calendar** makes an all-day event (EventKit on iPhone and Mac, an .ics file on the web).
   The iPhone and Mac can remind you at 09:00 when **sign-up opens** and the day before the **next price step**, each
-  switched on per race (local notifications). My races stay on the device; no server is involved yet.
+  switched on per race (local notifications). My races stay on the device.
+- **Train for it** (iPhone, Mac and web; see [Train for it](#train-for-it)): the race page's own action turns a race
+  in My races into a weekly **class mix** of Bruce classes up to race day: Base, Build, Peak, race week and a
+  recovery week, as a phase strip and a weeks × categories grid you can change week by week, with 2 to 6 classes a
+  week. My classes › Races shows the week ("Week 3 of 10 · Base") and **This week** with each planned class Done,
+  Booked, Auto-book (a weekly rule books it) or a class near you to **Book** (hold for Book every week); Home's Next
+  race card adds the week and the next class to book. Race week offers to pause weekly bookings of hard classes. The
+  plan can make this month's **monthly goals**, and **race week** (Monday 08:00) and **the day before** (18:00)
+  reminders come as notifications, or with the server on as a push and an email. It is not coaching: it doesn't
+  plan long runs, rides or swims and says so.
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.
@@ -237,7 +246,9 @@ selected, Explore shows the city's studios on a map next to the list.
   check-in request and shows the ticket. Scan the door QR code with the camera (BarcodeDetector, or jsQR where
   that is missing) or type the code. Studios that open with Parakey still need the Parakey app.
 - **Races**: Explore › Races, race pages with the price steps and the official link, My classes › Races (kept in
-  localStorage), the next race on Home, and Add to Calendar as an .ics file.
+  localStorage), the next race on Home, and Add to Calendar as an .ics file. **Train for it** with the plan sheet,
+  This week and Book (no Book every week: the web has no weekly auto-book), monthly goals from the plan, and race-week
+  reminders sent by the server while it is on.
 - **Friends** (their upcoming classes), **My classes** (bookings, waitlist, bookmarks under Classes; your races under
   Races) and **Notifications**.
 - **Account menu**: plan, visit meters and strikes, statistics (visits per month and the visits behind each bar),
@@ -296,6 +307,50 @@ never edits the catalog and nothing runs it automatically.
 
 **Not planned:** selling entries, affiliate links, scraped results, Strava sync, pace coaching, races outside Sweden,
 Norway and Denmark (for now).
+
+## Train for it
+
+[`Shared/BruceCore/RacePlanner.swift`](Shared/BruceCore/RacePlanner.swift) (and the same logic in
+[`docs/app/js/raceplan.js`](docs/app/js/raceplan.js), tested with the same cases) turns a race day into weeks:
+
+- **The block** ends in race week (the ISO week of your day of the race) and is 10 weeks by default (4 to 16), never
+  starting before the week you started the plan. Race week is last, Peak the two weeks before it, Build about a third
+  of the rest, Base the remainder; a block of six weeks or fewer (a race under six weeks away) skips Base, and very
+  short ones keep Peak, then Build. One recovery week follows race week.
+- **The class mix** per race type, by Bruce category id with a title fallback (ids as in the demo data; when the API's
+  list has the id under another title, a category with a matching title or code is used instead):
+
+| Race type | Categories (id) | A Build week with 4 classes | Race week | Recovery |
+|---|---|---|---|---|
+| HYROX | Hyrox 13, Strength 26, Running 23, High-intensity 12, Mobility 16 | 2 Hyrox, 1 Strength, 1 Running | 1 Hyrox, 1 Mobility | Mobility, Sauna 24 |
+| Running | Running 23, Cycling 9, Strength 26, Mobility 16, Yoga 2 | 1 Running, 1 Cycling, 1 Strength, 1 Mobility | 1 Mobility | Massage & Naprapathy 15, Mobility |
+| Obstacle | Strength 26, CrossFit 8, Climbing 7, Running 23, Outdoor 18 | 1 Strength, 1 CrossFit, 1 Climbing, 1 Running | 1 Climbing, 1 Mobility | Mobility, Sauna |
+| Ski | Cardio 6, Strength 26, Cycling 9 | 2 Cardio, 1 Strength, 1 Cycling | 1 Cardio, 1 Mobility | Mobility, Sauna |
+| Bike | Cycling 9, Strength 26, Cardio 6 | 2 Cycling, 1 Strength, 1 Cardio | 1 Cycling, 1 Mobility | Mobility, Sauna |
+| Swim | Swimming 27, Strength 26, Cardio 6 | 2 Swimming, 1 Strength, 1 Cardio | 1 Swimming, 1 Mobility | Mobility, Sauna |
+| Triathlon | Swimming 27, Cycling 9, Running 23, Strength 26 | 1 each | 1 Swimming, 1 Mobility | Mobility, Sauna |
+
+- **Your changes**: the number of classes a week (2 to 6, for Base, Build and Peak) and the count of any category in
+  any week ahead (the grid). They are saved with the race in My races (`plan`: `startedOn`, `weeks`, `perWeek`,
+  `edits` as `"<Monday>|<category>"`), so a file from an older version still loads and one with an unreadable plan
+  keeps the race.
+- **This week** counts your check-ins (the visit history goals and Statistics read) and bookings: each fills a slot
+  of one of its categories. Open slots get a class from the city schedule for the rest of the week, ranked like For
+  you (your places and commute, history, friends), within your visit limits, your plan's tiers and the selected area,
+  one class per slot, preferring days without another class and classes still free to cancel (a class inside the
+  free cancellation shows "Cancelling costs a strike"). **Book** opens the usual booking rules sheet; **Book every
+  week** is the existing auto-book with its late-spot rule. In race week only classes before race day are
+  suggested, and from the week before race week My classes offers to **pause** weekly bookings of hard classes
+  (Hyrox, Strength, High-intensity, CrossFit) until race day is over; nothing is cancelled without you.
+- **Monthly goals** from the plan: this month's planned classes per category (a week counts for the month its
+  Thursday is in, the four biggest categories) become monthly goals with "Reminder when behind"; their targets
+  follow the plan each month and they go when the plan stops or ends. A category you already have a goal for keeps
+  yours, and a plan goal you delete stays deleted.
+- **Reminders**: race week (08:00 on the Monday; for a race on a Monday either switch means the evening before) and
+  the day before (18:00), each switched on per race. On the device they are local notifications; with the server on,
+  each device sends its races with `PUT /me/races` and the server pushes them (the race-week one also by email, with
+  what you booked that week), and the device leaves out the ones the server confirmed
+  ([server/README.md](server/README.md#race-reminders)).
 
 ## Repository layout
 
@@ -358,8 +413,10 @@ Simulator builds need no signing setup. To run on a device, copy `Config/Local.x
 map tiles except on the custom-area drawing map, which needs Apple Maps to draw on. Book, cancel and check-in only change local state. `BRUCE_SCREEN=<name>` opens a
 specific screen (`explore`, `classes`, `studio`, `detail`, `checkin`, `friends`, `myclasses`, `account`,
 `settings`, `welcome`, `mybookings`, `similar`, `alerts`, `area`, `races` (Explore › Races), `race` (a race page),
-`myraces` (My classes › Races), `myrace` (a race in My races), `addrace` (add a race by hand), …; the full list is in
-[`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)). Demo Home shows the Next race card.
+`myraces` (My classes › Races with This week of a plan in week 3 of 10), `myrace` (a race in My races), `addrace`
+(add a race by hand), `trainforit` (a race page with Train for it), `planstart` (the plan sheet before starting),
+`raceplan` (the plan sheet in week 3 of 10), …; the full list is in
+[`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)). Demo Home shows the Next race card with the plan's week.
 Demo mode is not reachable from the UI.
 
 ```sh
@@ -430,8 +487,10 @@ so they are **not** included in this repository. Examples in the docs use placeh
 - The apps talk only to Bruce Studios' own servers (`api.bruce.app`, and Cloudinary for studio images),
   plus Apple Maps. There is no analytics, tracking or third-party SDK. The race list is read from this project's
   own GitHub Pages site (`djui.github.io/bruce/app/races.json`, no data sent); race links open in your browser.
-- My races, their reminders and your race notes stay on the device (Application Support on iPhone and Mac,
-  localStorage on the web).
+- My races, their reminders, Train for it plans and your race notes stay on the device (Application Support on
+  iPhone and Mac, localStorage on the web). Only with the server on and a race-week or day-before reminder switched on
+  does a race (its id, name, your day and the plan's race-week mix) go to the server, which deletes it with your
+  account.
 - Your password is sent once to log in and never stored. The session tokens are stored only in the
   Keychain (iOS service `net.dauernheim.bruce`; macOS `net.dauernheim.BruceMacOS`). Log out removes them.
 - Location (iOS, when in use) is used on the device for distances and the check-in suggestion. The

@@ -131,6 +131,37 @@ switch it off with `"nudges": false`), logic in `src/habits.js`:
 - Cost: the history read covers the last 6 weeks (often one or two pages instead of one), plus at most 8 class-list
   requests on a day with a broken habit, all within `DAILY_BUDGET`.
 
+## Race reminders
+
+Train for it (the apps' My races) can remind about race day: **race week** at 08:00 local on the Monday of race week
+(a race on a Monday has no race week before it: either switch means the evening before, sent once) and **the day
+before** at 18:00. The apps keep them as local notifications until the server is on; then they send the races that
+have one of the two switched on with `PUT /me/races` and leave the notifications of the races the server confirmed
+(`ids`, when `push` is true) to the server.
+
+- My races are per device, so each `PUT` carries a `device` id and replaces only the races that device sent (at most
+  20 per device, 40 in all); another device's races stay. A race sent from two devices is one row, owned by the last.
+  `DELETE /me/races/<id>` removes a race from any device. After a new login the apps send their races again.
+
+- Table `user_races` (`migrations/0003_races.sql`): user, race id (the catalog id or `custom-<uuid>`), name, the
+  member's race day, the race's own page, the two switches, the plan (JSON: classes a week, block length, the start
+  and the race-week mix) and when each reminder went out.
+- The **minute cron** sends each reminder once when its time has come (`week_sent_at` / `eve_sent_at` are set, only
+  if still empty, before sending), or drops it when it is more than 12 hours late or race day has begun (a race added
+  after the Monday, "Tomorrow" switched on at 01:00 on race day, a missed minute). Race
+  week is a push and an email: "Race week: HYROX Stockholm" / "Saturday is race day. Booked this week: Mobility Wed
+  18:00, Hyrox Thu 07:00." (the user's bookings until race day, one `GET /v52/booking` page; without any, the plan's
+  mix), with a link to the race page in the web app and the "No more emails" link. The day before is a push: "Race
+  day tomorrow. Start times and what to bring are on hyrox.com." Push category `RACE_REMINDER`, payload `{"raceId"}`
+  (opens the race page).
+- A reminder already sent stays sent when the race is sent again with the same day; a new day reminds again.
+- The **daily cron** removes races whose day is over (from the day after), and with them the row of a user who has
+  nothing else on the server. A user whose only data is race reminders (a web user without a device) keeps their
+  row until then; `DELETE /me` and an expired login delete the races too.
+
+Phase 3 (friends going, race crews) builds on `user_races`: who may see a race is a column to add, friends on the same
+race are found by `race_id` (indexed), and a crew will be a challenge that ends on race day.
+
 ## Users and what is stored
 
 There is no shared key. The app signs in with the user's own Bruce login (`X-Access-Token` and `X-User-Id`
@@ -144,7 +175,7 @@ Bruce. Switching "Let the server book for me" off in the app deletes the user's 
 then only the rules, watches and goals go and the login stays (joining a challenge stores it, auto-book on or off).
 A 401 from Bruce deletes the row too (and pushes "Auto-book paused"; the app sends the new login on its next start).
 Challenge, participant and history tables: see "Challenges with friends" above; the `nudges` table (one row per user:
-the last skipped habit told and its push) under "Skipped a habit".
+the last skipped habit told and its push) under "Skipped a habit"; `user_races` under "Race reminders".
 
 ## Set up
 
@@ -156,7 +187,7 @@ npx wrangler secret put APNS_KEY               # contents of the APNs AuthKey_XX
 npx wrangler secret put APNS_KEY_ID            # its Key ID
 npx wrangler secret put APNS_TEAM_ID           # Apple team id
 npx wrangler secret put RESEND_API_KEY         # optional: Resend API key, for booking emails
-npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges
+npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges, user_races
 npx wrangler deploy
 ```
 
@@ -180,8 +211,8 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | Request | Body | Effect |
 |---|---|---|
 | `PUT /me` | `{"rules":[{"id","studioId","masterId","title","weekday","minuteOfDay"}],"device":{"token","env"},"nudges":true,"lateSpots":"ask"}` | Stores the login, replaces the rules (weekday 1 = Sunday, local time in Europe/Stockholm), adds the device (`env` `production` or `sandbox`); `nudges` (optional, default on) switches skipped-habit pushes, `nudgeDays` (1-7, default 4) sets their quiet days; `lateSpots` (optional, `ask` or `book`, default `ask`) is what happens to a spot 3-12 h before the class (see "Late spots") |
-| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], opening:[{classId,title,start,opens}], maxOpening, log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots}` |
-| `DELETE /me` | | Deletes the user's row and history; in a challenge it keeps the login and clears rules, watches and goals |
+| `GET /me` | | `{hasSession, rules, lastScan, upcoming:[{classId,title,at}], waitlist:[{classId,title,start}], opening:[{classId,title,start,opens}], maxOpening, log:[{classId,title,at,outcome}], devices, email, nudges, nudgeDays, lateSpots, races:[{id,name,date,url,remindWeek,remindEve,plan,weekSentAt,eveSentAt}]}` |
+| `DELETE /me` | | Deletes the user's row, history and races; in a challenge it keeps the login and clears rules, watches, goals and races |
 | `PUT /me/waitlist/<classId>` | | Watches a full class and books it when a spot frees up (404 if the class is gone or started, 409 over 10 watches). Stores the login; creates the user's row if needed |
 | `DELETE /me/waitlist/<classId>` | | Stops watching it |
 | `PUT /me/opening/<classId>` | | Books a listed class that is not bookable yet once, the moment its window opens (404 if the class is gone or started, 409 if it is already open or over 5 pending). Stores the login; creates the user's row if needed |
@@ -190,6 +221,8 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | `PUT /me/email` | `{"enabled":false}` | Stops (or with `true` restarts) the booking emails → `{email}`: the address used, or null |
 | `GET /email/off?u=<userId>&t=<token>` | | The unsubscribe link in each email (no login needed; `POST` for one-click) |
 | `PUT /me/goals` | `{"goals":[{"id","title","category","studioId","target","remind"}]}` | Stores the goals with `remind` for "Behind on your goal" pushes (max 10; `[]` clears) |
+| `PUT /me/races` | `{"device":"<id>","races":[{"id","name","date","url","remindWeek","remindEve","plan":{"perWeek","weeks","startedOn","raceWeek":[{"key","title","count"}]}}]}` | Replaces the races this `device` sent with race-day reminders (`id` lower case with dashes, `date` the member's race day; races without a reminder on are left out; 409 over 20, or 40 on all devices) → `{races, ids, push, email}`: `push` true when the server can push to a device. Stores the login; creates the user's row if needed |
+| `DELETE /me/races/<id>` | | Removes one race → `{races}` |
 | `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366), invites friends by push → 201 `{challenge}` |
 | `GET /challenges` | | `{challenges:[…], usesBruce:[userId]}`: the caller's challenges and invites, and which friends use the server |
 | `GET /challenges/<id>` | | Participants: `{challenge, leaderboard:[{userId,name,status,rank,score,visits,classes,dropins,minutes,studios,topStudio,topClass,categories,together,lastVisit,done,daily,recent}], months:[{month,label,entries}], updatedAt}`; others: a preview `{challenge, joinable}` |

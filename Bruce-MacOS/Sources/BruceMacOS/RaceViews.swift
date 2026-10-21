@@ -170,6 +170,21 @@ struct RaceDetailView: View {
                         }
                         .toggleStyle(.switch).tint(Theme.lime)
                     }
+                    if let e = m.myRaceEntries.first(where: { $0.mine.key == raceId }), let plan = m.racePlan(for: e) {
+                        Button { m.present(.racePlan(raceId)) } label: {
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("\(Copy.planTrainForIt) · \(plan.headline())").font(.system(size: 15, weight: .semibold))
+                                    Spacer()
+                                    if let st = m.planWeekStatus(e, plan) { Text(st.progressText).font(.system(size: 13, weight: .light)).foregroundStyle(Theme.secondary) }
+                                }
+                                PlanPhaseStrip(plan: plan, onGradient: false)
+                            }
+                            .padding(14).contentShape(Rectangle())
+                            .background(RoundedRectangle(cornerRadius: 12).stroke(Theme.cardBorder))
+                        }
+                        .buttonStyle(.plain)
+                    }
                     if let mine { yourRace(r, mine) }
                     VStack(alignment: .leading, spacing: 6) {
                         if r.isCustom { Text(Copy.raceCustom) }
@@ -181,9 +196,13 @@ struct RaceDetailView: View {
                 }
                 .padding(.horizontal, Theme.gutter).padding(.bottom, 16)
             }
+            if !r.isPast(day: mine?.day) {
+                LimeButton(title: mine?.plan == nil ? Copy.planTrainForIt : "Your plan") { m.present(.racePlan(raceId)) }
+                    .padding(.horizontal, Theme.gutter).padding(.top, 10)
+            }
             Group {
                 if mine == nil {
-                    LimeButton(title: "Add to My races") { m.addToMyRaces(r) }
+                    Button("Add to My races") { m.addToMyRaces(r) }.buttonStyle(.plain).font(.system(size: 15, weight: .semibold)).frame(height: 30)
                 } else {
                     LimeButton(title: working ? "Adding…" : "Add to Calendar") {
                         guard !working, let e = CalendarEvent(race: r, day: mine?.day) else { return }
@@ -267,6 +286,10 @@ struct RaceDetailView: View {
                 }
             }
             TextField("Your start, e.g. Doubles Open or 10 km", text: $noteDraft).textFieldStyle(.roundedBorder).onSubmit { saveNote() }
+            if !r.isPast(day: mine.day) {
+                Toggle(Copy.planRemindWeek, isOn: Binding(get: { mine.remindWeek }, set: { m.setRaceReminder(r, week: $0) })).toggleStyle(.switch).tint(Theme.lime)
+                Toggle(Copy.planRemindEve, isOn: Binding(get: { mine.remindEve }, set: { m.setRaceReminder(r, eve: $0) })).toggleStyle(.switch).tint(Theme.lime)
+            }
             HStack {
                 if r.isCustom { Button("Edit…") { m.present(.editRace(mine.id)) } }
                 Spacer()
@@ -303,8 +326,13 @@ struct MyRacesList: View {
                 .font(.system(size: 15, weight: .medium)).buttonStyle(.plain).padding(.top, 12)
                 if up.isEmpty && past.isEmpty { EmptyState(system: "flag.checkered", text: Copy.myRacesEmpty).frame(height: 360) }
                 if let next = up.first {
-                    Button { m.push(.race(next.race.id)) } label: { NextRaceTile(entry: next) }.buttonStyle(.plain)
+                    Button { m.push(.race(next.race.id)) } label: { NextRaceTile(entry: next, plan: m.racePlan(for: next)) }.buttonStyle(.plain)
+                    if m.racePlan(for: next) == nil, (next.daysToGo() ?? 0) > 0 {
+                        Button { m.present(.racePlan(next.mine.key)) } label: { Label("\(Copy.planTrainForIt): a weekly class mix up to race day", systemImage: "figure.run") }
+                            .buttonStyle(.plain).font(.system(size: 14, weight: .medium))
+                    }
                 }
+                if let ap = m.activePlan { PlanWeekList(entry: ap.entry, plan: ap.plan).padding(.top, 6) }
                 ForEach(up.dropFirst() + past) { e in
                     Button { m.push(.race(e.race.id)) } label: { row(e) }.buttonStyle(.plain)
                 }
@@ -336,6 +364,7 @@ struct MyRacesList: View {
 /// The next race with its countdown (My classes › Races and Home).
 struct NextRaceTile: View {
     let entry: MyRaceEntry
+    var plan: RacePlan? = nil
     var body: some View {
         let r = entry.race, days = entry.daysToGo() ?? 0
         VStack(alignment: .leading, spacing: 10) {
@@ -352,7 +381,10 @@ struct NextRaceTile: View {
                 }
                 Spacer(minLength: 0)
             }
-            if let h = entry.hint() {
+            if let plan, plan.isRunning() {
+                PlanPhaseStrip(plan: plan)
+                Text(plan.headline()).font(.system(size: 13, weight: .semibold))
+            } else if let h = entry.hint() {
                 Label(h, systemImage: entry.mine.remindSignup || entry.mine.remindPrice ? "bell.fill" : "info.circle")
                     .font(.system(size: 13, weight: .semibold))
                     .padding(.horizontal, 10).padding(.vertical, 7)
@@ -378,7 +410,18 @@ struct NextRaceSection: View {
                     Spacer()
                     Button("My races") { m.showMyRaces() }.buttonStyle(.plain).font(.system(size: 15, weight: .medium))
                 }
-                Button { m.push(.race(e.race.id)) } label: { NextRaceTile(entry: e) }.buttonStyle(.plain)
+                Button { m.push(.race(e.race.id)) } label: { NextRaceTile(entry: e, plan: m.racePlan(for: e)) }.buttonStyle(.plain)
+                if let plan = m.racePlan(for: e), let st = m.planWeekStatus(e, plan) {
+                    HStack {
+                        Text(st.progressText).font(.system(size: 14, weight: .semibold))
+                        Spacer()
+                        if let s = st.nextToBook {
+                            Text("\(s.category.title) · \(BruceDate.format(s.c.start, "EEE HH:mm")) · \(m.studioName(s.c.studioId))")
+                                .font(.system(size: 13, weight: .light)).foregroundStyle(Theme.secondary).lineLimit(1)
+                            Button("Book") { m.bookPlanned(s) }
+                        }
+                    }
+                }
             }
             .padding(.horizontal, Theme.gutter).padding(.top, 20)
         }

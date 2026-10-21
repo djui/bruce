@@ -401,24 +401,33 @@ struct MyRace: Codable, Identifiable, Hashable {
     var city: String?
     var url: String?
     var type: RaceType = .running
+    /// An endurance race's sport, saved so Train for it has the right class mix before the catalog loads.
+    var sport: RaceSport?
     /// The member's day of a multi-day event (their HYROX heat), else nil.
     var day: String?
     /// Their start, "Doubles Open" or "10 km".
     var note: String?
     var remindSignup = false
     var remindPrice = false
+    /// "Race week" (08:00 on the Monday of race week) and "the day before" (18:00) reminders (RaceReminders).
+    var remindWeek = false
+    var remindEve = false
+    /// Train for it (RacePlanner.swift); nil without a plan.
+    var plan: RacePlanSettings?
     var addedAt = Date()
 
     init(race: Race, day: String? = nil, note: String? = nil, remindSignup: Bool = false, remindPrice: Bool = false) {
         raceId = race.isCustom ? nil : race.id
-        name = race.name; date = race.date; endDate = race.endDate; city = race.city; url = race.signupUrl; type = race.type
+        name = race.name; date = race.date; endDate = race.endDate; city = race.city; url = race.signupUrl; type = race.type; sport = race.sport
         self.day = day; self.note = note; self.remindSignup = remindSignup; self.remindPrice = remindPrice
     }
     init(name: String, date: String, city: String? = nil, url: String? = nil, type: RaceType = .running, note: String? = nil) {
         raceId = nil; self.name = name; self.date = date; self.city = city; self.url = url; self.type = type; self.note = note
     }
 
-    enum CodingKeys: String, CodingKey { case id, raceId, name, date, endDate, city, url, type, day, note, remindSignup, remindPrice, addedAt }
+    enum CodingKeys: String, CodingKey {
+        case id, raceId, name, date, endDate, city, url, type, sport, day, note, remindSignup, remindPrice, remindWeek, remindEve, plan, addedAt
+    }
     /// Missing fields get their defaults, so files written by older and newer versions both load.
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -430,10 +439,15 @@ struct MyRace: Codable, Identifiable, Hashable {
         city = try c.decodeIfPresent(String.self, forKey: .city)
         url = try c.decodeIfPresent(String.self, forKey: .url)
         type = (try? c.decodeIfPresent(RaceType.self, forKey: .type)) ?? .running
+        sport = try? c.decodeIfPresent(RaceSport.self, forKey: .sport)
         day = try c.decodeIfPresent(String.self, forKey: .day)
         note = try c.decodeIfPresent(String.self, forKey: .note)
         remindSignup = try c.decodeIfPresent(Bool.self, forKey: .remindSignup) ?? false
         remindPrice = try c.decodeIfPresent(Bool.self, forKey: .remindPrice) ?? false
+        remindWeek = (try? c.decodeIfPresent(Bool.self, forKey: .remindWeek)) ?? false
+        remindEve = (try? c.decodeIfPresent(Bool.self, forKey: .remindEve)) ?? false
+        // A plan this version can't read is dropped, not the race.
+        plan = try? c.decodeIfPresent(RacePlanSettings.self, forKey: .plan)
         addedAt = try c.decodeIfPresent(Date.self, forKey: .addedAt) ?? Date()
     }
 
@@ -443,7 +457,7 @@ struct MyRace: Codable, Identifiable, Hashable {
     /// The catalog race (fresh facts) when the catalog has it, else a race built from what was saved.
     func resolved(in catalog: [Race]) -> Race {
         if let raceId, let r = catalog.first(where: { $0.id == raceId }) { return r }
-        return Race(id: key, name: name, type: type, date: date, endDate: endDate, city: city ?? "", country: "",
+        return Race(id: key, name: name, type: type, sport: sport, date: date, endDate: endDate, city: city ?? "", country: "",
                     signupUrl: url ?? "", status: .checkSite, checkedOn: "")
     }
 }
@@ -566,11 +580,52 @@ enum RaceCatalog {
 
 // MARK: - Reminders (local notifications, opt-in per race)
 
-/// "Sign-up opens" (09:00 on the opening day) and "price goes up" (09:00 the day before the next step), per race in
-/// My races. They only remind: nothing is signed up or paid for.
+/// "Sign-up opens" (09:00 on the opening day) and "price goes up" (09:00 the day before the next step) for catalog races,
+/// and for any race "race week" (08:00 on the Monday of race week) and "the day before" (18:00), each opt-in per race in
+/// My races. They only remind: nothing is signed up or paid for. While the server has the race-day reminders
+/// (`PUT /me/races` answered that it can push), it sends those two by push and email and the device leaves them out.
 enum RaceReminders {
     static let category = "RACE_REMINDER"
     static let idPrefix = "race-reminder-"
+    /// The races (My races keys) whose race-week and day-before reminders the server pushes: the ones this device sent
+    /// in its last `PUT /me/races` that the server can push to (set by `syncRaceServer`).
+    static var serverIds: Set<String> {
+        guard AutoBookServer.isConfigured, AutoBookServer.booksForMe else { return [] }
+        return Set(UserDefaults.standard.stringArray(forKey: "raceServerIds") ?? [])
+    }
+    /// This device in `PUT /me/races`: each device's My races replace only the races it sent.
+    static var deviceId: String {
+        if let d = UserDefaults.standard.string(forKey: "raceSyncDevice") { return d }
+        let d = UUID().uuidString.lowercased()
+        UserDefaults.standard.set(d, forKey: "raceSyncDevice")
+        return d
+    }
+    /// After a new login or with the server off: send again, and remind on the device until then.
+    static func forgetServer() {
+        UserDefaults.standard.removeObject(forKey: "raceReminderSync")
+        UserDefaults.standard.removeObject(forKey: "raceServerIds")
+    }
+
+    /// 08:00 on the Monday of race week; nil for a race on a Monday (the evening before covers it).
+    static func weekTime(_ day: String) -> Date? {
+        let monday = RacePlanner.monday(of: day)
+        guard monday != day, let d = RaceDay.date(monday) else { return nil }
+        return BruceDate.calendar.date(bySettingHour: 8, minute: 0, second: 0, of: d)
+    }
+    /// 18:00 the day before race day.
+    static func eveTime(_ day: String) -> Date? {
+        RaceDay.adding(-1, to: day).flatMap(RaceDay.date).flatMap { BruceDate.calendar.date(bySettingHour: 18, minute: 0, second: 0, of: $0) }
+    }
+    /// "Saturday is race day. Your class mix this week: 1 Hyrox and 1 Mobility."
+    static func weekBody(_ r: Race, day: String, plan: RacePlan?) -> String {
+        var s = "\(RaceDay.format(day, "EEEE")) is race day."
+        if let p = plan, let w = p.raceWeek, w.total > 0 { s += " Your class mix this week: \(RacePlanner.mixText(w, rows: p.rows))." }
+        return s
+    }
+    static func eveBody(_ r: Race) -> String {
+        guard let h = r.host else { return "Race day tomorrow." }
+        return "Race day tomorrow. Start times and what to bring are on \(h)."
+    }
 
     struct Planned: Hashable {
         let id: String
@@ -581,12 +636,25 @@ enum RaceReminders {
     }
 
     /// The reminders the member asked for that are still ahead, soonest first.
-    static func plan(_ mine: [MyRace], catalog: [Race], now: Date = Date()) -> [Planned] {
+    /// `serverIds`: races whose race-week and day-before reminders the server sends instead.
+    static func plan(_ mine: [MyRace], catalog: [Race], now: Date = Date(), serverIds: Set<String> = []) -> [Planned] {
         var out: [Planned] = []
         for m in mine {
-            guard m.raceId != nil else { continue }
             let r = m.resolved(in: catalog)
-            guard !r.isCustom, !r.isPast(now: now) else { continue }
+            let day = m.day ?? r.date
+            guard !r.isPast(day: m.day, now: now) else { continue }
+            let local = !serverIds.contains(m.key)
+            if local, m.remindWeek, let fire = weekTime(day), fire > now {
+                let plan = m.plan.flatMap { RacePlan(raceDay: day, type: r.type, sport: r.sport, settings: $0) }
+                out.append(Planned(id: "\(idPrefix)week-\(m.key)", raceId: m.key, fire: fire, title: "Race week: \(r.name)",
+                                   body: weekBody(r, day: day, plan: plan)))
+            }
+            // A Monday race has no race week before it: either switch is the evening before.
+            let eve = m.remindEve || (m.remindWeek && weekTime(day) == nil)
+            if local, eve, let fire = eveTime(day), fire > now {
+                out.append(Planned(id: "\(idPrefix)eve-\(m.key)", raceId: m.key, fire: fire, title: "Tomorrow: \(r.name)", body: eveBody(r)))
+            }
+            guard m.raceId != nil, !r.isCustom, !r.isPast(now: now) else { continue }
             let site = r.host ?? "the race's page"
             // Planned until the moment itself, so a sync early on the opening day keeps it.
             if m.remindSignup, r.status == .opensSoon, let o = r.opensOn, let fire = RaceDay.morning(o), fire > now {
@@ -616,7 +684,7 @@ enum RaceReminders {
         let center = UNUserNotificationCenter.current()
         let old = await center.pendingNotificationRequests().map(\.identifier).filter { $0.hasPrefix(idPrefix) }
         center.removePendingNotificationRequests(withIdentifiers: old)
-        for p in plan(mine, catalog: catalog, now: now).prefix(20) {
+        for p in plan(mine, catalog: catalog, now: now, serverIds: serverIds).prefix(20) {
             let content = UNMutableNotificationContent()
             content.title = p.title
             content.body = p.body
@@ -640,6 +708,9 @@ extension AppModel {
         if races.isEmpty, let cached = await Task.detached(priority: .userInitiated, operation: { RaceCatalog.loadCached() }).value {
             races = cached.races; racesFetchedAt = cached.at
         }
+        // Train for it (RacePlanner.swift): rules paused for a race that is over come back; plan goals follow the month.
+        restorePausedRules()
+        refreshPlanGoals()
         if !force, let at = racesFetchedAt, Date().timeIntervalSince(at) < RaceCatalog.refreshAfter { return }
         guard !racesLoading else { return }
         racesLoading = true
@@ -677,13 +748,18 @@ extension AppModel {
 
     func removeFromMyRaces(_ key: String) {
         guard let i = myRaces.firstIndex(where: { $0.key == key }) else { return }
-        let removed = myRaces.remove(at: i)
+        var removed = myRaces.remove(at: i)
         // A race added by hand has no page without it; a catalog race's page stays (with Add to My races).
         if removed.raceId == nil { stacks = stacks.mapValues { $0.filter { $0 != .race(key) } } }
+        // Its Train for it plan goes too: weekly bookings paused for race week come back, its goals go (Undo brings
+        // the plan back, its goals with the next refresh).
+        if let p = removed.plan, !p.paused.isEmpty { restoreAutoBookRules(p.paused); removed.plan?.paused = [] }
+        planWeekCache[key] = nil
+        refreshPlanGoals()
         persistMyRaces()
         flash(Copy.raceRemoved, icon: "flag.slash", undo: { [weak self] in
             guard let self, !self.isMyRace(removed.key) else { return }
-            self.myRaces.insert(removed, at: min(i, self.myRaces.count)); self.persistMyRaces()
+            self.myRaces.insert(removed, at: min(i, self.myRaces.count)); self.persistMyRaces(); self.refreshPlanGoals()
         })
     }
 
@@ -694,13 +770,15 @@ extension AppModel {
     }
 
     /// Turns a reminder on or off; switching one on adds the race to My races and asks for notification permission.
-    func setRaceReminder(_ r: Race, signup: Bool? = nil, price: Bool? = nil) {
+    func setRaceReminder(_ r: Race, signup: Bool? = nil, price: Bool? = nil, week: Bool? = nil, eve: Bool? = nil) {
         var mine = myRace(forKey: r.id) ?? MyRace(race: r)
         let wasMine = isMyRace(r.id)
         if let signup { mine.remindSignup = signup }
         if let price { mine.remindPrice = price }
+        if let week { mine.remindWeek = week }
+        if let eve { mine.remindEve = eve }
         saveMyRace(mine)
-        if signup == true || price == true {
+        if signup == true || price == true || week == true || eve == true {
             if !wasMine { flash(Copy.raceAdded, icon: "flag.checkered") }
             if !AppModel.demo { Task { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) } }
         }
@@ -724,6 +802,38 @@ extension AppModel {
     func persistMyRaces() {
         guard !AppModel.demo else { return }
         MyRaces.save(myRaces)
+        syncRaceReminders()
+        Task { await syncRaceServer() }
+    }
+
+    /// `PUT /me/races` with this device's races that have race-week or day-before reminders (at most 20), only while the
+    /// server is on: the server sends them by push and email (server/README.md), and the device leaves out the ones the
+    /// server confirmed. Skipped when nothing changed; failures are silent and the device keeps its notifications.
+    func syncRaceServer() async {
+        guard !AppModel.demo, tokenUsable, let s = session, AutoBookServer.isConfigured, AutoBookServer.booksForMe else { return }
+        let list = upcomingMyRaces.filter { $0.mine.remindWeek || $0.mine.remindEve }.prefix(20)
+        let races: [[String: Any]] = list.map { e in
+            var o: [String: Any] = ["id": e.mine.key, "name": e.race.name, "date": e.day, "remindWeek": e.mine.remindWeek, "remindEve": e.mine.remindEve]
+            if let u = e.race.url { o["url"] = u.absoluteString }
+            if let p = racePlan(for: e) {
+                var plan: [String: Any] = ["perWeek": p.settings.perWeek, "weeks": p.blockWeeks, "startedOn": p.settings.startedOn]
+                if let w = p.raceWeek {
+                    plan["raceWeek"] = p.rows.compactMap { c in w.count(c) > 0 ? ["key": c.rawValue, "title": c.short, "count": w.count(c)] : nil }
+                }
+                o["plan"] = plan
+            }
+            return o
+        }
+        let body: [String: Any] = ["device": RaceReminders.deviceId, "races": races]
+        let signature = (try? JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])).map { String(decoding: $0, as: UTF8.self) }
+        let last = UserDefaults.standard.string(forKey: "raceReminderSync")
+        guard signature != last, !(last == nil && races.isEmpty) else { return }
+        struct R: Decodable { let push: Bool?; let ids: [String]? }
+        // A failed PUT keeps the last confirmed races: the others stay local notifications.
+        guard let data = try? await BruceAPI.send(AutoBookServer.request("PUT", "me/races", session: s, body: body)) else { return }
+        let r = try? JSONDecoder().decode(R.self, from: data)
+        UserDefaults.standard.set(signature, forKey: "raceReminderSync")
+        UserDefaults.standard.set(r?.push == true ? (r?.ids ?? []) : [], forKey: "raceServerIds")
         syncRaceReminders()
     }
 
