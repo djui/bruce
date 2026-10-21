@@ -49,7 +49,7 @@ struct WidgetsPreviewSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 18) {
                 Text("Add them from the Home Screen or Lock Screen widget gallery; the check-in Control is in Control Center. They only open the app: nothing is booked or checked in from a widget.")
-                    .font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                    .bruceFont(14).foregroundStyle(Theme.secondary)
                 HStack(spacing: 14) {
                     face(NextClassView(snapshot: s, now: Date(), family: .systemSmall), w: 158, h: 158)
                     face(VisitsLeftView(snapshot: s, family: .systemSmall), w: 158, h: 158)
@@ -60,7 +60,7 @@ struct WidgetsPreviewSheet: View {
                     face(VisitsLeftView(snapshot: s, family: .accessoryCircular), w: 76, h: 76, lock: true)
                     face(CheckInButtonView(), w: 76, h: 76, lock: true)
                 }
-                Text("Live Activity for today's class").font(.system(size: 16, weight: .bold)).padding(.top, 8)
+                Text("Live Activity for today's class").bruceFont(16, weight: .bold).padding(.top, 8)
                 let a = ClassLiveActivity.demoAttributes
                 ForEach(Array([ClassActivityAttributes.ContentState(phase: .leave, leaveBy: a.start.addingTimeInterval(-33 * 60), travelMinutes: 12, mode: "bike", checkedInAt: nil),
                                .init(phase: .checkIn, leaveBy: nil, travelMinutes: nil, mode: nil, checkedInAt: nil),
@@ -69,7 +69,7 @@ struct WidgetsPreviewSheet: View {
                         .background(Color.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
                         .environment(\.colorScheme, .dark)
                 }
-                Text(WidgetTheme.brand).font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                Text(WidgetTheme.brand).bruceFont(12).foregroundStyle(Theme.secondary)
             }
             .padding(Theme.gutter)
         }

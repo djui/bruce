@@ -53,7 +53,7 @@ struct AutoBookView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Spot opens 3–12 h before")
-                            Text(AutoBookCopy.lateSpots).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                            Text(AutoBookCopy.lateSpots).bruceFont(13).foregroundStyle(Theme.secondary)
                         }
                     }
                     Toggle(isOn: Binding(get: { habitNudges }, set: { on in
@@ -63,7 +63,7 @@ struct AutoBookView: View {
                     })) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Suggest classes when I skip a habit")
-                            Text(AutoBookCopy.habitNudges(days: habitNudgeDays)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                            Text(AutoBookCopy.habitNudges(days: habitNudgeDays)).bruceFont(13).foregroundStyle(Theme.secondary)
                         }
                     }
                     if habitNudges {
@@ -82,7 +82,7 @@ struct AutoBookView: View {
                         run { try await AutoBookServer.testPush(session: s) }
                     }
                 }
-                if let n = m.autoBookServerNote { Text(n).foregroundStyle(Theme.red).font(.system(size: 14)) }
+                if let n = m.autoBookServerNote { Text(n).foregroundStyle(Theme.red).bruceFont(14) }
                 DisclosureGroup("Server address", isExpanded: $showServerFields) {
                     TextField(AutoBookServer.defaultURL, text: $serverURL)
                         .textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
@@ -112,7 +112,7 @@ struct AutoBookView: View {
                 Text("\(e.outcome ?? "") · \(e.title ?? "#\(e.classId)")").foregroundStyle(Theme.secondary)
             }
         }
-        .font(.system(size: 14))
+        .bruceFont(14)
     }
 
     func loadServer() async {
@@ -155,8 +155,8 @@ struct AutoBookToggle: View {
         Toggle(isOn: Binding(get: { m.autoBookRule(for: c) != nil }, set: { m.setAutoBook($0, for: c) })) {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Book every week").font(.system(size: 16, weight: .semibold))
-                    Text(subtitle).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    Text("Book every week").bruceFont(16, weight: .semibold)
+                    Text(subtitle).bruceFont(13).foregroundStyle(Theme.secondary)
                 }
             } icon: { Image(systemName: "calendar.badge.clock") }
         }
@@ -182,17 +182,17 @@ struct OpeningWatchBar: View {
     var body: some View {
         VStack(spacing: 8) {
             HStack(spacing: 6) {
-                Image(systemName: watching ? "checkmark.circle.fill" : "clock").font(.system(size: 12, weight: .semibold))
+                Image(systemName: watching ? "checkmark.circle.fill" : "clock").bruceFont(12, weight: .semibold)
                 Text(watching ? "Watching · \(Copy.openingWatching(opens))" : "\(Copy.bookingOpens(opens)) · \(Copy.oneOffClass)")
-                    .font(.system(size: 13, weight: .medium)).lineLimit(2).multilineTextAlignment(.center)
+                    .bruceFont(13, weight: .medium).lineLimit(2).multilineTextAlignment(.center)
             }
             .foregroundStyle(watching ? Theme.teal : Theme.secondary)
             if watching {
                 HStack(spacing: 10) {
-                    Text(Copy.openingUsed(m.openingWatches.count)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    Text(Copy.openingUsed(m.openingWatches.count)).bruceFont(13).foregroundStyle(Theme.secondary)
                     Spacer()
                     Button(working ? "Stopping…" : "Stop watching") { toggle(false) }
-                        .font(.system(size: 15, weight: .semibold)).buttonStyle(.glass).controlSize(.regular).disabled(working)
+                        .bruceFont(15, weight: .semibold).buttonStyle(.glass).controlSize(.regular).disabled(working)
                 }
             } else {
                 LimeButton(title: working ? "Saving…" : "Book when booking opens", systemImage: "bolt.badge.clock") { toggle(true) }
@@ -216,10 +216,10 @@ struct WaitlistAutoBookToggle: View {
         Toggle(isOn: Binding(get: { m.isWatchingWaitlist(c.id) }, set: { on in Task { await m.setBookWhenSpotOpens(on, classId: c.id) } })) {
             Label {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Book when a spot opens").font(.system(size: 16, weight: .semibold))
+                    Text("Book when a spot opens").bruceFont(16, weight: .semibold)
                     Text(m.isOnWaitlist(c.id) ? "The server books it the moment a waitlist spot is free and notifies you"
                                               : "Joins the waitlist and books it the moment a spot is free")
-                        .font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                        .bruceFont(13).foregroundStyle(Theme.secondary)
                 }
             } icon: { Image(systemName: "bolt.badge.clock") }
         }

@@ -19,10 +19,10 @@ struct AddToCalendarSheet: View {
             VStack(alignment: .leading, spacing: 18) {
                 if let c, let event {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text(c.title).font(.system(size: 20, weight: .bold))
-                        Text("\(BruceDate.format(event.start, "EEE d MMM")) · \(BruceDate.time(event.start))–\(BruceDate.time(event.end))").font(.system(size: 16))
-                        if let l = event.location { Text(l).font(.system(size: 15)).foregroundStyle(Theme.secondary) }
-                        Label(Copy.calendarAlert, systemImage: "bell").font(.system(size: 14)).foregroundStyle(Theme.secondary).padding(.top, 4)
+                        Text(c.title).bruceFont(20, weight: .bold)
+                        Text("\(BruceDate.format(event.start, "EEE d MMM")) · \(BruceDate.time(event.start))–\(BruceDate.time(event.end))").bruceFont(16)
+                        if let l = event.location { Text(l).bruceFont(15).foregroundStyle(Theme.secondary) }
+                        Label(Copy.calendarAlert, systemImage: "bell").bruceFont(14).foregroundStyle(Theme.secondary).padding(.top, 4)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(18)
@@ -30,12 +30,12 @@ struct AddToCalendarSheet: View {
                     LimeButton(title: "Add to Calendar", systemImage: "calendar.badge.plus") { editing = true }
                     if let feed = m.calendarFeedURL {
                         Button { openURL(feed); m.dismissSheets() } label: {
-                            Label(Copy.calendarSubscribe, systemImage: "calendar.badge.clock").font(.system(size: 17, weight: .semibold))
+                            Label(Copy.calendarSubscribe, systemImage: "calendar.badge.clock").bruceFont(17, weight: .semibold)
                                 .frame(maxWidth: .infinity).frame(height: 40)
                         }
                         .buttonStyle(.glass).controlSize(.large)
                     }
-                    Text(Copy.calendarOneOff).font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                    Text(Copy.calendarOneOff).bruceFont(14).foregroundStyle(Theme.secondary)
                 } else {
                     ProgressView().frame(maxWidth: .infinity)
                 }

@@ -8,7 +8,7 @@ struct UseLocationButton: View {
         if !loc.authorized {
             Button { loc.request() } label: {
                 Label(loc.denied ? "Allow location in Settings" : text, systemImage: "location.fill")
-                    .font(.system(size: 14, weight: .semibold))
+                    .bruceFont(14, weight: .semibold)
             }
             .buttonStyle(.glass)
         }

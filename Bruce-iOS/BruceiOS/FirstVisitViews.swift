@@ -10,9 +10,9 @@ struct FirstVisitCard: View {
         let info = FirstVisitInfo(studio: studio, class: c)
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Label("First visit here?", systemImage: "sparkles").font(.system(size: 16, weight: .bold))
+                Label("First visit here?", systemImage: "sparkles").bruceFont(16, weight: .bold)
                 Spacer()
-                if let c { Text("\(c.title) \(BruceDate.time(c.start))").font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1) }
+                if let c { Text("\(c.title) \(BruceDate.time(c.start))").bruceFont(13).foregroundStyle(Theme.secondary).lineLimit(1) }
             }
             row("qrcode.viewfinder", info.checkIn, info.checkInNote)
             if let door = info.door { row("door.left.hand.open", door, nil) }
@@ -26,10 +26,10 @@ struct FirstVisitCard: View {
 
     func row(_ icon: String, _ text: String, _ note: String?, tint: Color = Theme.limeInk) -> some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: icon).font(.system(size: 15)).foregroundStyle(tint).frame(width: 22).padding(.top, 1)
+            Image(systemName: icon).bruceFont(15).foregroundStyle(tint).frame(width: 22).padding(.top, 1)
             VStack(alignment: .leading, spacing: 2) {
-                Text(text).font(.system(size: 15, weight: .medium)).fixedSize(horizontal: false, vertical: true)
-                if let note { Text(note).font(.system(size: 13)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true) }
+                Text(text).bruceFont(15, weight: .medium).fixedSize(horizontal: false, vertical: true)
+                if let note { Text(note).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true) }
             }
         }
     }
@@ -48,18 +48,18 @@ struct RecentRatingRow: View {
             cell("Last \(RecentRating.window) days", recent?.text ?? "–", recent.map { "\($0.count) with comments" } ?? (reviews == nil ? "loading…" : "no comments yet"))
         }
         if let t = RecentRating.trend(allTime: rating?.average, recent: recent) {
-            Text(t).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.hoursOrange)
+            Text(t).bruceFont(14, weight: .semibold).foregroundStyle(Theme.hoursOrange)
         }
     }
 
     func cell(_ title: String, _ value: String, _ sub: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(title).font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondary)
+            Text(title).bruceFont(12, weight: .semibold).foregroundStyle(Theme.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
-                Image(systemName: "star.fill").font(.system(size: 12)).foregroundStyle(Theme.ink)
-                Text(value).font(.system(size: 24, weight: .black).width(.expanded))
+                Image(systemName: "star.fill").bruceFont(12).foregroundStyle(Theme.ink)
+                Text(value).bruceFont(24, weight: .black, width: .expanded)
             }
-            Text(sub).font(.system(size: 12)).foregroundStyle(Theme.secondary)
+            Text(sub).bruceFont(12).foregroundStyle(Theme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

@@ -42,6 +42,64 @@ enum Theme {
     /// Heavy, wide uppercase heading ("HOME", "EXPLORE", ...), the Bruce identity.
     static func screenTitle(_ size: CGFloat = 30) -> Font { .system(size: size, weight: .black).width(.expanded) }
     static func heading(_ size: CGFloat = 22) -> Font { .system(size: size, weight: .heavy).width(.expanded) }
+
+    // MARK: Dynamic Type
+
+    /// `size` points at the default text size, scaled like the text style closest to it (Settings › Display & Brightness
+    /// › Text Size, and the accessibility sizes). Scaling stops at twice the design size so layouts stay readable.
+    static func scaled(_ size: CGFloat, for dts: DynamicTypeSize) -> CGFloat {
+        let style: UIFont.TextStyle = size <= 11 ? .caption2 : size <= 12 ? .caption1 : size <= 13 ? .footnote : size <= 15 ? .subheadline
+            : size <= 16 ? .callout : size <= 17 ? .body : size <= 20 ? .title3 : size <= 22 ? .title2 : size <= 28 ? .title1 : .largeTitle
+        let traits = UITraitCollection(preferredContentSizeCategory: contentSize(dts))
+        return min(UIFontMetrics(forTextStyle: style).scaledValue(for: size, compatibleWith: traits), size * 2)
+    }
+
+    static func contentSize(_ d: DynamicTypeSize) -> UIContentSizeCategory {
+        switch d {
+        case .xSmall: .extraSmall
+        case .small: .small
+        case .medium: .medium
+        case .large: .large
+        case .xLarge: .extraLarge
+        case .xxLarge: .extraExtraLarge
+        case .xxxLarge: .extraExtraExtraLarge
+        case .accessibility1: .accessibilityMedium
+        case .accessibility2: .accessibilityLarge
+        case .accessibility3: .accessibilityExtraLarge
+        case .accessibility4: .accessibilityExtraExtraLarge
+        case .accessibility5: .accessibilityExtraExtraExtraLarge
+        @unknown default: .large
+        }
+    }
+
+    static func font(_ size: CGFloat, weight: Font.Weight, design: Font.Design, width: Font.Width?, monospacedDigit: Bool, for dts: DynamicTypeSize) -> Font {
+        var f = Font.system(size: scaled(size, for: dts), weight: weight, design: design)
+        if let width { f = f.width(width) }
+        if monospacedDigit { f = f.monospacedDigit() }
+        return f
+    }
+}
+
+/// `.bruceFont(15, weight: .semibold)`: the app's fixed design sizes, following Dynamic Type (Theme.scaled).
+struct BruceFont: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dts
+    let size: CGFloat
+    let weight: Font.Weight
+    let design: Font.Design
+    let width: Font.Width?
+    let monospacedDigit: Bool
+    func body(content: Content) -> some View {
+        content.font(Theme.font(size, weight: weight, design: design, width: width, monospacedDigit: monospacedDigit, for: dts))
+    }
+}
+
+extension View {
+    func bruceFont(_ size: CGFloat, weight: Font.Weight = .regular, design: Font.Design = .default, width: Font.Width? = nil, monospacedDigit: Bool = false) -> some View {
+        modifier(BruceFont(size: size, weight: weight, design: design, width: width, monospacedDigit: monospacedDigit))
+    }
+    /// The wide black screen titles and headings (`Theme.heading`), following Dynamic Type.
+    func bruceHeading(_ size: CGFloat = 22) -> some View { bruceFont(size, weight: .heavy, width: .expanded) }
+    func bruceScreenTitle(_ size: CGFloat = 30) -> some View { bruceFont(size, weight: .black, width: .expanded) }
 }
 
 extension Color {
@@ -61,7 +119,7 @@ extension View {
                 ToolbarItem(placement: .topBarLeading) {
                     // Own width, but at most 170 pt, so a long title ("MY CLASSES") shrinks instead of pushing
                     // Notifications and Menu into an overflow menu, even on a 375 pt wide iPhone.
-                    Text(title.uppercased()).font(Theme.screenTitle(26)).lineLimit(1).minimumScaleFactor(0.6)
+                    Text(title.uppercased()).bruceScreenTitle(26).lineLimit(1).minimumScaleFactor(0.6)
                         .frame(maxWidth: 170, alignment: .leading)
                         .fixedSize()
                 }
@@ -99,7 +157,7 @@ struct LimeButton: View {
     var action: () -> Void
     var body: some View {
         Button(action: action) {
-            Label { Text(title).font(.system(size: 17, weight: .bold)) } icon: {
+            Label { Text(title).bruceFont(17, weight: .bold) } icon: {
                 if let systemImage { Image(systemName: systemImage) }
             }
             .foregroundStyle(.black)
@@ -116,7 +174,7 @@ struct RedButton: View {
     var action: () -> Void
     var body: some View {
         Button(action: action) {
-            Text(title).font(.system(size: 17, weight: .bold)).foregroundStyle(.white)
+            Text(title).bruceFont(17, weight: .bold).foregroundStyle(.white)
                 .frame(maxWidth: .infinity).frame(height: 40)
         }
         .buttonStyle(.glassProminent)
@@ -132,7 +190,7 @@ struct GlassChip<Label: View>: View {
     @ViewBuilder var label: Label
     var body: some View {
         Button(action: action) {
-            label.font(.system(size: 15, weight: .semibold))
+            label.bruceFont(15, weight: .semibold)
                 .foregroundStyle(selected ? Color.black : Theme.ink)
                 .padding(.horizontal, 14).frame(height: 36)
         }
@@ -152,7 +210,7 @@ struct CountPill: View {
     let used: Int
     let total: Int
     var body: some View {
-        Text("\(used) / \(total)").font(.system(size: 15, weight: .semibold)).monospacedDigit()
+        Text("\(used) / \(total)").bruceFont(15, weight: .semibold).monospacedDigit()
             .padding(.horizontal, 12).frame(height: 32)
             .glassEffect(.regular, in: .capsule)
     }
@@ -182,7 +240,7 @@ struct StudioLimitPill: View {
 struct SectionHeaderBar: View {
     let text: String
     var body: some View {
-        Text(text).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.secondary)
+        Text(text).bruceFont(15, weight: .semibold).foregroundStyle(Theme.secondary)
             .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
             .padding(.horizontal, Theme.gutter)
             .background(.bar)
@@ -193,8 +251,8 @@ struct EmptyState: View {
     let system: String
     let text: String
     var body: some View {
-        ContentUnavailableView { Image(systemName: system).font(.system(size: 56, weight: .light)) } description: {
-            Text(text).font(.system(size: 16))
+        ContentUnavailableView { Image(systemName: system).bruceFont(56, weight: .light) } description: {
+            Text(text).bruceFont(16)
         }
         .frame(maxWidth: .infinity, minHeight: 360)
     }
@@ -210,13 +268,13 @@ struct InfoRow<Accessory: View>: View {
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(title).font(.system(size: 17, weight: .medium)).foregroundStyle(Theme.ink)
-                if let subtitle { Text(subtitle).font(.system(size: 15)).foregroundStyle(Theme.secondary) }
-                if let footnote { Text(footnote).font(.system(size: 13)).foregroundStyle(Theme.tertiary) }
+                Text(title).bruceFont(17, weight: .medium).foregroundStyle(Theme.ink)
+                if let subtitle { Text(subtitle).bruceFont(15).foregroundStyle(Theme.secondary) }
+                if let footnote { Text(footnote).bruceFont(13).foregroundStyle(Theme.tertiary) }
             }
             Spacer()
             accessory
-            if chevron { Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.tertiary) }
+            if chevron { Image(systemName: "chevron.right").bruceFont(14, weight: .semibold).foregroundStyle(Theme.tertiary) }
         }
         .contentShape(Rectangle())
     }
@@ -258,7 +316,7 @@ struct RemotePhoto: View, Equatable {
             LinearGradient(colors: p, startPoint: .topLeading, endPoint: .bottomTrailing)
             RadialGradient(colors: [.white.opacity(0.18), .clear], center: .topTrailing, startRadius: 10, endRadius: 260)
             Image(systemName: symbol ?? "figure.strengthtraining.traditional")
-                .font(.system(size: 120, weight: .ultraLight)).foregroundStyle(.white.opacity(0.10))
+                .bruceFont(120, weight: .ultraLight).foregroundStyle(.white.opacity(0.10))
                 .offset(x: 90, y: 20)
         }
     }
@@ -296,34 +354,36 @@ struct ClassRow: View {
     var trailing: AnyView? = nil
     /// "Free cancel until 18:30" on booked rows (BookingRules.cancelChip).
     var cancelChip: BookingRules.CancelChip? = nil
+    /// The time column grows with Dynamic Type so "07:00" never wraps.
+    @ScaledMetric(relativeTo: .body) private var timeWidth: CGFloat = 58
 
     var body: some View {
         let st = m.studio(c.studioId)
         let friends = showFriends ? m.friendsBooked(c.id) : []
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .trailing, spacing: 3) {
-                Text(BruceDate.time(c.start)).font(.system(size: 17, weight: .semibold)).monospacedDigit()
-                Text(c.durationMinutes.map { "\($0) min" } ?? "").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                Text(BruceDate.time(c.start)).bruceFont(17, weight: .semibold).monospacedDigit()
+                Text(c.durationMinutes.map { "\($0) min" } ?? "").bruceFont(13).foregroundStyle(Theme.secondary)
                 if m.isWellness(studioId: c.studioId) { WellnessTag().padding(.top, 3) }
             }
-            .frame(width: 58, alignment: .trailing)
+            .frame(width: timeWidth, alignment: .trailing)
             VStack(alignment: .leading, spacing: 3) {
-                Text(c.title).font(.system(size: 17, weight: .semibold)).lineLimit(2)
-                Text(st?.name ?? c.studio?.name ?? "").font(.system(size: 15)).lineLimit(1)
+                Text(c.title).bruceFont(17, weight: .semibold).lineLimit(2)
+                Text(st?.name ?? c.studio?.name ?? "").bruceFont(15).lineLimit(1)
                 let line = meta ?? [st?.vicinity ?? c.studio?.vicinity, c.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | ")
-                if !line.isEmpty { Text(line).font(.system(size: 15)).foregroundStyle(Theme.secondary).lineLimit(1) }
+                if !line.isEmpty { Text(line).bruceFont(15).foregroundStyle(Theme.secondary).lineLimit(1) }
                 if let badge = badge ?? m.waitlistBadge(c.id) {
                     // "Booked" (a waitlist spot that turned into a booking) and "Spot open" are teal, "Waitlist" orange.
                     let tint = badge == "Waitlist" ? Theme.waitlistOrange : Theme.teal
                     HStack(spacing: 5) {
-                        Image(systemName: badge == "Booked" ? "checkmark.circle.fill" : badge == Copy.checkedIn ? "checkmark.seal.fill" : badge == Copy.spotOpen ? "person.crop.circle.badge.plus" : "bell.fill").font(.system(size: 10, weight: .semibold)).foregroundStyle(tint)
-                        Text(badge).font(.system(size: 13, weight: .semibold))
+                        Image(systemName: badge == "Booked" ? "checkmark.circle.fill" : badge == Copy.checkedIn ? "checkmark.seal.fill" : badge == Copy.spotOpen ? "person.crop.circle.badge.plus" : "bell.fill").bruceFont(10, weight: .semibold).foregroundStyle(tint)
+                        Text(badge).bruceFont(13, weight: .semibold)
                     }
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(tint.opacity(0.18), in: Capsule())
                     .padding(.top, 4)
                 } else if let a = c.availableSpots, a <= 0 {
-                    Text("Fully booked").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.red).padding(.top, 2)
+                    Text("Fully booked").bruceFont(13, weight: .semibold).foregroundStyle(Theme.red).padding(.top, 2)
                 }
                 if let chip = cancelChip { CancelChipView(chip: chip).padding(.top, 4) }
                 if !friends.isEmpty { FriendFaces(users: friends).padding(.top, 6) }
@@ -344,8 +404,8 @@ struct CancelChipView: View {
     var body: some View {
         let tint: Color = switch chip.tone { case .free: Theme.teal; case .warn: Theme.hoursOrange; case .bad: Theme.red }
         HStack(spacing: 5) {
-            Image(systemName: chip.tone == .free ? "clock" : "exclamationmark.triangle.fill").font(.system(size: 10, weight: .semibold))
-            Text(chip.text).font(.system(size: 13, weight: .semibold))
+            Image(systemName: chip.tone == .free ? "clock" : "exclamationmark.triangle.fill").bruceFont(10, weight: .semibold)
+            Text(chip.text).bruceFont(13, weight: .semibold)
         }
         .foregroundStyle(tint)
         .padding(.horizontal, 10).padding(.vertical, 5)
@@ -365,7 +425,7 @@ struct FriendFaces: View {
                     .overlay(Circle().stroke(Theme.background, lineWidth: 2))
             }
             if users.count > 5 {
-                Text("+\(users.count - 5)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.secondary)
+                Text("+\(users.count - 5)").bruceFont(12, weight: .semibold).foregroundStyle(Theme.secondary)
                     .padding(.leading, size * 0.3 + 4)
             }
         }
@@ -377,7 +437,7 @@ struct FriendFaces: View {
 /// Small boxed "Wellness" tag (class rows; the studio's `label` is WELLNESS).
 struct WellnessTag: View {
     var body: some View {
-        Text("Wellness").font(.system(size: 10, weight: .semibold)).foregroundStyle(Theme.secondary)
+        Text("Wellness").bruceFont(10, weight: .semibold).foregroundStyle(Theme.secondary)
             .lineLimit(1).fixedSize()
             .padding(.horizontal, 4).padding(.vertical, 2)
             .overlay(RoundedRectangle(cornerRadius: 3).stroke(Theme.secondary.opacity(0.6), lineWidth: 0.75))
@@ -403,9 +463,10 @@ struct ClassMenu: View {
                 Button("Show studio", systemImage: "building.2") { (pushRoute ?? m.push)(.studio(sid)) }
             }
         } label: {
-            Image(systemName: "ellipsis").font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.secondary)
+            Image(systemName: "ellipsis").bruceFont(15, weight: .bold).foregroundStyle(Theme.secondary)
                 .frame(width: 32, height: 32).contentShape(Rectangle())
         }
+        .accessibilityLabel("More actions for \(c?.title ?? "this class")")
     }
 }
 
@@ -415,12 +476,12 @@ struct ToastView: View {
     let text: String
     var body: some View {
         HStack(spacing: 10) {
-            if let icon = m.toastIcon { Image(systemName: icon).font(.system(size: 15, weight: .semibold)) }
-            Text(text).font(.system(size: 15, weight: .semibold)).lineLimit(3)
+            if let icon = m.toastIcon { Image(systemName: icon).bruceFont(15, weight: .semibold) }
+            Text(text).bruceFont(15, weight: .semibold).lineLimit(3)
             Spacer(minLength: 4)
             if let undo = m.toastUndo {
                 Button("Undo") { m.dismissToast(); undo() }
-                    .font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.lime).buttonStyle(.plain)
+                    .bruceFont(15, weight: .bold).foregroundStyle(Theme.lime).buttonStyle(.plain)
             }
         }
         .foregroundStyle(.white)
@@ -445,7 +506,7 @@ struct OfflineMap: View {
                 }
             }
             .stroke(Color(.systemBackground).opacity(0.6), lineWidth: 2)
-            Label("Map offline in demo mode", systemImage: "map").font(.system(size: 13, weight: .semibold))
+            Label("Map offline in demo mode", systemImage: "map").bruceFont(13, weight: .semibold)
                 .foregroundStyle(Theme.secondary).padding(.horizontal, 12).padding(.vertical, 8)
                 .glassEffect(.regular, in: .capsule)
         }
@@ -475,10 +536,10 @@ struct UnderlineTabs: View {
                 Button { withAnimation(.snappy(duration: 0.25)) { selection = i } } label: {
                     VStack(spacing: 8) {
                         HStack(spacing: 6) {
-                            Text(titles[i]).font(.system(size: 16, weight: sel ? .bold : .medium))
+                            Text(titles[i]).bruceFont(16, weight: sel ? .bold : .medium)
                                 .foregroundStyle(sel ? Theme.ink : Theme.secondary)
                             if i < badges.count, let b = badges[i] {
-                                Text(b).font(.system(size: 12, weight: .bold)).monospacedDigit()
+                                Text(b).bruceFont(12, weight: .bold).monospacedDigit()
                                     .foregroundStyle(sel ? Color.black : Theme.secondary)
                                     .padding(.horizontal, 7).padding(.vertical, 2)
                                     .background(Capsule().fill(sel ? Theme.lime : Theme.chipGrey))

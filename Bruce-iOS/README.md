@@ -182,6 +182,14 @@ Rendering:
 - `NSLocationWhenInUseUsageDescription`: check-in suggestion and nearby studios.
 - `ITSAppUsesNonExemptEncryption = NO` (HTTPS only).
 
+## Dynamic Type
+
+Text uses `.bruceFont(size, weight:)` (`Theme.swift`), a modifier that reads the environment's `dynamicTypeSize` and
+scales the design size like the nearest system text style (caption2 … largeTitle), capped at twice the size. Use it
+instead of `.font(.system(size:))`; `.bruceHeading()` / `.bruceScreenTitle()` are the wide black headings. Proportional
+glyphs inside fixed shapes (avatars, badges) keep `.system(size:)` on purpose. Row time columns use `@ScaledMetric`.
+Try it with `xcrun simctl ui <udid> content_size accessibility-large` before taking screenshots.
+
 ## Widgets and Controls
 
 `BruceWidgets` (an app extension target, `Bruce-iOS/BruceWidgets/`) ships three widgets and a Control: *Next class*

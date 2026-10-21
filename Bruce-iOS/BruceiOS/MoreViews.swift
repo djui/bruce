@@ -12,9 +12,9 @@ struct WelcomeView: View {
         VStack(spacing: 0) {
                 Spacer()
                 VStack(spacing: 14) {
-                    Text(appDisplayName.uppercased()).font(.system(size: 54, weight: .black).width(.expanded))
+                    Text(appDisplayName.uppercased()).bruceFont(54, weight: .black, width: .expanded)
                         .minimumScaleFactor(0.6).lineLimit(1)
-                    Text(Copy.tagline).font(.system(size: 14, weight: .heavy).width(.expanded)).kerning(1)
+                    Text(Copy.tagline).bruceFont(14, weight: .heavy, width: .expanded).kerning(1)
                 }
                 .foregroundStyle(.white)
                 Spacer()
@@ -23,12 +23,12 @@ struct WelcomeView: View {
                         LimeButton(title: "Log in") { m.present(.login) }
                         // Sneak peek: browse the public studio list (GET /v1/studios) without an account.
                         Button { Task { await m.startSneakPeek() } } label: {
-                            Text("Sneak peek").font(.system(size: 16, weight: .semibold)).frame(maxWidth: .infinity).frame(height: 36)
+                            Text("Sneak peek").bruceFont(16, weight: .semibold).frame(maxWidth: .infinity).frame(height: 36)
                         }
                         .buttonStyle(.glass).controlSize(.large)
                         // No signup endpoint is known: sign up on the website.
                         Link("Create account", destination: URL(string: "https://www.brucestudios.com")!)
-                            .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white.opacity(0.8)).padding(.top, 6)
+                            .bruceFont(15, weight: .semibold).foregroundStyle(.white.opacity(0.8)).padding(.top, 6)
                     }
                 }
                 .padding(.horizontal, Theme.gutter).padding(.bottom, 24)
@@ -45,7 +45,7 @@ struct WelcomeView: View {
                 .offset(x: animate ? 120 : -80, y: animate ? -260 : -180)
             Circle().fill(Theme.teal.opacity(0.45)).frame(width: 360).blur(radius: 100)
                 .offset(x: animate ? -110 : 90, y: animate ? 260 : 160)
-            Image(systemName: "dumbbell.fill").font(.system(size: 280, weight: .black)).foregroundStyle(.white.opacity(0.04))
+            Image(systemName: "dumbbell.fill").bruceFont(280, weight: .black).foregroundStyle(.white.opacity(0.04))
                 .rotationEffect(.degrees(-24)).offset(x: 60, y: -40)
         }
         .clipped()
@@ -193,9 +193,9 @@ struct SettingsView: View {
                     Text("\(appDisplayName) \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "") (\(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? ""))")
                     Text("Unofficial client. Not affiliated with Bruce Studios.")
                     Link("djui.github.io/bruce", destination: URL(string: "https://djui.github.io/bruce/")!)
-                        .font(.system(size: 13, weight: .semibold)).tint(Theme.limeInk)
+                        .bruceFont(13, weight: .semibold).tint(Theme.limeInk)
                 }
-                .font(.system(size: 13)).foregroundStyle(Theme.secondary).frame(maxWidth: .infinity)
+                .bruceFont(13).foregroundStyle(Theme.secondary).frame(maxWidth: .infinity)
                 .listRowBackground(Color.clear)
             }
         }
@@ -289,8 +289,8 @@ struct TextInfoSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-                Text(title.uppercased()).font(Theme.heading(26)).padding(.bottom, 8)
-                ForEach(paragraphs, id: \.self) { Text($0).font(.system(size: 16)).lineSpacing(5) }
+                Text(title.uppercased()).bruceHeading(26).padding(.bottom, 8)
+                ForEach(paragraphs, id: \.self) { Text($0).bruceFont(16).lineSpacing(5) }
             }
             .padding(Theme.gutter)
         }
@@ -323,10 +323,10 @@ struct ClassInviteSheet: View {
                     } label: {
                         HStack(spacing: 14) {
                             Avatar(fileId: u.photo, initials: u.initials, size: 44)
-                            Text(u.firstName ?? u.fullName).font(.system(size: 17, weight: .medium))
+                            Text(u.firstName ?? u.fullName).bruceFont(17, weight: .medium)
                             Spacer()
                             Image(systemName: picked.contains(u.id) ? "checkmark.circle.fill" : "circle")
-                                .font(.system(size: 24)).foregroundStyle(picked.contains(u.id) ? Theme.limeInk : Theme.secondary)
+                                .bruceFont(24).foregroundStyle(picked.contains(u.id) ? Theme.limeInk : Theme.secondary)
                         }
                         .contentShape(Rectangle())
                     }
@@ -366,10 +366,10 @@ struct InviteSheet: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("INVITE A FRIEND").font(Theme.screenTitle(30))
+                Text("INVITE A FRIEND").bruceScreenTitle(30)
                 Text(Copy.inviteIntro(open: m.openInvites))
-                    .font(.system(size: 15)).foregroundStyle(Theme.secondary)
-                Text("INVITES").font(Theme.heading(16)).padding(.top, 10)
+                    .bruceFont(15).foregroundStyle(Theme.secondary)
+                Text("INVITES").bruceHeading(16).padding(.top, 10)
                 if open.isEmpty {
                     Text(m.isLoggedIn ? "No invite codes left." : "Log in to see your invite codes.").foregroundStyle(Theme.secondary)
                 }
@@ -378,10 +378,10 @@ struct InviteSheet: View {
                         ForEach(open) { v in
                             HStack(spacing: 14) {
                                 Image(systemName: "gift.fill").foregroundStyle(Theme.limeInk)
-                                Text(v.code.uppercased()).font(.system(size: 18, weight: .bold, design: .monospaced))
+                                Text(v.code.uppercased()).bruceFont(18, weight: .bold, design: .monospaced)
                                 Spacer()
                                 ShareLink(item: Copy.shareInvite(v.code)) {
-                                    Label("Share", systemImage: "square.and.arrow.up").font(.system(size: 14, weight: .bold)).foregroundStyle(.black)
+                                    Label("Share", systemImage: "square.and.arrow.up").bruceFont(14, weight: .bold).foregroundStyle(.black)
                                 }
                                 .buttonStyle(.glassProminent).tint(Theme.lime)
                             }
@@ -391,16 +391,16 @@ struct InviteSheet: View {
                     }
                 }
                 if !accepted.isEmpty {
-                    Text("ACCEPTED").font(Theme.heading(16)).padding(.top, 10)
+                    Text("ACCEPTED").bruceHeading(16).padding(.top, 10)
                     ForEach(accepted) { v in
                         HStack(spacing: 14) {
                             Avatar(fileId: nil, initials: "?", size: 44)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(m.friends.first { $0.friendUser?.id == v.userId }?.friendUser?.firstName ?? "Invited friend").font(.system(size: 16, weight: .semibold))
-                                Text(v.code.uppercased()).font(.system(size: 14, design: .monospaced)).foregroundStyle(Theme.secondary)
+                                Text(m.friends.first { $0.friendUser?.id == v.userId }?.friendUser?.firstName ?? "Invited friend").bruceFont(16, weight: .semibold)
+                                Text(v.code.uppercased()).bruceFont(14, design: .monospaced).foregroundStyle(Theme.secondary)
                             }
                             Spacer()
-                            Text("Pending").font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.secondary)
+                            Text("Pending").bruceFont(14, weight: .medium).foregroundStyle(Theme.secondary)
                         }
                     }
                 }
@@ -423,9 +423,9 @@ struct VoucherSheet: View {
     @FocusState private var focused: Bool
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("REDEEM VOUCHER").font(Theme.screenTitle(28)).padding(.top, 20)
+            Text("REDEEM VOUCHER").bruceScreenTitle(28).padding(.top, 20)
             TextField("XXXXXX", text: $code)
-                .font(.system(size: 22, weight: .bold, design: .monospaced)).textInputAutocapitalization(.characters)
+                .bruceFont(22, weight: .bold, design: .monospaced).textInputAutocapitalization(.characters)
                 .padding(.horizontal, 18).frame(height: 58)
                 .glassEffect(.regular.interactive(), in: .capsule)
                 .focused($focused)
@@ -448,9 +448,9 @@ struct SupportSheet: View {
         List {
             Section {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Hi \(m.user?.firstName ?? "there") 👋").font(.system(size: 26, weight: .bold))
+                    Text("Hi \(m.user?.firstName ?? "there") 👋").bruceFont(26, weight: .bold)
                     Text("Support chat and the FAQ are run by Bruce Studios. Contact them through their website or the official app.")
-                        .font(.system(size: 15)).foregroundStyle(Theme.secondary)
+                        .bruceFont(15).foregroundStyle(Theme.secondary)
                 }
                 .padding(.vertical, 6)
             }

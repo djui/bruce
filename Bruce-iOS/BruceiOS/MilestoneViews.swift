@@ -31,16 +31,16 @@ struct MilestoneCard: View {
             HStack(alignment: .top, spacing: 14) {
                 MilestoneBadge(m: ms)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("MILESTONE").font(.system(size: 11, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary)
-                    Text(ms.title).font(.system(size: 18, weight: .bold))
-                    Text(ms.detail).font(.system(size: 14)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                    Text("MILESTONE").bruceFont(11, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
+                    Text(ms.title).bruceFont(18, weight: .bold)
+                    Text(ms.detail).bruceFont(14).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
                     HStack(spacing: 10) {
                         ShareLink(item: ms.shareText) {
-                            Label("Share", systemImage: "square.and.arrow.up").font(.system(size: 14, weight: .semibold))
+                            Label("Share", systemImage: "square.and.arrow.up").bruceFont(14, weight: .semibold)
                                 .padding(.horizontal, 12).frame(height: 32)
                         }
                         .buttonStyle(.glass)
-                        Button("Done") { withAnimation { m.markMilestoneSeen(ms.key) } }.font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.secondary)
+                        Button("Done") { withAnimation { m.markMilestoneSeen(ms.key) } }.bruceFont(14, weight: .semibold).foregroundStyle(Theme.secondary)
                     }
                     .padding(.top, 6)
                 }
@@ -61,14 +61,14 @@ struct MilestonesRow: View {
         let reached = Milestones.reached(visits: visits, categoryTitle: { m.categoryTitle(forKey: String($0)) }, studioName: { m.studio($0)?.name })
         if !reached.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
-                Text("MILESTONES").font(Theme.heading(18)).padding(.horizontal, Theme.gutter)
+                Text("MILESTONES").bruceHeading(18).padding(.horizontal, Theme.gutter)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 14) {
                         ForEach(reached) { ms in
                             VStack(spacing: 6) {
                                 MilestoneBadge(m: ms, size: 52)
-                                Text(ms.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
-                                Text(BruceDate.format(ms.reachedAt, "d MMM yyyy")).font(.system(size: 11)).foregroundStyle(Theme.secondary)
+                                Text(ms.title).bruceFont(12, weight: .semibold).lineLimit(1)
+                                Text(BruceDate.format(ms.reachedAt, "d MMM yyyy")).bruceFont(11).foregroundStyle(Theme.secondary)
                             }
                             .frame(width: 92)
                             .contextMenu { ShareLink(item: ms.shareText) }
@@ -92,13 +92,13 @@ struct NewToYouSection: View {
         if !picks.isEmpty {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
-                    Text("NEW TO YOU").font(Theme.heading(19)).padding(.horizontal, Theme.gutter)
+                    Text("NEW TO YOU").bruceHeading(19).padding(.horizontal, Theme.gutter)
                     Spacer()
                     if let g = m.goals.first(where: { $0.category == "newStudios" }) {
                         let p = m.goalsMonth().progress.first { $0.goal.id == g.id }
                         NavigationLink(value: Route.goals) {
                             Text("Try \(g.target) new studio\(g.target == 1 ? "" : "s") · \(p?.done ?? 0) of \(g.target)")
-                                .font(.system(size: 13, weight: .semibold)).padding(.horizontal, 12).frame(height: 30)
+                                .bruceFont(13, weight: .semibold).padding(.horizontal, 12).frame(height: 30)
                         }
                         .buttonStyle(.glass).padding(.trailing, Theme.gutter)
                     }
@@ -111,10 +111,10 @@ struct NewToYouSection: View {
                                     RemotePhoto(fileId: p.studio.photo)
                                     LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
                                     VStack(alignment: .leading, spacing: 3) {
-                                        Text(p.studio.name).font(.system(size: 19, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
+                                        Text(p.studio.name).bruceFont(19, weight: .bold).lineLimit(1).minimumScaleFactor(0.7)
                                         Text([p.studio.vicinity, p.distance.map { formatDistance(Int($0)) }, "never visited"].compactMap { $0 }.joined(separator: " · "))
-                                            .font(.system(size: 13, weight: .medium))
-                                        Text(p.reason).font(.system(size: 12)).opacity(0.85)
+                                            .bruceFont(13, weight: .medium)
+                                        Text(p.reason).bruceFont(12).opacity(0.85)
                                     }
                                     .foregroundStyle(.white).padding(14)
                                 }

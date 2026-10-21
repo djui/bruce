@@ -178,8 +178,8 @@ struct ExploreView: View {
                         let d = BruceDate.calendar.date(byAdding: .day, value: i, to: Date())!
                         Button { withAnimation(.spring(duration: 0.3)) { dayOffset = i } } label: {
                             VStack(spacing: 1) {
-                                Text(i == 0 ? "today" : BruceDate.format(d, "EEE").lowercased()).font(.system(size: 12, weight: .semibold))
-                                Text(BruceDate.format(d, "d")).font(.system(size: 17, weight: .bold))
+                                Text(i == 0 ? "today" : BruceDate.format(d, "EEE").lowercased()).bruceFont(12, weight: .semibold)
+                                Text(BruceDate.format(d, "d")).bruceFont(17, weight: .bold)
                             }
                             .foregroundStyle(dayOffset == i ? Color.black : Theme.ink)
                             .frame(width: 50, height: 50)
@@ -232,7 +232,7 @@ struct ExploreView: View {
             }
             if classes.count > upcomingClasses.count {
                 Text("\(classes.count - upcomingClasses.count) earlier classes today are not shown")
-                    .font(.system(size: 13)).foregroundStyle(Theme.secondary).padding(.vertical, 16)
+                    .bruceFont(13).foregroundStyle(Theme.secondary).padding(.vertical, 16)
             }
         }
     }
@@ -263,23 +263,23 @@ struct StudioCard: View, Equatable {
             RemotePhoto(fileId: studio.photo, symbol: symbol)
             LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 3) {
-                Text(studio.name).font(.system(size: 24, weight: .heavy).width(.expanded)).lineLimit(2)
+                Text(studio.name).bruceFont(24, weight: .heavy, width: .expanded).lineLimit(2)
                 Text(([studio.vicinity] + [distance.map { formatDistance(Int($0)) }]).compactMap { $0 }.joined(separator: " | "))
-                    .font(.system(size: 15, weight: .medium))
+                    .bruceFont(15, weight: .medium)
             }
             .foregroundStyle(.white).padding(16)
             HStack(spacing: 8) {
                 if let r = studio.rating?.display {
-                    Label(r, systemImage: "star.fill").font(.system(size: 13, weight: .bold))
+                    Label(r, systemImage: "star.fill").bruceFont(13, weight: .bold)
                         .padding(.horizontal, 10).padding(.vertical, 6).background(.thinMaterial, in: Capsule())
                 }
                 Spacer()
                 if let category {
-                    Text(category).font(.system(size: 13, weight: .semibold))
+                    Text(category).bruceFont(13, weight: .semibold)
                         .padding(.horizontal, 10).padding(.vertical, 6).background(.thinMaterial, in: Capsule())
                 }
                 if isFavorite {
-                    Image(systemName: "heart.fill").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.red)
+                    Image(systemName: "heart.fill").bruceFont(13, weight: .bold).foregroundStyle(Theme.red)
                         .frame(width: 30, height: 30).background(.thinMaterial, in: Circle())
                 }
             }
@@ -306,7 +306,7 @@ struct FilterActiveFooter: View {
     @Environment(AppModel.self) var m
     var body: some View {
         Button { m.filterOpen = true } label: {
-            Text("Filter active").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+            Text("Filter active").bruceFont(13).foregroundStyle(Theme.secondary)
                 .frame(maxWidth: .infinity).padding(.vertical, 16).contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -319,7 +319,7 @@ struct TimeRangeSlider: View {
     @Binding var to: Double
     var body: some View {
         HStack(spacing: 12) {
-            Text(label(from)).font(.system(size: 14, weight: .semibold)).monospacedDigit().frame(width: 46, alignment: .leading)
+            Text(label(from)).bruceFont(14, weight: .semibold).monospacedDigit().frame(width: 46, alignment: .leading)
             GeometryReader { geo in
                 let w = geo.size.width - 24
                 ZStack(alignment: .leading) {
@@ -333,7 +333,7 @@ struct TimeRangeSlider: View {
                 .frame(height: geo.size.height)
             }
             .frame(height: 28)
-            Text(label(to)).font(.system(size: 14, weight: .semibold)).monospacedDigit().frame(width: 46, alignment: .trailing)
+            Text(label(to)).bruceFont(14, weight: .semibold).monospacedDigit().frame(width: 46, alignment: .trailing)
         }
     }
     var thumb: some View { Circle().fill(.white).frame(width: 24, height: 24).glassEffect(.regular.interactive(), in: .circle).shadow(color: .black.opacity(0.15), radius: 3) }
@@ -367,7 +367,7 @@ struct StudiosMap: View {
                 ForEach(pins) { p in
                     Annotation(p.name, coordinate: p.c, anchor: .bottom) {
                         Button { (pushRoute ?? m.push)(.studio(p.id)) } label: {
-                            Image(systemName: "dumbbell.fill").font(.system(size: 13, weight: .bold)).foregroundStyle(.black)
+                            Image(systemName: "dumbbell.fill").bruceFont(13, weight: .bold).foregroundStyle(.black)
                                 .frame(width: 32, height: 32).background(Circle().fill(Theme.lime))
                                 .overlay(Circle().stroke(.white, lineWidth: 2))
                         }
@@ -378,7 +378,7 @@ struct StudiosMap: View {
             .mapControls { MapCompass(); MapScaleView() }
             .overlay(alignment: .bottomTrailing) {
                 Button { withAnimation { position = .region(cityRegion) } } label: {
-                    Image(systemName: "location.fill").font(.system(size: 20)).frame(width: 30, height: 30)
+                    Image(systemName: "location.fill").bruceFont(20).frame(width: 30, height: 30)
                 }
                 .buttonStyle(.glass).buttonBorderShape(.circle).controlSize(.large)
                 .padding(Theme.gutter).padding(.bottom, 90)
@@ -435,18 +435,18 @@ struct FilterSheet: View {
                     }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Text("Area").font(.system(size: 18, weight: .bold))
+                            Text("Area").bruceFont(18, weight: .bold)
                             Spacer()
-                            NavigationLink("Change city") { SelectCitySheet() }.font(.system(size: 15, weight: .semibold))
+                            NavigationLink("Change city") { SelectCitySheet() }.bruceFont(15, weight: .semibold)
                         }
                         AreaChips()
                     }
                     VStack(alignment: .leading, spacing: 14) {
                         HStack {
-                            Text("Categories").font(.system(size: 18, weight: .bold))
+                            Text("Categories").bruceFont(18, weight: .bold)
                             Spacer()
                             Button(showAllCategories ? "Show less" : "Show all") { withAnimation { showAllCategories.toggle() } }
-                                .font(.system(size: 15, weight: .semibold))
+                                .bruceFont(15, weight: .semibold)
                         }
                         GlassEffectContainer(spacing: 8) {
                             FlowLayout {
@@ -475,7 +475,7 @@ struct FilterSheet: View {
 
     func section<C: View>(_ title: String, @ViewBuilder content: () -> C) -> some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(title).font(.system(size: 18, weight: .bold))
+            Text(title).bruceFont(18, weight: .bold)
             GlassEffectContainer(spacing: 8) { FlowLayout { content() } }
         }
     }
@@ -541,7 +541,7 @@ struct SearchResults: View {
         ScrollView {
             if query.isEmpty {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("POPULAR").font(Theme.heading(16)).foregroundStyle(Theme.secondary)
+                    Text("POPULAR").bruceHeading(16).foregroundStyle(Theme.secondary)
                     GlassEffectContainer(spacing: 8) {
                         FlowLayout {
                             ForEach(m.chipCategories.prefix(12)) { c in
@@ -669,7 +669,7 @@ struct AreaChips: View {
                     })
                 }
                 NavigationLink { NewAreaSheet() } label: {
-                    Label("New area", systemImage: "plus").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Label("New area", systemImage: "plus").bruceFont(15, weight: .semibold).foregroundStyle(Theme.ink)
                         .padding(.horizontal, 14).frame(height: 36)
                 }
                 .buttonStyle(.plain)
@@ -752,7 +752,7 @@ struct NewAreaSheet: View {
         .overlay(alignment: .top) {
             Text(drawing ? "Draw the outline of your area with one finger." :
                     Copy.areaHint)
-                .font(.system(size: 15, weight: .medium)).multilineTextAlignment(.center).foregroundStyle(.white)
+                .bruceFont(15, weight: .medium).multilineTextAlignment(.center).foregroundStyle(.white)
                 .padding(14).frame(maxWidth: .infinity)
                 .background(Color.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 14))
                 .padding(Theme.gutter)
@@ -765,7 +765,7 @@ struct NewAreaSheet: View {
                 }
                 Button { stroke = []; drawing.toggle() } label: {
                     Label(drawing ? "Cancel" : "Draw", systemImage: drawing ? "xmark" : "pencil.tip")
-                        .font(.system(size: 17, weight: .bold)).foregroundStyle(.black)
+                        .bruceFont(17, weight: .bold).foregroundStyle(.black)
                 }
                 .buttonStyle(.glassProminent).tint(Theme.lime).controlSize(.large)
             }
@@ -828,7 +828,7 @@ struct CategoriesGridView: View {
                     NavigationLink(value: Route.category(c.0)) {
                         ZStack(alignment: .bottomLeading) {
                             RemotePhoto(fileId: c.2, w: 240, h: 240, symbol: "figure.mind.and.body")
-                            Text(c.1).font(.system(size: 16, weight: .bold)).lineLimit(1)
+                            Text(c.1).bruceFont(16, weight: .bold).lineLimit(1)
                                 .padding(.horizontal, 12).padding(.vertical, 7).glassEffect(.regular, in: .capsule).padding(10)
                         }
                         .aspectRatio(1, contentMode: .fit)

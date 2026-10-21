@@ -45,8 +45,8 @@ struct HomeView: View {
     var searchField: some View {
         Button { m.present(.search) } label: {
             HStack(spacing: 12) {
-                Image(systemName: "magnifyingglass").font(.system(size: 18, weight: .medium))
-                Text("Search studios, classes, instructors").font(.system(size: 16))
+                Image(systemName: "magnifyingglass").bruceFont(18, weight: .medium)
+                Text("Search studios, classes, instructors").bruceFont(16)
                 Spacer()
             }
             .foregroundStyle(Theme.secondary)
@@ -59,9 +59,9 @@ struct HomeView: View {
 
     var loggedOut: some View {
         VStack(spacing: 18) {
-            Image(systemName: "figure.run.circle").font(.system(size: 64, weight: .light)).foregroundStyle(Theme.limeInk)
+            Image(systemName: "figure.run.circle").bruceFont(64, weight: .light).foregroundStyle(Theme.limeInk)
             Text("Log in to see your spotlight, categories and classes.")
-                .font(.system(size: 16)).multilineTextAlignment(.center)
+                .bruceFont(16).multilineTextAlignment(.center)
             LimeButton(title: "Log in") { m.present(.login) }
         }
         .padding(.horizontal, Theme.gutter).padding(.top, 70)
@@ -72,16 +72,16 @@ struct HomeView: View {
         NavigationLink(value: Route.classDetail(c.id)) {
             HStack(spacing: 14) {
                 VStack(spacing: 2) {
-                    Text(BruceDate.format(c.start, "EEE").uppercased()).font(.system(size: 12, weight: .heavy).width(.expanded))
-                    Text(BruceDate.time(c.start)).font(.system(size: 18, weight: .bold)).monospacedDigit()
+                    Text(BruceDate.format(c.start, "EEE").uppercased()).bruceFont(12, weight: .heavy, width: .expanded)
+                    Text(BruceDate.time(c.start)).bruceFont(18, weight: .bold).monospacedDigit()
                 }
                 .foregroundStyle(.black)
                 .frame(width: 70, height: 58)
                 .background(RoundedRectangle(cornerRadius: 16).fill(Theme.lime))
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("NEXT UP").font(.system(size: 11, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary)
-                    Text(c.title).font(.system(size: 17, weight: .bold)).lineLimit(1)
-                    Text(m.studioName(c.studioId)).font(.system(size: 14)).foregroundStyle(Theme.secondary).lineLimit(1)
+                    Text("NEXT UP").bruceFont(11, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
+                    Text(c.title).bruceFont(17, weight: .bold).lineLimit(1)
+                    Text(m.studioName(c.studioId)).bruceFont(14).foregroundStyle(Theme.secondary).lineLimit(1)
                 }
                 .foregroundStyle(Theme.ink)
                 Spacer(minLength: 0)
@@ -95,7 +95,7 @@ struct HomeView: View {
     }
 
     func sectionTitle(_ t: String) -> some View {
-        Text(t.uppercased()).font(Theme.heading(19)).padding(.horizontal, Theme.gutter)
+        Text(t.uppercased()).bruceHeading(19).padding(.horizontal, Theme.gutter)
     }
 
     var spotlightSection: some View {
@@ -109,13 +109,13 @@ struct HomeView: View {
                                 RemotePhoto(fileId: it.photo, symbol: "figure.highintensity.intervaltraining")
                                 LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(it.className ?? "").font(.system(size: 26, weight: .heavy).width(.expanded)).lineLimit(2)
+                                    Text(it.className ?? "").bruceFont(26, weight: .heavy, width: .expanded).lineLimit(2)
                                     Text(BruceDate.format(it.startTime.flatMap(BruceDate.parse), "EEEE | d MMMM | HH:mm"))
-                                        .font(.system(size: 15, weight: .medium))
+                                        .bruceFont(15, weight: .medium)
                                 }
                                 .foregroundStyle(.white)
                                 .padding(18)
-                                Text(it.studioName ?? "").font(.system(size: 13, weight: .semibold))
+                                Text(it.studioName ?? "").bruceFont(13, weight: .semibold)
                                     .padding(.horizontal, 12).padding(.vertical, 7)
                                     .glassEffect(.regular, in: .capsule)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
@@ -153,7 +153,7 @@ struct HomeView: View {
             HStack {
                 sectionTitle("Categories")
                 Spacer()
-                NavigationLink(value: Route.categories) { Text("Show all").font(.system(size: 15, weight: .semibold)) }
+                NavigationLink(value: Route.categories) { Text("Show all").bruceFont(15, weight: .semibold) }
                     .buttonStyle(.glass).padding(.trailing, Theme.gutter)
             }
             ScrollView(.horizontal, showsIndicators: false) {
@@ -162,7 +162,7 @@ struct HomeView: View {
                         NavigationLink(value: c.categoryId.map { Route.category($0) } ?? Route.categories) {
                             ZStack(alignment: .bottomLeading) {
                                 RemotePhoto(fileId: c.photo, w: 240, h: 240, symbol: "figure.mind.and.body")
-                                Text(c.title ?? "").font(.system(size: 17, weight: .bold))
+                                Text(c.title ?? "").bruceFont(17, weight: .bold)
                                     .padding(.horizontal, 14).padding(.vertical, 8)
                                     .glassEffect(.regular, in: .capsule)
                                     .padding(10)
@@ -208,9 +208,9 @@ struct HomeView: View {
                                 RemotePhoto(fileId: it.photo)
                                 LinearGradient(colors: [.clear, .black.opacity(0.5)], startPoint: .center, endPoint: .bottom)
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(it.studioName ?? "").font(.system(size: 19, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
+                                    Text(it.studioName ?? "").bruceFont(19, weight: .bold).lineLimit(1).minimumScaleFactor(0.7)
                                     Text(([it.categories?.first, it.vicinities?.first].compactMap { $0 } + [it.distance.map(formatDistance)].compactMap { $0 })
-                                        .joined(separator: " | ")).font(.system(size: 13, weight: .medium))
+                                        .joined(separator: " | ")).bruceFont(13, weight: .medium)
                                 }
                                 .foregroundStyle(.white).padding(14)
                             }

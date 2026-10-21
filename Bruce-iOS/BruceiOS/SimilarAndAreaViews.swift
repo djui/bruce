@@ -16,11 +16,11 @@ struct SimilarClassesSheet: View {
         ScrollView {
             VStack(spacing: 20) {
                 VStack(spacing: 4) {
-                    Text("Similar classes to").font(.system(size: 16)).foregroundStyle(Theme.secondary)
+                    Text("Similar classes to").bruceFont(16).foregroundStyle(Theme.secondary)
                     Text([c?.title, c.map { BruceDate.time($0.start) }].compactMap { $0 }.joined(separator: ", "))
-                        .font(.system(size: 18, weight: .bold))
+                        .bruceFont(18, weight: .bold)
                     if let sid = c?.studioId {
-                        Text("nearby \(m.studioName(sid))").font(.system(size: 16)).foregroundStyle(Theme.secondary)
+                        Text("nearby \(m.studioName(sid))").bruceFont(16).foregroundStyle(Theme.secondary)
                     }
                 }
                 .multilineTextAlignment(.center).padding(.horizontal, Theme.gutter)
@@ -63,13 +63,13 @@ struct SimilarClassCard: View {
             RemotePhoto(fileId: card.photo, w: 300, h: 220, symbol: "figure.strengthtraining.traditional")
             LinearGradient(colors: [.clear, .black.opacity(0.7)], startPoint: .center, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 3) {
-                Text("\(BruceDate.time(card.start)) - \(BruceDate.time(card.end))").font(.system(size: 16, weight: .semibold)).monospacedDigit()
-                Text(card.title ?? "Class").font(.system(size: 22, weight: .heavy)).lineLimit(2)
+                Text("\(BruceDate.time(card.start)) - \(BruceDate.time(card.end))").bruceFont(16, weight: .semibold).monospacedDigit()
+                Text(card.title ?? "Class").bruceFont(22, weight: .heavy).lineLimit(2)
                 HStack(spacing: 6) {
                     Text(card.studio?.name ?? "").lineLimit(1)
                     if let d = card.distance, d > 0 { Text("· \(formatDistance(d))").layoutPriority(1) }
                 }
-                .font(.system(size: 14, weight: .medium))
+                .bruceFont(14, weight: .medium)
             }
             .foregroundStyle(.white).padding(16)
         }
@@ -129,10 +129,10 @@ struct AreaMapSheet: View {
         let selected = m.selectedAreaId == a.id
         return VStack(spacing: 12) {
             Text(m.studios.isEmpty ? "Studios are still loading" : "\(count) studio\(count == 1 ? "" : "s") in this area")
-                .font(.system(size: 15, weight: .medium))
+                .bruceFont(15, weight: .medium)
             if selected {
                 Button { m.selectedAreaId = nil } label: {
-                    Label("Filtering by this area", systemImage: "checkmark").font(.system(size: 17, weight: .bold))
+                    Label("Filtering by this area", systemImage: "checkmark").bruceFont(17, weight: .bold)
                         .frame(maxWidth: .infinity).frame(height: 40)
                 }
                 .buttonStyle(.glass).controlSize(.large)

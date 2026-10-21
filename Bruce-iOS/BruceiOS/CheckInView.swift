@@ -123,13 +123,13 @@ struct CheckInScanner: View {
                 // The tab shows its title in the navigation bar; the sheet has no bar, so it draws its own.
                 if inSheet {
                     HStack {
-                        Text("CHECK IN").font(Theme.screenTitle(26)).foregroundStyle(.white)
+                        Text("CHECK IN").bruceScreenTitle(26).foregroundStyle(.white)
                         Spacer()
                         Button(role: .close) { scanner.stop(); m.dismissSheets() }.buttonStyle(.glass)
                     }
                 }
                 Label("Hold the camera steady over the QR code on the studio door", systemImage: "qrcode.viewfinder")
-                    .font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
+                    .bruceFont(15, weight: .medium).foregroundStyle(.white)
                     .padding(.horizontal, 16).padding(.vertical, 12)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .glassEffect(.clear, in: .rect(cornerRadius: 22))
@@ -175,7 +175,7 @@ struct CheckInScanner: View {
     /// Shown inside the viewfinder while the camera isn't running.
     var cameraStatus: some View {
         VStack(spacing: 14) {
-            Image(systemName: "camera.viewfinder").font(.system(size: 50, weight: .light))
+            Image(systemName: "camera.viewfinder").bruceFont(50, weight: .light)
             switch scanner.state {
             case .denied:
                 Text("Camera access is off. Allow it in Settings to scan the door QR code.")
@@ -185,7 +185,7 @@ struct CheckInScanner: View {
             default: ProgressView()
             }
         }
-        .font(.system(size: 15)).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.85))
+        .bruceFont(15).multilineTextAlignment(.center).foregroundStyle(.white.opacity(0.85))
     }
 
     func handle(_ code: String) {
@@ -210,7 +210,7 @@ struct CheckInSuggestions: View {
             }
             if !loc.authorized && suggestion?.kind != .booking {
                 HStack {
-                    Text("Suggest the gym you're at").font(.system(size: 14)).foregroundStyle(.white.opacity(0.85))
+                    Text("Suggest the gym you're at").bruceFont(14).foregroundStyle(.white.opacity(0.85))
                     Spacer()
                     UseLocationButton()
                 }
@@ -219,10 +219,10 @@ struct CheckInSuggestions: View {
             }
             Button { showAll = true } label: {
                 HStack(spacing: 14) {
-                    Image(systemName: "list.bullet").font(.system(size: 18)).frame(width: 28)
+                    Image(systemName: "list.bullet").bruceFont(18).frame(width: 28)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Other studios").font(.system(size: 17, weight: .semibold))
-                        Text("Bookings, recent visits and all check-in studios").font(.system(size: 13)).foregroundStyle(.white.opacity(0.7))
+                        Text("Other studios").bruceFont(17, weight: .semibold)
+                        Text("Bookings, recent visits and all check-in studios").bruceFont(13).foregroundStyle(.white.opacity(0.7))
                     }
                     Spacer()
                     Image(systemName: "chevron.right").foregroundStyle(.white.opacity(0.5))
@@ -244,13 +244,13 @@ struct SuggestedCheckInCard: View {
         let t = suggestion.target
         VStack(alignment: .leading, spacing: 14) {
             Label(suggestion.reason, systemImage: icon)
-                .font(.system(size: 13, weight: .heavy).width(.expanded)).textCase(.uppercase)
+                .bruceFont(13, weight: .heavy, width: .expanded).textCase(.uppercase)
                 .foregroundStyle(suggestion.kind == .booking ? Color.black : Theme.ink)
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(Capsule().fill(suggestion.kind == .booking ? Theme.lime : Theme.chipGrey))
-            Text(t.name).font(.system(size: 26, weight: .black).width(.expanded)).lineLimit(2).minimumScaleFactor(0.7)
+            Text(t.name).bruceFont(26, weight: .black, width: .expanded).lineLimit(2).minimumScaleFactor(0.7)
             if !t.subtitle.isEmpty, suggestion.kind == .booking || !t.subtitle.hasPrefix("Checked in") {
-                Text(t.subtitle).font(.system(size: 15)).foregroundStyle(Theme.secondary)
+                Text(t.subtitle).bruceFont(15).foregroundStyle(Theme.secondary)
             }
             LimeButton(title: "Check in", systemImage: "checkmark.circle.fill") { m.askCheckIn(t) }
         }
@@ -302,13 +302,13 @@ struct OtherStudiosView: View {
                         .foregroundStyle(Theme.secondary).frame(width: 24)
                     VStack(alignment: .leading, spacing: 2) {
                         HStack(spacing: 6) {
-                            Text(t.name).font(.system(size: 16, weight: .semibold)).lineLimit(1)
-                            if m.isCheckInPinned(t.studioId) { Image(systemName: "pin.fill").font(.system(size: 11)).foregroundStyle(Theme.limeInk) }
+                            Text(t.name).bruceFont(16, weight: .semibold).lineLimit(1)
+                            if m.isCheckInPinned(t.studioId) { Image(systemName: "pin.fill").bruceFont(11).foregroundStyle(Theme.limeInk) }
                         }
-                        if !t.subtitle.isEmpty { Text(t.subtitle).font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1) }
+                        if !t.subtitle.isEmpty { Text(t.subtitle).bruceFont(13).foregroundStyle(Theme.secondary).lineLimit(1) }
                     }
                     Spacer()
-                    Button { m.askCheckIn(t) } label: { Text("Check in").font(.system(size: 13, weight: .bold)).foregroundStyle(.black) }
+                    Button { m.askCheckIn(t) } label: { Text("Check in").bruceFont(13, weight: .bold).foregroundStyle(.black) }
                         .buttonStyle(.glassProminent).tint(Theme.lime)
                 }
                 .swipeActions(edge: .leading) {
