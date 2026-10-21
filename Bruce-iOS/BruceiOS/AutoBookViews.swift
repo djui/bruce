@@ -219,6 +219,11 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
             }
             return
         }
+        let content = response.notification.request.content
+        if content.categoryIdentifier == CancelReminders.category, let classId = content.userInfo["classId"] as? Int {
+            await MainActor.run { AppDelegate.openClass?(classId) }
+            return
+        }
         guard let classId = await AutoBook.handle(response) else { return }
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier {
             await MainActor.run { AppDelegate.openClass?(classId) }

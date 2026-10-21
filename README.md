@@ -79,6 +79,10 @@ My classes tabs, with class and studio pages and account sheets.
   the free-cancel deadline in its notes and a 1 h alert. Settings › **Calendar subscription** opens Bruce's own
   `webcal://` feed of all your bookings directly (long-press to copy the link instead); a one-off event does not
   follow changes to the class, the feed does.
+- **Free cancel until 18:30**: every booked row in My classes says what cancelling costs right now, green while it is
+  free, amber once it costs 1 or 2 strikes ("Cancel now: 2 strikes · 3 from 18:30"), red at 3. Settings › **Last
+  free cancel reminder** (off by default) sends a local notification one hour before the free deadline; nothing is
+  ever cancelled for you.
 - **Visit limits:** tap the visits pill (e.g. "1/1") for visits used and left, the reset date and each
   plan's limit at the studio. A class over your limit shows its drop-in price ("Buy for SEK 220").
 - **Descriptions and alerts:** studio and class descriptions are rendered as Markdown (bold, lists, links).

@@ -278,6 +278,7 @@ body.logged-out .main { display: block; }
 .pill .i { width: 13px; height: 13px; }
 .pill.teal { background: color-mix(in srgb, var(--teal) 16%, transparent); color: var(--teal); }
 .pill.orange { background: color-mix(in srgb, var(--orange) 16%, transparent); color: var(--orange); }
+.pill.red { background: color-mix(in srgb, var(--red) 14%, transparent); color: var(--red); }
 .full { margin-top: 4px; font-size: 12px; font-weight: 700; color: var(--red); }
 .faces { display: flex; margin-top: 6px; }
 .faces .avatar { margin-right: -6px; box-shadow: 0 0 0 2px var(--bg); }

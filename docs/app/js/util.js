@@ -63,6 +63,13 @@ export function classDateLine(c) {
   return dayHeader(c.start_time) + ', ' + time(c.start_time) + (c.end_time ? ' - ' + time(c.end_time) : '');
 }
 /** "11:20, Monday, 12 October" (booking rules). */
+/** "18:30" today, "tomorrow 06:30", else "Wed 18:30" (BruceDate.shortWhen). */
+export const shortWhen = (d) => {
+  const k = dayKey(d), t = todayKey();
+  if (k === t) return time(d);
+  if (k === addDays(t, 1)) return 'tomorrow ' + time(d);
+  return fmt(d, { weekday: 'short' }) + ' ' + time(d);
+};
 export const ruleTime = (d) => time(d) + ', ' + fmt(d, { weekday: 'long', day: 'numeric', month: 'long' });
 export const minutes = (a, b) => (a && b ? Math.round((new Date(b) - new Date(a)) / 60000) : null);
 export const instructor = (s) => (s ? s.replace(/\*\*/g, '').trim() || null : null);

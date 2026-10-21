@@ -169,6 +169,9 @@ struct SettingsView: View {
                 }
                 Button { subscribeCalendar() } label: { InfoRow(title: "Calendar subscription", subtitle: "Subscribe to your bookings in Calendar") }
                     .contextMenu { Button("Copy link", systemImage: "doc.on.doc") { copyCalendarURL() } }
+                Toggle(isOn: Binding(get: { m.cancelRemindersOn }, set: { m.setCancelReminders($0) })) {
+                    InfoRow(title: "Last free cancel reminder", subtitle: Copy.cancelReminder, chevron: false)
+                }
                 NavigationLink(value: SheetRoute.push) {
                     InfoRow(title: "Push notifications", subtitle: "Reminders and studio news", chevron: false)
                 }

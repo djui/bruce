@@ -1,5 +1,5 @@
 // The five tabs (BruceApp.swift RootView): Home, Explore, Check in, Friends, My classes.
-import { $, esc, icon, fmt, time, todayKey, addDays, dayChip, dayHeader, instructor, isListed, rating, distance, metres, byDay, ls, media as photoMedia, byStart, onDay } from './util.js';
+import { $, esc, icon, fmt, time, todayKey, addDays, dayChip, dayHeader, instructor, isListed, rating, distance, metres, byDay, ls, media as photoMedia, byStart, onDay, shortWhen } from './util.js';
 import { Bruce } from './api.js';
 import * as St from './store.js';
 import { S } from './store.js';
@@ -11,6 +11,7 @@ import { forYouHTML, forYouClick } from './foryou.js';
 import { challengesHTML, challengesClick, openNewChallenge, loadIfAllowed } from './challenges.js';
 import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
 import { addToCalendar, ONE_OFF_NOTE } from './calendar.js';
+import { cancelChip } from './rules.js';
 
 /** Page header of a main tab: big wide uppercase title, the tab's own glass buttons, then Notifications and
  *  Menu, which end every tab's header (on wide screens they live in the sidebar instead). */
@@ -399,6 +400,7 @@ export const Mine = {
     const rv = this.tab === 'bookings' ? St.pendingReviews() : [];
     b.innerHTML = (this.tab === 'bookings' ? goalsCardHTML() : '') + rv.map((r) => '<div class="card prompt">' + icon('star') + '<div class="grow"><b>Rate ' + esc(r.class.title) + '</b><p class="muted">' + esc(dayHeader(r.class.start_time)) + '</p></div><button class="btn lime sm" data-review="' + r.id + '">Rate</button></div>').join('') +
       (list.length ? classList(list, (c) => link('mine', 'class', c.id) + '?tab=' + this.tab, { selectedId: sel && sel.id,
+        chipOf: (c) => { const b = this.tab === 'bookings' && S.bookings.get(c.id); return b && !b.checked_in_at ? cancelChip(St.rules(c), Date.now(), shortWhen) : null; },
         trailingOf: (c) => (this.tab === 'bookings' && new Date(c.start_time) > Date.now() ? '<button class="row-btn" data-ics="' + c.id + '" aria-label="Add to Calendar" title="Add to Calendar">' + icon('calendar') + '</button>' : '') }) : empty(msg[0], msg[1]));
   },
 };

@@ -290,8 +290,11 @@ extension AppModel {
             if AppModel.setting("BRUCE_SCREEN") == "review" { present(.review(2)) } else { tab = .myClasses }
         case "booked": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001))
         case "cancelsheet": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001)); present(.bookingRules(9001))
-        case "booked": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001))
         case "addtocalendar": bookings = [BruceAPI.Booking(id: 1, classId: 9001, studioId: 1489, checkedInAt: nil, class: classDetails[9001])]; push(.classDetail(9001)); present(.addToCalendar(9001))
+        case "cancelchips":
+            // Today 23:25 (cancelling costs a strike already), tomorrow 07:00 and 11:30 (still free).
+            bookings = [9008, 9006, 9001].compactMap { id in classDetails[id].map { BruceAPI.Booking(id: id, classId: id, studioId: $0.studioId, checkedInAt: nil, class: $0) } }
+            tab = .myClasses
         case "detailmap": push(.classDetail(9001)); demoScrollBottom = true
         case "invite": present(.invite)
         case "howitworks": sheets = [.invite, .howItWorks]
