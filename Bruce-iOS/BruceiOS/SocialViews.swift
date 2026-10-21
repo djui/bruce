@@ -82,9 +82,9 @@ struct FriendsView: View {
                     HStack(spacing: 14) {
                         Avatar(fileId: f.friendUser?.photo, initials: f.friendUser?.initials ?? "", size: 44)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(f.friendUser?.fullName ?? "").font(.system(size: 16, weight: .semibold))
+                            Text(f.friendUser?.fullName ?? "").bruceFont(16, weight: .semibold)
                             if let id = f.friendUser?.id, m.usesBruce.contains(id) {
-                                Text("Uses Brüce").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                                Text("Uses Brüce").bruceFont(13).foregroundStyle(Theme.secondary)
                             }
                         }
                         Spacer()
@@ -103,7 +103,7 @@ struct FriendsView: View {
                     VStack(spacing: 6) {
                         Avatar(fileId: f.friendUser?.photo, initials: f.friendUser?.initials ?? "", size: 58)
                             .padding(3).glassEffect(.regular, in: .circle)
-                        Text(f.friendUser?.firstName ?? "").font(.system(size: 12, weight: .medium))
+                        Text(f.friendUser?.firstName ?? "").bruceFont(12, weight: .medium)
                     }
                 }
             }
@@ -149,7 +149,7 @@ struct MyClassesView: View {
         .bruceTitle("My classes")
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Text(m.simultaneousLimit.map { "\(m.upcomingBookings.count) / \($0)" } ?? "\(m.upcomingBookings.count)").font(.system(size: 15, weight: .semibold)).monospacedDigit()
+                Text(m.simultaneousLimit.map { "\(m.upcomingBookings.count) / \($0)" } ?? "\(m.upcomingBookings.count)").bruceFont(15, weight: .semibold).monospacedDigit()
                     .padding(.horizontal, 6)
             }
             ToolbarSpacer(.fixed, placement: .topBarTrailing)
@@ -198,7 +198,7 @@ struct NotificationsSheet: View {
             } else {
                 LazyVStack(alignment: .leading, spacing: 12) {
                     ForEach(groupedByDay(m.notifications, date: \.date).reversed(), id: \.0) { day, list in
-                        Text(BruceDate.dayHeader(day)).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.secondary).padding(.top, 10)
+                        Text(BruceDate.dayHeader(day)).bruceFont(15, weight: .semibold).foregroundStyle(Theme.secondary).padding(.top, 10)
                         ForEach(list.sorted { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }) { n in
                             // Opens the class the notification is about, else its studio.
                             Button { m.openNotification(n) } label: { card(n) }.buttonStyle(.plain)
@@ -219,12 +219,12 @@ struct NotificationsSheet: View {
             NotificationIcon(n: n, size: 48)
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text(n.title ?? "").font(.system(size: 16, weight: .bold))
+                    Text(n.title ?? "").bruceFont(16, weight: .bold)
                     Spacer()
-                    Text(BruceDate.time(n.date)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    Text(BruceDate.time(n.date)).bruceFont(13).foregroundStyle(Theme.secondary)
                     if m.isNew(n) { Circle().fill(Theme.red).frame(width: 8, height: 8) }
                 }
-                Text(n.message ?? "").font(.system(size: 15)).foregroundStyle(Theme.ink.opacity(0.85))
+                Text(n.message ?? "").bruceFont(15).foregroundStyle(Theme.ink.opacity(0.85))
             }
         }
         .padding(16)

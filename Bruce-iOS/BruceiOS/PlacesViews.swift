@@ -50,7 +50,7 @@ struct PlacesView: View {
                 }
                 .onDelete { idx in var n = s; n.places.remove(atOffsets: idx); m.saveRecSettings(n) }
                 NavigationLink(value: SheetRoute.editPlace(nil)) {
-                    Label("Add place", systemImage: "plus").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.limeInk)
+                    Label("Add place", systemImage: "plus").bruceFont(16, weight: .semibold).foregroundStyle(Theme.limeInk)
                 }
             } header: { Text("Places") } footer: { Text("Saved on this iPhone only. Never sent to Bruce or our server.") }
             Section {
@@ -111,14 +111,14 @@ struct PlaceRow: View {
     let place: SavedPlace
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: place.symbol).font(.system(size: 14, weight: .semibold)).foregroundStyle(.black)
+            Image(systemName: place.symbol).bruceFont(14, weight: .semibold).foregroundStyle(.black)
                 .frame(width: 30, height: 30)
                 .background(place.kind == .home ? Theme.lime : Color.white, in: .rect(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.divider, lineWidth: place.kind == .home ? 0 : 1))
             VStack(alignment: .leading, spacing: 2) {
-                Text(place.name).font(.system(size: 16))
+                Text(place.name).bruceFont(16)
                 Text(place.kind == .work ? "\(place.address) · \(place.workdaysLabel)" : place.address)
-                    .font(.system(size: 14)).foregroundStyle(Theme.secondary).lineLimit(1)
+                    .bruceFont(14).foregroundStyle(Theme.secondary).lineLimit(1)
             }
         }
     }
@@ -180,14 +180,14 @@ struct PlacesMap: View {
     }
 
     func pin(_ p: SavedPlace) -> some View {
-        Image(systemName: p.symbol).font(.system(size: 12, weight: .bold)).foregroundStyle(.black)
+        Image(systemName: p.symbol).bruceFont(12, weight: .bold).foregroundStyle(.black)
             .frame(width: 28, height: 28)
             .background(Circle().fill(p.kind == .home ? Theme.lime : .white))
             .overlay(Circle().stroke(.black, lineWidth: 2))
     }
 
     func tripPill(_ t: Int) -> some View {
-        Label("\(t) min", systemImage: settings.mode.symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(.black)
+        Label("\(t) min", systemImage: settings.mode.symbol).bruceFont(11, weight: .bold).foregroundStyle(.black)
             .padding(.horizontal, 8).padding(.vertical, 4).background(.white, in: .capsule)
     }
 
@@ -227,7 +227,7 @@ struct PlacesMap: View {
                 if let p = settings.home { pin(p).position(home) }
                 if let p = settings.work { pin(p).position(work) }
                 if settings.places.isEmpty {
-                    Text("Add home and work to see your trips").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.secondary)
+                    Text("Add home and work to see your trips").bruceFont(13, weight: .semibold).foregroundStyle(Theme.secondary)
                         .padding(.horizontal, 12).padding(.vertical, 8).glassEffect(.regular, in: .capsule)
                 }
             }
@@ -307,7 +307,7 @@ struct EditPlaceView: View {
                     } label: {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(r.title).foregroundStyle(Theme.ink)
-                            if !r.subtitle.isEmpty { Text(r.subtitle).font(.system(size: 13)).foregroundStyle(Theme.secondary) }
+                            if !r.subtitle.isEmpty { Text(r.subtitle).bruceFont(13).foregroundStyle(Theme.secondary) }
                         }
                     }
                 }
@@ -323,7 +323,7 @@ struct EditPlaceView: View {
                             Button {
                                 if on { place.workdays.removeAll { $0 == d } } else { place.workdays.append(d) }
                             } label: {
-                                Text(["", "S", "M", "T", "W", "T", "F", "S"][d]).font(.system(size: 15, weight: .semibold))
+                                Text(["", "S", "M", "T", "W", "T", "F", "S"][d]).bruceFont(15, weight: .semibold)
                                     .foregroundStyle(on ? Color.black : Theme.ink)
                                     .frame(maxWidth: .infinity, minHeight: 36)
                                     .background(on ? Theme.lime : Theme.chipGrey, in: .circle)

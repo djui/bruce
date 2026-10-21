@@ -9,10 +9,10 @@ struct ForYouSection: View {
         let recs = m.recommendations
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
-                Text("FOR YOU").font(Theme.heading(19))
+                Text("FOR YOU").bruceHeading(19)
                 Spacer()
-                if let first = recs.first { Text(ForYou.dayLabel(first.c.start)).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.secondary) }
-                Button { m.present(.places) } label: { Image(systemName: "mappin.and.ellipse").font(.system(size: 15, weight: .semibold)) }
+                if let first = recs.first { Text(ForYou.dayLabel(first.c.start)).bruceFont(14, weight: .semibold).foregroundStyle(Theme.secondary) }
+                Button { m.present(.places) } label: { Image(systemName: "mappin.and.ellipse").bruceFont(15, weight: .semibold) }
                     .buttonStyle(.glass).accessibilityLabel("Places & commute")
             }
             .padding(.horizontal, Theme.gutter)
@@ -21,9 +21,9 @@ struct ForYouSection: View {
                     .buttonStyle(.plain).padding(.horizontal, Theme.gutter)
                 if recs.count > 1 {
                     HStack {
-                        Text("MORE PICKS").font(Theme.heading(19))
+                        Text("MORE PICKS").bruceHeading(19)
                         Spacer()
-                        NavigationLink(value: Route.forYou) { Text("Show all").font(.system(size: 15, weight: .semibold)) }.buttonStyle(.glass)
+                        NavigationLink(value: Route.forYou) { Text("Show all").bruceFont(15, weight: .semibold) }.buttonStyle(.glass)
                     }
                     .padding(.horizontal, Theme.gutter).padding(.top, 14)
                     ForEach(recs.dropFirst().prefix(3)) { r in
@@ -37,10 +37,10 @@ struct ForYouSection: View {
             } else {
                 Button { m.present(.places) } label: {
                     HStack(spacing: 12) {
-                        Image(systemName: "sparkles").font(.system(size: 22)).foregroundStyle(Theme.limeInk)
+                        Image(systemName: "sparkles").bruceFont(22).foregroundStyle(Theme.limeInk)
                         Text(m.recSettings.places.isEmpty ? "Add home and work to get picks that fit your day."
                                                           : "No picks for the next two days yet. Check back later.")
-                            .font(.system(size: 15)).foregroundStyle(Theme.ink).multilineTextAlignment(.leading)
+                            .bruceFont(15).foregroundStyle(Theme.ink).multilineTextAlignment(.leading)
                         Spacer(minLength: 0)
                     }
                     .padding(16).background(Theme.sectionGrey, in: .rect(cornerRadius: 24))
@@ -80,20 +80,20 @@ struct RecHeroCard: View {
             LinearGradient(colors: [Color(red: 0.31, green: 0.37, blue: 0.16), Color(red: 0.50, green: 0.60, blue: 0.23), Color(red: 0.64, green: 0.75, blue: 0.29)],
                            startPoint: .topLeading, endPoint: .bottomTrailing)
             Image(systemName: GoalCategory.symbol(c.classCategories?.first?.categoryId.map(String.init), categoryTitle: m.categories.first { $0.id == c.classCategories?.first?.categoryId }?.title))
-                .font(.system(size: 130, weight: .ultraLight)).foregroundStyle(.white.opacity(0.10))
+                .bruceFont(130, weight: .ultraLight).foregroundStyle(.white.opacity(0.10))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).offset(x: 20, y: 30)
             VStack(alignment: .leading, spacing: 4) {
-                Text(c.title).font(.system(size: 25, weight: .heavy).width(.expanded)).lineLimit(2)
+                Text(c.title).bruceFont(25, weight: .heavy, width: .expanded).lineLimit(2)
                 Text("\(BruceDate.format(c.start, "EEEE | d MMMM | HH:mm"))\(c.durationMinutes.map { " · \($0) min" } ?? "")")
-                    .font(.system(size: 14, weight: .medium)).opacity(0.9)
+                    .bruceFont(14, weight: .medium).opacity(0.9)
                 ReasonChips(rec: rec, limit: 2, onDark: true).padding(.top, 8)
             }
             .foregroundStyle(.white).padding(18)
             HStack(alignment: .top) {
-                Text("\(rec.match)% match").font(.system(size: 13, weight: .semibold)).foregroundStyle(.black)
+                Text("\(rec.match)% match").bruceFont(13, weight: .semibold).foregroundStyle(.black)
                     .padding(.horizontal, 12).padding(.vertical, 6).background(Theme.lime, in: .capsule)
                 Spacer()
-                Text(m.studioName(c.studioId)).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                Text(m.studioName(c.studioId)).bruceFont(13, weight: .semibold).foregroundStyle(.white).lineLimit(1)
                     .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(.white.opacity(0.18), in: .capsule).overlay(Capsule().stroke(.white.opacity(0.3)))
             }
@@ -116,19 +116,19 @@ struct RecCard: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    if showDay { Text(BruceDate.format(c.start, "EEE").uppercased()).font(.system(size: 11, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary) }
-                    Text(BruceDate.time(c.start)).font(.system(size: 17, weight: .bold)).monospacedDigit()
-                    Text(durationText(c)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    if showDay { Text(BruceDate.format(c.start, "EEE").uppercased()).bruceFont(11, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary) }
+                    Text(BruceDate.time(c.start)).bruceFont(17, weight: .bold).monospacedDigit()
+                    Text(durationText(c)).bruceFont(13).foregroundStyle(Theme.secondary)
                 }
                 .frame(width: 54, alignment: .leading)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(c.title).font(.system(size: 17, weight: .bold)).lineLimit(2)
-                    Text(st?.name ?? c.studio?.name ?? "").font(.system(size: 15)).lineLimit(1)
+                    Text(c.title).bruceFont(17, weight: .bold).lineLimit(2)
+                    Text(st?.name ?? c.studio?.name ?? "").bruceFont(15).lineLimit(1)
                     let line = [st?.vicinity ?? c.studio?.vicinity, c.instructor].compactMap { $0?.isEmpty == false ? $0 : nil }.joined(separator: " | ")
-                    if !line.isEmpty { Text(line).font(.system(size: 14)).foregroundStyle(Theme.secondary).lineLimit(1) }
+                    if !line.isEmpty { Text(line).bruceFont(14).foregroundStyle(Theme.secondary).lineLimit(1) }
                 }
                 Spacer(minLength: 0)
-                Text("\(rec.match)%").font(.system(size: 13, weight: .bold)).foregroundStyle(Theme.limeInk).monospacedDigit()
+                Text("\(rec.match)%").bruceFont(13, weight: .bold).foregroundStyle(Theme.limeInk).monospacedDigit()
             }
             ReasonChips(rec: rec, limit: 3)
         }
@@ -152,7 +152,7 @@ struct ReasonChips: View {
                 InsightChip(text: r.text, symbol: r.symbol, friendIds: r.friendIds, onDark: onDark)
             }
             if let n = rec.fewSpots {
-                Text("\(n) spot\(n == 1 ? "" : "s") left").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.black)
+                Text("\(n) spot\(n == 1 ? "" : "s") left").bruceFont(12.5, weight: .semibold).foregroundStyle(.black)
                     .padding(.horizontal, 10).padding(.vertical, 5).background(Theme.lime, in: .capsule)
             }
         }
@@ -174,10 +174,10 @@ struct InsightChip: View {
                             .overlay(Circle().stroke(onDark ? Color.clear : Theme.sectionGrey, lineWidth: 2))
                     }
                 }
-            } else if let symbol { Image(systemName: symbol).font(.system(size: 11, weight: .semibold)) }
+            } else if let symbol { Image(systemName: symbol).bruceFont(11, weight: .semibold) }
             Text(text)
         }
-        .font(.system(size: 12.5, weight: .semibold)).lineLimit(1)
+        .bruceFont(12.5, weight: .semibold).lineLimit(1)
         .foregroundStyle(onDark ? Color.white : Theme.ink)
         .padding(.horizontal, 10).padding(.vertical, 5)
         .background(onDark ? AnyShapeStyle(.white.opacity(0.2)) : AnyShapeStyle(Theme.chipGrey), in: .capsule)
@@ -205,7 +205,7 @@ struct ForYouListView: View {
             LazyVStack(alignment: .leading, spacing: 12) {
                 PageHeading(text: "For you")
                 ForEach(groupedByDay(m.recommendations, date: { $0.c.start }), id: \.0) { day, list in
-                    Text(ForYou.dayLabel(day)).font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.secondary).padding(.top, 8)
+                    Text(ForYou.dayLabel(day)).bruceFont(15, weight: .semibold).foregroundStyle(Theme.secondary).padding(.top, 8)
                     ForEach(list.sorted { $0.c.startTime < $1.c.startTime }) { r in
                         NavigationLink(value: Route.classDetail(r.c.id)) { RecCard(rec: r) }.buttonStyle(.plain)
                     }
@@ -214,7 +214,7 @@ struct ForYouListView: View {
                     EmptyState(system: "sparkles", text: m.recommendationsLoading ? "Finding classes for you…" : "No picks for the next two days yet.")
                 }
                 Text("Picked on this iPhone from your visits, friends' bookings and travel time from your places.")
-                    .font(.system(size: 13)).foregroundStyle(Theme.secondary).padding(.top, 8)
+                    .bruceFont(13).foregroundStyle(Theme.secondary).padding(.top, 8)
             }
             .padding(.horizontal, Theme.gutter).padding(.bottom, 30)
         }
@@ -235,7 +235,7 @@ struct ForYouListView: View {
 struct PageHeading: View {
     let text: String
     var body: some View {
-        Text(text.uppercased()).font(Theme.screenTitle(26)).lineLimit(1).minimumScaleFactor(0.6)
+        Text(text.uppercased()).bruceScreenTitle(26).lineLimit(1).minimumScaleFactor(0.6)
             .frame(maxWidth: .infinity, alignment: .leading).padding(.bottom, 4)
             .accessibilityAddTraits(.isHeader)
     }

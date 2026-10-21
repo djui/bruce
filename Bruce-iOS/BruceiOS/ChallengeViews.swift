@@ -44,9 +44,9 @@ struct ChallengesSegment: View {
             }
             if m.challengesLoaded && m.challenges.isEmpty && m.challengesError == nil && AutoBookServer.isConfigured {
                 VStack(spacing: 14) {
-                    Image(systemName: "trophy").font(.system(size: 48, weight: .light)).foregroundStyle(Theme.limeInk)
+                    Image(systemName: "trophy").bruceFont(48, weight: .light).foregroundStyle(Theme.limeInk)
                     Text("Challenge your friends: most classes this month, or everyone hits 12.")
-                        .font(.system(size: 16)).multilineTextAlignment(.center)
+                        .bruceFont(16).multilineTextAlignment(.center)
                     LimeButton(title: "New challenge", systemImage: "plus") { m.present(.newChallenge) }
                 }
                 .padding(.top, 50)
@@ -64,13 +64,13 @@ struct ChallengeHeaderCard: View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Label(chip, systemImage: "trophy.fill")
-                    .font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.black)
+                    .bruceFont(12.5, weight: .semibold).foregroundStyle(.black)
                     .padding(.horizontal, 10).padding(.vertical, 5).background(Theme.lime, in: .capsule)
                 Spacer()
-                if let left = c.period?.daysLeft { Text(left == 0 ? "Last day" : "\(left) day\(left == 1 ? "" : "s") left").font(.system(size: 13)).opacity(0.8) }
+                if let left = c.period?.daysLeft { Text(left == 0 ? "Last day" : "\(left) day\(left == 1 ? "" : "s") left").bruceFont(13).opacity(0.8) }
             }
-            Text(c.displayTitle).font(.system(size: 22, weight: .heavy).width(.expanded)).padding(.top, 12).padding(.bottom, 2)
-            Text(line).font(.system(size: 14)).opacity(0.85)
+            Text(c.displayTitle).bruceFont(22, weight: .heavy, width: .expanded).padding(.top, 12).padding(.bottom, 2)
+            Text(line).bruceFont(14).opacity(0.85)
         }
         .foregroundStyle(.white)
         .padding(16)
@@ -108,8 +108,8 @@ struct ChallengeInviteCard: View {
                 HStack(spacing: 12) {
                     LetterFace(name: c.ownerName ?? "?", size: 40)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(c.ownerName ?? "A friend") challenged you").font(.system(size: 16, weight: .bold))
-                        Text("\(c.displayTitle) · \(c.period?.label ?? "")").font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                        Text("\(c.ownerName ?? "A friend") challenged you").bruceFont(16, weight: .bold)
+                        Text("\(c.displayTitle) · \(c.period?.label ?? "")").bruceFont(14).foregroundStyle(Theme.secondary)
                     }
                     Spacer(minLength: 0)
                 }
@@ -118,15 +118,15 @@ struct ChallengeInviteCard: View {
             .buttonStyle(.plain)
             HStack(spacing: 10) {
                 Button { m.withChallengeServerConsent { await m.joinChallenge(c.id) } } label: {
-                    Text("Accept").font(.system(size: 15, weight: .bold)).foregroundStyle(.black).frame(maxWidth: .infinity)
+                    Text("Accept").bruceFont(15, weight: .bold).foregroundStyle(.black).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glassProminent).tint(Theme.lime)
                 Button { Task { await m.leaveChallenge(c.id) } } label: {
-                    Text("Decline").font(.system(size: 15, weight: .semibold)).frame(maxWidth: .infinity)
+                    Text("Decline").bruceFont(15, weight: .semibold).frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.glass)
             }
-            Text(ChallengeCopy.privacy).font(.system(size: 12)).foregroundStyle(Theme.secondary)
+            Text(ChallengeCopy.privacy).bruceFont(12).foregroundStyle(Theme.secondary)
         }
         .padding(16)
         .background(Theme.sectionGrey, in: .rect(cornerRadius: 24))
@@ -155,17 +155,17 @@ struct Leaderboard: View {
     func row(_ e: ChallengeEntry, above: ChallengeEntry?) -> some View {
         let me = m.isMe(e.userId)
         return HStack(spacing: 10) {
-            Text(e.rank.map(String.init) ?? "–").font(.system(size: 15, weight: .heavy)).foregroundStyle(Theme.secondary).frame(width: 24)
+            Text(e.rank.map(String.init) ?? "–").bruceFont(15, weight: .heavy).foregroundStyle(Theme.secondary).frame(width: 24)
             LetterFace(name: me ? "You" : (e.name ?? "?"), color: me ? Theme.lime : nil)
             VStack(alignment: .leading, spacing: 1) {
-                Text(me ? "You" : (e.name ?? "Friend")).font(.system(size: 16, weight: .semibold))
-                Text(detailLine(e, above: above, me: me)).font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1)
+                Text(me ? "You" : (e.name ?? "Friend")).bruceFont(16, weight: .semibold)
+                Text(detailLine(e, above: above, me: me)).bruceFont(13).foregroundStyle(Theme.secondary).lineLimit(1)
             }
             Spacer(minLength: 4)
             if detail.challenge.metric == "target", e.done == true {
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(Theme.limeInk)
             }
-            Text(e.isInvited ? "" : score(e)).font(.system(size: 20, weight: .heavy).width(.expanded)).monospacedDigit()
+            Text(e.isInvited ? "" : score(e)).bruceFont(20, weight: .heavy, width: .expanded).monospacedDigit()
         }
         .foregroundStyle(Theme.ink)
         .padding(.horizontal, 14).padding(.vertical, 11)
@@ -215,11 +215,11 @@ struct YourDays: View {
         let top = max(daily.max() ?? 1, 1)
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("YOUR DAYS").font(Theme.heading(18))
+                Text("YOUR DAYS").bruceHeading(18)
                 Spacer()
                 let n = entry.score ?? 0
                 Text("\(n) \(Challenge.unit(challenge.metric, n)) in \(daily.count) day\(daily.count == 1 ? "" : "s")")
-                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.secondary)
+                    .bruceFont(14, weight: .semibold).foregroundStyle(Theme.secondary)
             }
             VStack(spacing: 6) {
                 HStack(alignment: .bottom, spacing: 3) {
@@ -234,7 +234,7 @@ struct YourDays: View {
                     Spacer()
                     Text("Today")
                 }
-                .font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                .bruceFont(12).foregroundStyle(Theme.secondary)
             }
             .padding(14)
             .background(Theme.sectionGrey, in: .rect(cornerRadius: 22))
@@ -268,9 +268,9 @@ struct ChallengeView: View {
                         months(d)
                         sendLink(c)
                         if let u = d.updatedAt.flatMap(BruceDate.parse) {
-                            Text("Updated daily. Last update \(BruceDate.format(u, "d MMM HH:mm")).").font(.system(size: 12)).foregroundStyle(Theme.secondary)
+                            Text("Updated daily. Last update \(BruceDate.format(u, "d MMM HH:mm")).").bruceFont(12).foregroundStyle(Theme.secondary)
                         }
-                        Text(ChallengeCopy.privacy).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                        Text(ChallengeCopy.privacy).bruceFont(13).foregroundStyle(Theme.secondary)
                         if !c.isInvite {
                             Button("Leave challenge", role: .destructive) { confirmLeave = true }.buttonStyle(.glass).padding(.top, 6)
                         }
@@ -310,9 +310,9 @@ struct ChallengeView: View {
     func joinBar(_ c: ChallengeSummary, preview: Bool, joinable: Bool) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(preview ? "\(c.ownerName ?? "A friend") started this challenge." : "\(c.ownerName ?? "A friend") challenged you.")
-                .font(.system(size: 16, weight: .semibold))
+                .bruceFont(16, weight: .semibold)
             if preview && !joinable {
-                Text("Only Bruce friends of \(c.ownerName ?? "the owner") can join.").font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                Text("Only Bruce friends of \(c.ownerName ?? "the owner") can join.").bruceFont(14).foregroundStyle(Theme.secondary)
             } else {
                 LimeButton(title: preview ? "Join" : "Accept") { m.withChallengeServerConsent { await m.joinChallenge(c.id, viaLink: preview) } }
                 if !preview {
@@ -327,17 +327,17 @@ struct ChallengeView: View {
     @ViewBuilder func months(_ d: ChallengeDetail) -> some View {
         let list = d.months ?? []
         if !list.isEmpty {
-            Text("BY MONTH").font(Theme.heading(18)).padding(.top, 10)
+            Text("BY MONTH").bruceHeading(18).padding(.top, 10)
             ForEach(list) { mo in
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(mo.label ?? mo.month).font(.system(size: 15, weight: .bold))
+                    Text(mo.label ?? mo.month).bruceFont(15, weight: .bold)
                     ForEach(Array(mo.entries.enumerated()), id: \.offset) { i, e in
                         HStack {
-                            Text("\(i + 1)").font(.system(size: 13, weight: .heavy)).foregroundStyle(Theme.secondary).frame(width: 18)
-                            Text(m.isMe(e.userId) ? "You" : (e.name ?? "Friend")).font(.system(size: 15, weight: m.isMe(e.userId) ? .bold : .regular))
+                            Text("\(i + 1)").bruceFont(13, weight: .heavy).foregroundStyle(Theme.secondary).frame(width: 18)
+                            Text(m.isMe(e.userId) ? "You" : (e.name ?? "Friend")).bruceFont(15, weight: m.isMe(e.userId) ? .bold : .regular)
                             Spacer()
-                            Text("\(e.visits ?? 0) visits · \(Int((Double(e.minutes ?? 0) / 60).rounded())) h").font(.system(size: 13)).foregroundStyle(Theme.secondary)
-                            Text("\(e.score ?? 0)").font(.system(size: 15, weight: .bold)).monospacedDigit().frame(minWidth: 30, alignment: .trailing)
+                            Text("\(e.visits ?? 0) visits · \(Int((Double(e.minutes ?? 0) / 60).rounded())) h").bruceFont(13).foregroundStyle(Theme.secondary)
+                            Text("\(e.score ?? 0)").bruceFont(15, weight: .bold).monospacedDigit().frame(minWidth: 30, alignment: .trailing)
                         }
                     }
                 }
@@ -352,7 +352,7 @@ struct ChallengeView: View {
         let inIt = Set((c.participants ?? []).map(\.userId))
         let others = m.friends.compactMap(\.friendUser).filter { !inIt.contains($0.id) && !m.usesBruce.contains($0.id) }
         if !others.isEmpty {
-            Text("INVITE MORE").font(Theme.heading(18)).padding(.top, 10)
+            Text("INVITE MORE").bruceHeading(18).padding(.top, 10)
             VStack(spacing: 0) {
                 ForEach(Array(others.prefix(8).enumerated()), id: \.1.id) { i, u in
                     if i > 0 { Divider().padding(.leading, 58) }
@@ -360,8 +360,8 @@ struct ChallengeView: View {
                         HStack(spacing: 12) {
                             LetterFace(name: u.firstName ?? "?", size: 32)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(u.firstName ?? u.fullName).font(.system(size: 16)).foregroundStyle(Theme.ink)
-                                Text("Not on Brüce yet · send link").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                                Text(u.firstName ?? u.fullName).bruceFont(16).foregroundStyle(Theme.ink)
+                                Text("Not on Brüce yet · send link").bruceFont(13).foregroundStyle(Theme.secondary)
                             }
                             Spacer()
                             Image(systemName: "square.and.arrow.up").foregroundStyle(Theme.limeInk)
@@ -390,9 +390,9 @@ struct ParticipantSheet: View {
                     HStack(spacing: 14) {
                         LetterFace(name: me ? "You" : (entry.name ?? "?"), color: me ? Theme.lime : nil, size: 56)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(me ? "You" : (entry.name ?? "Friend")).font(.system(size: 22, weight: .heavy).width(.expanded))
+                            Text(me ? "You" : (entry.name ?? "Friend")).bruceFont(22, weight: .heavy, width: .expanded)
                             Text(entry.rank.map { "Rank \($0) · \(entry.score ?? 0) \(Challenge.unit(metric, entry.score ?? 0))" } ?? "Invited")
-                                .font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                                .bruceFont(14).foregroundStyle(Theme.secondary)
                         }
                     }
                     .listRowBackground(Color.clear)
@@ -419,9 +419,9 @@ struct ParticipantSheet: View {
                     Section("Recent visits") {
                         ForEach(Array(recent.enumerated()), id: \.offset) { _, r in
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(r.kind == "dropin" ? "Drop-in" : (r.title ?? "Class")).font(.system(size: 16, weight: .medium))
+                                Text(r.kind == "dropin" ? "Drop-in" : (r.title ?? "Class")).bruceFont(16, weight: .medium)
                                 Text("\(m.studioLabel(id: r.studioId, name: r.studio)) · \(BruceDate.format(r.date, "EEE d MMM, HH:mm"))")
-                                    .font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                                    .bruceFont(13).foregroundStyle(Theme.secondary)
                             }
                         }
                     }
@@ -434,8 +434,8 @@ struct ParticipantSheet: View {
 
     func stat(_ v: String, _ l: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(v).font(.system(size: 26, weight: .black).width(.expanded)).monospacedDigit()
-            Text(l).font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.secondary)
+            Text(v).bruceFont(26, weight: .black, width: .expanded).monospacedDigit()
+            Text(l).bruceFont(13, weight: .semibold).foregroundStyle(Theme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -521,7 +521,7 @@ struct NewChallengeSheet: View {
                             if invited.contains(u.id) { invited.remove(u.id) } else { invited.insert(u.id) }
                         } label: {
                             friendRow(u, sub: "Uses Brüce") {
-                                Image(systemName: invited.contains(u.id) ? "checkmark.circle.fill" : "circle").font(.system(size: 26))
+                                Image(systemName: invited.contains(u.id) ? "checkmark.circle.fill" : "circle").bruceFont(26)
                                     .foregroundStyle(invited.contains(u.id) ? Theme.limeInk : Theme.tertiary)
                             }
                         }
@@ -536,7 +536,7 @@ struct NewChallengeSheet: View {
                     }
                 }
             } header: { Text("Invite friends") } footer: {
-                Label(ChallengeCopy.privacy, systemImage: "lock").font(.system(size: 13))
+                Label(ChallengeCopy.privacy, systemImage: "lock").bruceFont(13)
             }
             Section {
                 LimeButton(title: working ? "Starting…" : "Start challenge · \(invited.count + 1) people") { start() }
@@ -557,8 +557,8 @@ struct NewChallengeSheet: View {
         HStack(spacing: 12) {
             LetterFace(name: u.firstName ?? "?", size: 32)
             VStack(alignment: .leading, spacing: 1) {
-                Text(u.firstName ?? u.fullName).font(.system(size: 16)).foregroundStyle(Theme.ink)
-                Text(sub).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                Text(u.firstName ?? u.fullName).bruceFont(16).foregroundStyle(Theme.ink)
+                Text(sub).bruceFont(13).foregroundStyle(Theme.secondary)
             }
             Spacer()
             accessory()

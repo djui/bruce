@@ -318,7 +318,7 @@ struct ErrorBanner: View {
     var body: some View {
         HStack(spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.hoursOrange)
-            Text(text).font(.system(size: 14, weight: .medium)).lineLimit(2)
+            Text(text).bruceFont(14, weight: .medium).lineLimit(2)
             Spacer(minLength: 4)
             Button("Retry") { m.loadError = nil; Task { await m.bootstrap() } }
                 .buttonStyle(.glassProminent).tint(Theme.lime).foregroundStyle(.black)
@@ -362,7 +362,7 @@ struct SearchAccessory: View {
                     .buttonStyle(.plain).accessibilityLabel("Cancel search")
             }
         }
-        .font(.system(size: 16))
+        .bruceFont(16)
         .padding(.horizontal, 16)
         .onChange(of: focused) { _, f in if f { begin() } }
         .onChange(of: ui.searchActive) { _, active in

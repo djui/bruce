@@ -192,6 +192,10 @@ toolbars, `.glassEffect()` cards, chips and capsules grouped in `GlassEffectCont
 full-screen camera Check in tab with clear-glass overlays. It supports light and dark mode. Details are in
 [Bruce-iOS/README.md](Bruce-iOS/README.md#liquid-glass).
 
+**Dynamic Type and VoiceOver:** every text in the iPhone app follows Settings › Display & Brightness › Text Size and
+the accessibility sizes (the design sizes scale with the nearest text style, up to twice their size so layouts hold),
+row time columns scale with it, and icon-only controls, chips, pills and friend faces carry VoiceOver labels.
+
 ### macOS
 
 A 390×780 phone-sized window that recreates the mobile app on the Mac, including camera QR scanning

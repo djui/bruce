@@ -12,16 +12,16 @@ struct ParakeyRow: View {
     var body: some View {
         Button { m.present(.parakey(studio.id)) } label: {
             HStack(spacing: 14) {
-                Image(systemName: "key.radiowaves.forward.fill").font(.system(size: 22, weight: .semibold))
+                Image(systemName: "key.radiowaves.forward.fill").bruceFont(22, weight: .semibold)
                     .foregroundStyle(Theme.parakey).frame(width: 32)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Doors open with Parakey").font(.system(size: 16, weight: .semibold)).foregroundStyle(Theme.ink)
+                    Text("Doors open with Parakey").bruceFont(16, weight: .semibold).foregroundStyle(Theme.ink)
                     Text(forClass ? "Check in, then unlock with the Parakey app – from ten minutes before class."
                                   : "Check in, then unlock the door with the Parakey app.")
-                        .font(.system(size: 14)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                        .bruceFont(14).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.tertiary)
+                Image(systemName: "chevron.right").bruceFont(14, weight: .semibold).foregroundStyle(Theme.tertiary)
             }
             .padding(16).contentShape(Rectangle())
         }
@@ -39,20 +39,20 @@ struct ParakeySheet: View {
         let name = m.studioName(studioId)
         ScrollView {
             VStack(spacing: 22) {
-                Image(systemName: "key.radiowaves.forward.fill").font(.system(size: 54, weight: .semibold))
+                Image(systemName: "key.radiowaves.forward.fill").bruceFont(54, weight: .semibold)
                     .foregroundStyle(.white).frame(width: 120, height: 120)
                     .background(Theme.parakey, in: .circle).padding(.top, 24)
                 Text("\(name) is a Parakey connected studio. Parakey lets you use your phone as a key instead of key fobs and plastic cards.")
                 Text("When you check in with Bruce at a Parakey connected studio, an access key is created that you use to unlock doors and gates with the Parakey app. For classes the key is valid from ten minutes before the start.")
                 if let email = m.user?.parakeyEmail, !email.isEmpty {
                     Label("Your Bruce account is linked with Parakey (\(email)).", systemImage: "checkmark.seal.fill")
-                        .font(.system(size: 16, weight: .semibold))
+                        .bruceFont(16, weight: .semibold)
                 } else if m.isLoggedIn {
                     Text("Log in to the Parakey app with the email of your Bruce account; your first check-in here links the two.")
                         .foregroundStyle(Theme.secondary)
                 }
             }
-            .font(.system(size: 16)).multilineTextAlignment(.center).padding(.horizontal, Theme.gutter)
+            .bruceFont(16).multilineTextAlignment(.center).padding(.horizontal, Theme.gutter)
         }
         .safeAreaInset(edge: .bottom) {
             VStack(spacing: 10) {
@@ -60,10 +60,10 @@ struct ParakeySheet: View {
                     // Opens the app when installed, otherwise its App Store page.
                     openURL(Parakey.appURL) { ok in if !ok { openURL(Parakey.storeURL) } }
                 } label: {
-                    Text("Open Parakey").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
+                    Text("Open Parakey").bruceFont(17, weight: .bold).frame(maxWidth: .infinity).frame(height: 40)
                 }
                 .buttonStyle(.glassProminent).tint(Theme.parakey).controlSize(.large)
-                Link("Read more at help.parakey.co", destination: Parakey.helpURL).font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                Link("Read more at help.parakey.co", destination: Parakey.helpURL).bruceFont(14).foregroundStyle(Theme.secondary)
             }
             .padding(.horizontal, Theme.gutter).padding(.vertical, 8)
         }
@@ -88,13 +88,14 @@ struct ClassDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if let c, case .limited = m.studioLimitState(c.studioId) {
-                ToolbarItem(placement: .topBarTrailing) { StudioLimitPill(studioId: c.studioId).font(.system(size: 15, weight: .semibold)) }
+                ToolbarItem(placement: .topBarTrailing) { StudioLimitPill(studioId: c.studioId).bruceFont(15, weight: .semibold) }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 ShareLink(item: ShareURL.forClass(classId, title: c?.title ?? "")) { Image(systemName: "square.and.arrow.up") }
                 if booking == nil {
                     Button { m.toggleBookmark(classId) } label: { Image(systemName: m.isBookmarked(classId) ? "bookmark.fill" : "bookmark") }
+                        .accessibilityLabel(m.isBookmarked(classId) ? "Remove bookmark" : "Bookmark this class")
                 }
             }
         }
@@ -113,19 +114,19 @@ struct ClassDetailView: View {
                     hero(c)
                     VStack(alignment: .leading, spacing: 16) {
                         if let a = BruceAPI.currentAlert(c.studio?.alerts ?? studio?.alerts), let msg = a.message {
-                            Label(msg, systemImage: a.isCritical ? "exclamationmark.triangle.fill" : "info.circle.fill").font(.system(size: 14))
+                            Label(msg, systemImage: a.isCritical ? "exclamationmark.triangle.fill" : "info.circle.fill").bruceFont(14)
                                 .padding(14).frame(maxWidth: .infinity, alignment: .leading)
                                 .glassEffect(.regular.tint((a.isCritical ? Theme.red : Theme.lime).opacity(0.15)), in: .rect(cornerRadius: 20))
                         }
                         VStack(alignment: .leading, spacing: 6) {
-                            Text(classDateLine(c)).font(.system(size: 18, weight: .bold))
+                            Text(classDateLine(c)).bruceFont(18, weight: .bold)
                             if let i = c.instructor, !i.isEmpty {
-                                Label(i, systemImage: "person.fill").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.secondary)
+                                Label(i, systemImage: "person.fill").bruceFont(15, weight: .medium).foregroundStyle(Theme.secondary)
                             }
                             if let a = c.availableSpots {
                                 Label(a > 5 ? "5+ spots left" : a <= 0 ? "Fully booked" : "\(a) spot\(a == 1 ? "" : "s") left",
                                       systemImage: a <= 0 ? "person.crop.circle.badge.xmark" : "person.3.fill")
-                                    .font(.system(size: 15, weight: .medium))
+                                    .bruceFont(15, weight: .medium)
                                     .foregroundStyle(a <= 0 ? Theme.red : Theme.secondary)
                             }
                         }
@@ -166,7 +167,7 @@ struct ClassDetailView: View {
                     }
                     if let t = BookAgainTemplate(c) {
                         Button { m.openBookAgain(t) } label: {
-                            Text("Book again").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+                            Text("Book again").bruceFont(17, weight: .bold).foregroundStyle(Theme.ink)
                                 .frame(maxWidth: .infinity).frame(height: 40)
                         }
                         .buttonStyle(.glass).controlSize(.large)
@@ -186,7 +187,7 @@ struct ClassDetailView: View {
                 // visit-limit drop-in, so a full class offers the waitlist rather than "Buy for SEK n".
                 HStack(spacing: 10) {
                     Button { Task { await m.joinWaitlist(c.id) } } label: {
-                        Text("Join waitlist").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
+                        Text("Join waitlist").bruceFont(17, weight: .bold).frame(maxWidth: .infinity).frame(height: 40)
                     }
                     .buttonStyle(.glassProminent).tint(Theme.waitlistOrange).controlSize(.large)
                     similarButton(c)
@@ -198,7 +199,7 @@ struct ClassDetailView: View {
                     LimeButton(title: "Buy for \(p.currency) \(p.amount)") { m.flash(Copy.dropInUnavailable) }
                 } else {
                     Button {} label: {
-                        Text("Visit limit reached").font(.system(size: 17, weight: .bold)).frame(maxWidth: .infinity).frame(height: 40)
+                        Text("Visit limit reached").bruceFont(17, weight: .bold).frame(maxWidth: .infinity).frame(height: 40)
                     }
                     .buttonStyle(.glass).controlSize(.large).disabled(true)
                 }
@@ -216,7 +217,7 @@ struct ClassDetailView: View {
     }
 
     var limitNotice: some View {
-        Label { Text(Copy.visitLimitReached).font(.system(size: 15)).fixedSize(horizontal: false, vertical: true) }
+        Label { Text(Copy.visitLimitReached).bruceFont(15).fixedSize(horizontal: false, vertical: true) }
             icon: { Image(systemName: "info.circle") }
             .padding(16).frame(maxWidth: .infinity, alignment: .leading)
             .glassEffect(.regular, in: .rect(cornerRadius: 20))
@@ -224,7 +225,7 @@ struct ClassDetailView: View {
 
     func similarButton(_ c: BruceAPI.BruceClass) -> some View {
         Button { m.present(.similarClasses(c.id)) } label: {
-            Text("Similar classes").font(.system(size: 17, weight: .bold)).foregroundStyle(Theme.ink)
+            Text("Similar classes").bruceFont(17, weight: .bold).foregroundStyle(Theme.ink)
                 .frame(maxWidth: .infinity).frame(height: 40)
         }
         .buttonStyle(.glass).controlSize(.large)
@@ -247,7 +248,7 @@ struct ClassDetailView: View {
         VStack(alignment: .leading, spacing: 14) {
             Label(checkedIn.map { "Checked in \(BruceDate.time($0))" } ?? "Booked",
                   systemImage: checkedIn == nil ? "checkmark.circle.fill" : "checkmark.seal.fill")
-                .font(.system(size: 13, weight: .heavy).width(.expanded))
+                .bruceFont(13, weight: .heavy, width: .expanded)
                 .foregroundStyle(.black).padding(.horizontal, 10).padding(.vertical, 5).background(Capsule().fill(Theme.lime))
             RuleRow(icon: "qrcode.viewfinder", title: "Check in",
                     text: "\(BruceDate.format(r.start, "d MMM yyyy")), \(BruceDate.time(r.checkInFrom)) – \(BruceDate.time(r.lateCheckIn))")
@@ -256,7 +257,7 @@ struct ClassDetailView: View {
                 RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation · 2 strikes", text: "Cancel after \(BookingRules.long(r.shortNotice))")
                 RuleRow(icon: "calendar.badge.minus", title: "Last-minute cancellation · 3 strikes", text: "Cancel after \(BookingRules.long(r.lastMinute))")
                 Button { m.present(.addToCalendar(classId)) } label: {
-                    Label("Add to Calendar", systemImage: "calendar.badge.plus").font(.system(size: 15, weight: .semibold))
+                    Label("Add to Calendar", systemImage: "calendar.badge.plus").bruceFont(15, weight: .semibold)
                         .frame(maxWidth: .infinity).frame(height: 34)
                 }
                 .buttonStyle(.glass).padding(.top, 4)
@@ -275,26 +276,26 @@ struct ClassDetailView: View {
             HStack(alignment: .top, spacing: 14) {
                 Button { m.present(.classInvite(classId)) } label: {
                     VStack(spacing: 6) {
-                        Image(systemName: "plus").font(.system(size: 24, weight: .semibold)).foregroundStyle(.black)
+                        Image(systemName: "plus").bruceFont(24, weight: .semibold).foregroundStyle(.black)
                             .frame(width: 64, height: 64)
                             .glassEffect(.regular.tint(Theme.lime).interactive(), in: .circle)
-                        Text("Invite").font(.system(size: 13, weight: .medium))
+                        Text("Invite").bruceFont(13, weight: .medium)
                     }
                 }
                 .buttonStyle(.plain)
                 if people.isEmpty {
-                    Text("No one has booked this class yet").font(.system(size: 15)).foregroundStyle(Theme.secondary)
+                    Text("No one has booked this class yet").bruceFont(15).foregroundStyle(Theme.secondary)
                         .frame(height: 64)
                 } else {
                     ForEach(people) { p in
                         VStack(spacing: 6) {
                             if p.hidden {
-                                Image(systemName: "eyeglasses").font(.system(size: 24)).foregroundStyle(Theme.secondary)
+                                Image(systemName: "eyeglasses").bruceFont(24).foregroundStyle(Theme.secondary)
                                     .frame(width: 64, height: 64).background(Circle().fill(Theme.secondary.opacity(0.15)))
-                                Text("Hidden").font(.system(size: 13, weight: .medium)).italic().foregroundStyle(Theme.secondary)
+                                Text("Hidden").bruceFont(13, weight: .medium).italic().foregroundStyle(Theme.secondary)
                             } else {
                                 Avatar(fileId: p.photo, initials: p.initials, size: 64)
-                                Text(p.name ?? "").font(.system(size: 13, weight: .medium)).lineLimit(1)
+                                Text(p.name ?? "").bruceFont(13, weight: .medium).lineLimit(1)
                             }
                         }
                         .frame(width: 72)
@@ -312,12 +313,12 @@ struct ClassDetailView: View {
             LinearGradient(colors: [.black.opacity(0.25), .clear, .black.opacity(0.65)], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 6) {
                 if let cat = categoryTitle(c) {
-                    Text(cat).font(.system(size: 13, weight: .semibold)).padding(.horizontal, 10).padding(.vertical, 5)
+                    Text(cat).bruceFont(13, weight: .semibold).padding(.horizontal, 10).padding(.vertical, 5)
                         .glassEffect(.regular, in: .capsule)
                 }
-                Text(c.title.uppercased()).font(.system(size: 28, weight: .black).width(.expanded)).lineLimit(3).minimumScaleFactor(0.7)
+                Text(c.title.uppercased()).bruceFont(28, weight: .black, width: .expanded).lineLimit(3).minimumScaleFactor(0.7)
                 Text([studio?.name ?? c.studio?.name, studio?.vicinity ?? c.studio?.vicinity].compactMap { $0 }.joined(separator: " | "))
-                    .font(.system(size: 16, weight: .medium))
+                    .bruceFont(16, weight: .medium)
             }
             .foregroundStyle(.white).padding(Theme.gutter)
         }
@@ -331,7 +332,7 @@ struct ClassDetailView: View {
     }
 
     func iconLine(_ sym: String, _ text: String) -> some View {
-        Label { Text(text).font(.system(size: 16)) } icon: { Image(systemName: sym).foregroundStyle(Theme.limeInk) }
+        Label { Text(text).bruceFont(16) } icon: { Image(systemName: sym).foregroundStyle(Theme.limeInk) }
     }
 }
 
@@ -341,10 +342,10 @@ struct RuleRow: View {
     let text: String
     var body: some View {
         HStack(alignment: .top, spacing: 14) {
-            Image(systemName: icon).font(.system(size: 17)).foregroundStyle(Theme.limeInk).frame(width: 24).padding(.top, 2)
+            Image(systemName: icon).bruceFont(17).foregroundStyle(Theme.limeInk).frame(width: 24).padding(.top, 2)
             VStack(alignment: .leading, spacing: 2) {
-                Text(title).font(.system(size: 16, weight: .semibold))
-                Text(text).font(.system(size: 15)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(title).bruceFont(16, weight: .semibold)
+                Text(text).bruceFont(15).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
@@ -366,19 +367,19 @@ struct VisitLimitSheet: View {
             VStack(alignment: .leading, spacing: 0) {
                 header
                 VStack(alignment: .leading, spacing: 12) {
-                    Text("Visit limits at this studio").font(.system(size: 24, weight: .bold)).padding(.bottom, 4)
+                    Text("Visit limits at this studio").bruceFont(24, weight: .bold).padding(.bottom, 4)
                     if tiers.isEmpty {
                         Text("No plan limits available for this studio.").foregroundStyle(Theme.secondary)
                     }
                     ForEach(tiers, id: \.tier) { t in
                         HStack {
                             VStack(alignment: .leading, spacing: 6) {
-                                Text(t.tier).font(.system(size: 18, weight: .heavy).width(.expanded))
-                                Text(VisitLimitSheet.limitText(t.limit)).font(.system(size: 16)).foregroundStyle(Theme.secondary)
+                                Text(t.tier).bruceFont(18, weight: .heavy, width: .expanded)
+                                Text(VisitLimitSheet.limitText(t.limit)).bruceFont(16).foregroundStyle(Theme.secondary)
                             }
                             Spacer()
                             if t.tier == m.tier {
-                                Text("YOUR PLAN").font(.system(size: 11, weight: .bold).width(.expanded)).foregroundStyle(Theme.lime)
+                                Text("YOUR PLAN").bruceFont(11, weight: .bold, width: .expanded).foregroundStyle(Theme.lime)
                                     .padding(.horizontal, 10).padding(.vertical, 6).background(Color.black, in: .rect(cornerRadius: 4))
                             }
                         }
@@ -386,7 +387,7 @@ struct VisitLimitSheet: View {
                         .glassEffect(.regular, in: .rect(cornerRadius: 16))
                     }
                     NavigationLink(value: SheetRoute.plans) {
-                        Text("Change plan").font(.system(size: 17, weight: .bold)).foregroundStyle(.black)
+                        Text("Change plan").bruceFont(17, weight: .bold).foregroundStyle(.black)
                             .frame(maxWidth: .infinity).frame(height: 40)
                     }
                     .buttonStyle(.glassProminent).tint(Theme.lime).controlSize(.large).padding(.top, 12)
@@ -409,21 +410,21 @@ struct VisitLimitSheet: View {
         let used = m.studioVisitsThisMonth(studioId)
         let reset = m.visitLimitReset(studioId)
         return VStack(alignment: .leading, spacing: 8) {
-            Text(m.studioName(studioId)).font(.system(size: 20, weight: .bold))
+            Text(m.studioName(studioId)).bruceFont(20, weight: .bold)
             switch m.studioLimitState(studioId) {
             case .limited(let total):
                 (Text("\(used)").foregroundStyle(Theme.lime) + Text("/\(total)"))
-                    .font(.system(size: 56, weight: .light)).monospacedDigit().padding(.top, 8)
-                Text("VISITS USED THIS MONTH").font(.system(size: 13, weight: .semibold).width(.expanded)).foregroundStyle(.white.opacity(0.75))
+                    .bruceFont(56, weight: .light).monospacedDigit().padding(.top, 8)
+                Text("VISITS USED THIS MONTH").bruceFont(13, weight: .semibold, width: .expanded).foregroundStyle(.white.opacity(0.75))
                 Text(Copy.visitsLeft(max(0, (m.studioVisitLimit(studioId)?.remaining) ?? (total - used)),
                                      month: BruceDate.format(Date(), "MMMM"), reset: BruceDate.format(reset, "MMMM d")))
-                    .font(.system(size: 16)).padding(.top, 6)
+                    .bruceFont(16).padding(.top, 6)
             case .unlimited:
-                Image(systemName: "infinity").font(.system(size: 48, weight: .light)).foregroundStyle(Theme.lime).padding(.top, 8)
-                Text("UNLIMITED VISITS ON YOUR PLAN").font(.system(size: 13, weight: .semibold).width(.expanded)).foregroundStyle(.white.opacity(0.75))
+                Image(systemName: "infinity").bruceFont(48, weight: .light).foregroundStyle(Theme.lime).padding(.top, 8)
+                Text("UNLIMITED VISITS ON YOUR PLAN").bruceFont(13, weight: .semibold, width: .expanded).foregroundStyle(.white.opacity(0.75))
             case .notIncluded:
-                Text("0/0").font(.system(size: 56, weight: .light)).padding(.top, 8)
-                Text("NOT INCLUDED IN YOUR PLAN").font(.system(size: 13, weight: .semibold).width(.expanded)).foregroundStyle(.white.opacity(0.75))
+                Text("0/0").bruceFont(56, weight: .light).padding(.top, 8)
+                Text("NOT INCLUDED IN YOUR PLAN").bruceFont(13, weight: .semibold, width: .expanded).foregroundStyle(.white.opacity(0.75))
             case .unknown:
                 ProgressView().tint(.white).padding(.top, 8)
             }
@@ -448,8 +449,8 @@ struct BookingRulesSheet: View {
                 let booking = m.booking(forClass: classId)
                 VStack(alignment: .leading, spacing: 0) {
                     VStack(spacing: 10) {
-                        Text(c.title.uppercased()).font(Theme.heading(22)).multilineTextAlignment(.center)
-                        Text("\(classDateLine(c)) at \(m.studioName(c.studioId))").font(.system(size: 16))
+                        Text(c.title.uppercased()).bruceHeading(22).multilineTextAlignment(.center)
+                        Text("\(classDateLine(c)) at \(m.studioName(c.studioId))").bruceFont(16)
                             .foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity).padding(.bottom, 22)
@@ -464,7 +465,7 @@ struct BookingRulesSheet: View {
                     .glassEffect(.regular, in: .rect(cornerRadius: 26))
                     if booking != nil {
                         Text(Copy.cancelCost(strikes: r.cancelStrikes()))
-                            .font(.system(size: 16, weight: .semibold)).frame(maxWidth: .infinity).padding(.top, 20)
+                            .bruceFont(16, weight: .semibold).frame(maxWidth: .infinity).padding(.top, 20)
                     }
                     Group {
                         if let b = booking {
@@ -476,7 +477,7 @@ struct BookingRulesSheet: View {
                     .disabled(m.loading).padding(.top, 24)
                     Label(Copy.strikeFooter(unlockPrice: m.unblockPriceKr),
                           systemImage: "info.circle")
-                        .font(.system(size: 14)).foregroundStyle(Theme.secondary).padding(.top, 20)
+                        .bruceFont(14).foregroundStyle(Theme.secondary).padding(.top, 20)
                 }
                 .padding(Theme.gutter).padding(.top, 8)
             }
@@ -507,7 +508,7 @@ struct StudioInfoBlock: View {
             if !facilities.isEmpty {
                 LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 14) {
                     ForEach(facilities, id: \.self) { f in
-                        Label(f.title ?? "", systemImage: facilityIcon(f.code)).font(.system(size: 15, weight: .medium))
+                        Label(f.title ?? "", systemImage: facilityIcon(f.code)).bruceFont(15, weight: .medium)
                     }
                 }
                 .padding(18)
@@ -520,13 +521,13 @@ struct StudioInfoBlock: View {
                     MapSnippet(coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lon)).frame(height: 220)
                     HStack {
                         VStack(alignment: .leading, spacing: 3) {
-                            Text(studio?.name ?? "").font(.system(size: 16, weight: .semibold))
+                            Text(studio?.name ?? "").bruceFont(16, weight: .semibold)
                             Text([a.address, [a.zipCode, a.city].compactMap { $0 }.joined(separator: " ")].compactMap { $0 }.joined(separator: ", "))
-                                .font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                                .bruceFont(14).foregroundStyle(Theme.secondary)
                         }
                         Spacer()
                         Button { openURL(URL(string: "http://maps.apple.com/?daddr=\(lat),\(lon)")!) } label: {
-                            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill").font(.system(size: 20)).foregroundStyle(.black)
+                            Image(systemName: "arrow.triangle.turn.up.right.diamond.fill").bruceFont(20).foregroundStyle(.black)
                                 .frame(width: 30, height: 30)
                         }
                         .buttonStyle(.glassProminent).buttonBorderShape(.circle).tint(Theme.lime).controlSize(.large)
@@ -568,7 +569,7 @@ struct MapSnippet: View {
             Map(initialPosition: .region(MKCoordinateRegion(center: coordinate, latitudinalMeters: 1400, longitudinalMeters: 1400)),
                 interactionModes: []) {
                 Annotation("", coordinate: coordinate) {
-                    Image(systemName: "mappin.circle.fill").font(.system(size: 30)).foregroundStyle(.black, Theme.lime)
+                    Image(systemName: "mappin.circle.fill").bruceFont(30).foregroundStyle(.black, Theme.lime)
                 }
             }
             .mapStyle(.standard(emphasis: .muted, pointsOfInterest: .excludingAll))
@@ -665,7 +666,7 @@ struct StudioDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             if hasLimit {
-                ToolbarItem(placement: .topBarTrailing) { StudioLimitPill(studioId: studioId).font(.system(size: 15, weight: .semibold)) }
+                ToolbarItem(placement: .topBarTrailing) { StudioLimitPill(studioId: studioId).bruceFont(15, weight: .semibold) }
                 ToolbarSpacer(.fixed, placement: .topBarTrailing)
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
@@ -712,19 +713,19 @@ struct StudioDetailView: View {
             LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom).allowsHitTesting(false)
             VStack(alignment: .leading, spacing: 6) {
                 if studio?.label?.uppercased() == "WELLNESS" {
-                    Text("WELLNESS").font(.system(size: 11, weight: .heavy).width(.expanded))
+                    Text("WELLNESS").bruceFont(11, weight: .heavy, width: .expanded)
                         .padding(.horizontal, 8).padding(.vertical, 4).glassEffect(.regular, in: .capsule)
                 }
-                Text((studio?.name ?? "").uppercased()).font(.system(size: 26, weight: .black).width(.expanded)).lineLimit(2).minimumScaleFactor(0.7)
+                Text((studio?.name ?? "").uppercased()).bruceFont(26, weight: .black, width: .expanded).lineLimit(2).minimumScaleFactor(0.7)
                 HStack(spacing: 6) {
                     if let r = studio?.rating?.average, r > 0 {
-                        Image(systemName: "star.fill").font(.system(size: 12))
+                        Image(systemName: "star.fill").bruceFont(12)
                         Text(String(format: "%.1f", Double(r) / 100)).fontWeight(.bold)
                         Text("|")
                     }
                     Text([studio?.vicinity, categories].compactMap { $0 }.joined(separator: " | ")).lineLimit(1)
                 }
-                .font(.system(size: 14, weight: .medium))
+                .bruceFont(14, weight: .medium)
                 if photos.count > 1 {
                     HStack(spacing: 6) {
                         ForEach(0..<photos.count, id: \.self) { i in
@@ -760,7 +761,7 @@ struct StudioDetailView: View {
         if !msgs.isEmpty {
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(Array(msgs.enumerated()), id: \.offset) { _, msg in
-                    Label(msg, systemImage: "exclamationmark.circle.fill").font(.system(size: 15, weight: .medium))
+                    Label(msg, systemImage: "exclamationmark.circle.fill").bruceFont(15, weight: .medium)
                         .foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -796,10 +797,10 @@ struct StudioDetailView: View {
             Button { withAnimation(.spring(duration: 0.3)) { hoursOpen.toggle() } } label: {
                 HStack(spacing: 10) {
                     Circle().fill(hours.color).frame(width: 10, height: 10)
-                    Text(hours.title).font(.system(size: 16, weight: .semibold)).foregroundStyle(hours.color)
+                    Text(hours.title).bruceFont(16, weight: .semibold).foregroundStyle(hours.color)
                     Spacer()
                     Image(systemName: "chevron.down").rotationEffect(.degrees(hoursOpen ? 180 : 0))
-                        .font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.secondary)
+                        .bruceFont(14, weight: .semibold).foregroundStyle(Theme.secondary)
                 }
                 .padding(16).contentShape(Rectangle())
             }
@@ -814,7 +815,7 @@ struct StudioDetailView: View {
                             Text(e.map { $0.isAllDay == true ? "00:00 - 24:00" : "\(BruceDate.time($0.startDate)) - \(BruceDate.time($0.endDate))" } ?? "Closed")
                                 .monospacedDigit()
                         }
-                        .font(.system(size: 15, weight: isToday ? .bold : .regular))
+                        .bruceFont(15, weight: isToday ? .bold : .regular)
                         .foregroundStyle(isToday ? Theme.ink : Theme.secondary)
                     }
                 }
@@ -869,7 +870,7 @@ struct StudioReviews: View {
                 ForEach(0..<5, id: \.self) { i in
                     let p = percent(5 - i)
                     HStack(spacing: 12) {
-                        Text(emoji[i]).font(.system(size: 17))
+                        Text(emoji[i]).bruceFont(17)
                         GeometryReader { g in
                             ZStack(alignment: .leading) {
                                 Capsule().fill(Theme.chipGrey)
@@ -877,7 +878,7 @@ struct StudioReviews: View {
                             }
                         }
                         .frame(height: 12)
-                        Text(label(p)).font(.system(size: 13, weight: .medium)).monospacedDigit().frame(width: 44, alignment: .trailing)
+                        Text(label(p)).bruceFont(13, weight: .medium).monospacedDigit().frame(width: 44, alignment: .trailing)
                     }
                 }
             }
@@ -913,7 +914,7 @@ struct ReviewRow: View {
         HStack(alignment: .top, spacing: 14) {
             VStack(spacing: 4) {
                 Avatar(fileId: r.booking?.user?.photo, initials: String(name.prefix(1)), size: 52)
-                Text(name).font(.system(size: 11, weight: .medium)).foregroundStyle(Theme.secondary)
+                Text(name).bruceFont(11, weight: .medium).foregroundStyle(Theme.secondary)
                     .lineLimit(1).truncationMode(.tail)
             }
             .frame(width: Self.column)
@@ -921,14 +922,14 @@ struct ReviewRow: View {
                 HStack {
                     HStack(spacing: 2) {
                         ForEach(0..<5, id: \.self) { i in
-                            Image(systemName: "star.fill").font(.system(size: 11)).foregroundStyle(i < (r.rating ?? 0) ? Theme.ink : Theme.chipGrey)
+                            Image(systemName: "star.fill").bruceFont(11).foregroundStyle(i < (r.rating ?? 0) ? Theme.ink : Theme.chipGrey)
                         }
                     }
                     Spacer()
-                    Text(BruceDate.format(r.createdAt.flatMap(BruceDate.parse), "d MMM yyyy")).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    Text(BruceDate.format(r.createdAt.flatMap(BruceDate.parse), "d MMM yyyy")).bruceFont(13).foregroundStyle(Theme.secondary)
                 }
-                Text(r.activity).font(.system(size: 15, weight: .semibold))
-                Text(r.comment ?? "").font(.system(size: 15)).fixedSize(horizontal: false, vertical: true)
+                Text(r.activity).bruceFont(15, weight: .semibold)
+                Text(r.comment ?? "").bruceFont(15).fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -952,20 +953,20 @@ struct TicketSheet: View {
                     VStack(spacing: 16) {
                         Avatar(fileId: m.user?.photo, initials: m.user?.initials ?? "", size: 150)
                             .overlay(Circle().stroke(Theme.lime, lineWidth: 5))
-                        Text(m.user?.fullName ?? "").font(.system(size: 22, weight: .heavy).width(.expanded))
-                        Text(BruceDate.format(checkedIn, "EEEE, d MMMM")).font(.system(size: 16)).foregroundStyle(Theme.secondary)
+                        Text(m.user?.fullName ?? "").bruceFont(22, weight: .heavy, width: .expanded)
+                        Text(BruceDate.format(checkedIn, "EEEE, d MMMM")).bruceFont(16).foregroundStyle(Theme.secondary)
                     }
                     .padding(.top, 30)
                     HStack(alignment: .top, spacing: 14) {
-                        Image(systemName: "checkmark.seal.fill").font(.system(size: 30)).foregroundStyle(.black, Theme.lime)
+                        Image(systemName: "checkmark.seal.fill").bruceFont(30).foregroundStyle(.black, Theme.lime)
                         VStack(alignment: .leading, spacing: 4) {
-                            Text(b.class?.title ?? "Solo training").font(.system(size: 18, weight: .bold))
-                            Text(m.studioName(sid)).font(.system(size: 15)).foregroundStyle(Theme.secondary)
+                            Text(b.class?.title ?? "Solo training").bruceFont(18, weight: .bold)
+                            Text(m.studioName(sid)).bruceFont(15).foregroundStyle(Theme.secondary)
                         }
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
-                            Text("CHECKED IN").font(.system(size: 10, weight: .heavy).width(.expanded)).foregroundStyle(Theme.secondary)
-                            Text(BruceDate.time(checkedIn)).font(.system(size: 22, weight: .black)).monospacedDigit()
+                            Text("CHECKED IN").bruceFont(10, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
+                            Text(BruceDate.time(checkedIn)).bruceFont(22, weight: .black).monospacedDigit()
                         }
                     }
                     .padding(18)
@@ -1014,8 +1015,8 @@ struct ReviewSheet: View {
             VStack(alignment: .leading, spacing: 20) {
                 if let c {
                     VStack(spacing: 8) {
-                        Text(c.title.uppercased()).font(Theme.heading(22)).multilineTextAlignment(.center)
-                        Text("\(classDateLine(c)) at \(m.studioName(c.studioId))").font(.system(size: 16))
+                        Text(c.title.uppercased()).bruceHeading(22).multilineTextAlignment(.center)
+                        Text("\(classDateLine(c)) at \(m.studioName(c.studioId))").bruceFont(16)
                             .foregroundStyle(Theme.secondary).multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity).padding(.top, 8)
@@ -1024,7 +1025,7 @@ struct ReviewSheet: View {
                     ForEach(1...5, id: \.self) { i in
                         Button { withAnimation(.spring(duration: 0.25)) { rating = i } } label: {
                             Image(systemName: i <= rating ? "star.fill" : "star")
-                                .font(.system(size: 32, weight: .semibold))
+                                .bruceFont(32, weight: .semibold)
                                 .foregroundStyle(i <= rating ? Theme.limeInk : Theme.tertiary)
                                 .frame(maxWidth: .infinity).frame(height: 56)
                         }
@@ -1036,18 +1037,18 @@ struct ReviewSheet: View {
                 .padding(.horizontal, 8)
                 .glassEffect(.regular, in: .rect(cornerRadius: 24))
                 TextField(Copy.reviewCommentHint, text: $comment, axis: .vertical)
-                    .lineLimit(3...8).font(.system(size: 16))
+                    .lineLimit(3...8).bruceFont(16)
                     .focused($commentFocused)
                     .padding(16)
                     .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
                 if needsComment {
                     Label(Copy.reviewLowNeedsComment, systemImage: "exclamationmark.circle")
-                        .font(.system(size: 14)).foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true)
+                        .bruceFont(14).foregroundStyle(Theme.red).fixedSize(horizontal: false, vertical: true)
                 }
-                Toggle(Copy.reviewAnonymous, isOn: $anonymous).font(.system(size: 16, weight: .medium))
+                Toggle(Copy.reviewAnonymous, isOn: $anonymous).bruceFont(16, weight: .medium)
                     .tint(Theme.limeInk).padding(.horizontal, 4)
                 Label(Copy.reviewPrivacy, systemImage: "info.circle")
-                    .font(.system(size: 14)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                    .bruceFont(14).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
                 LimeButton(title: sending ? "Sending…" : (anonymous ? "Send anonymously" : "Send")) {
                     commentFocused = false
                     sending = true
@@ -1061,7 +1062,7 @@ struct ReviewSheet: View {
                 .padding(.top, 4)
                 if let c, let t = BookAgainTemplate(c) {
                     Button { m.openBookAgain(t) } label: {
-                        Label("Book again", systemImage: "arrow.counterclockwise").font(.system(size: 17, weight: .semibold))
+                        Label("Book again", systemImage: "arrow.counterclockwise").bruceFont(17, weight: .semibold)
                             .frame(maxWidth: .infinity).frame(height: 40)
                     }
                     .buttonStyle(.glass).controlSize(.large)
@@ -1095,8 +1096,8 @@ struct CheckoutSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
                 card {
-                    Text("Checkout").font(Theme.heading(24))
-                    Text("Ticket").font(.system(size: 16, weight: .bold)).padding(.top, 6)
+                    Text("Checkout").bruceHeading(24)
+                    Text("Ticket").bruceFont(16, weight: .bold).padding(.top, 6)
                     HStack { Text("Solo training"); Spacer(); Text("SEK \(price)").fontWeight(.bold) }
                     Text(studio?.name ?? "").foregroundStyle(.white.opacity(0.7))
                     Divider().overlay(.white.opacity(0.2))
@@ -1106,33 +1107,33 @@ struct CheckoutSheet: View {
                     HStack { Text("Total").fontWeight(.bold); Spacer(); Text("SEK \(price)").fontWeight(.bold) }
                 }
                 card {
-                    Text("Personal data").font(Theme.heading(24))
+                    Text("Personal data").bruceHeading(24)
                     Text("Name").foregroundStyle(.white.opacity(0.6))
                     Text(m.user?.fullName ?? "")
                     Text("National identity number").foregroundStyle(.white.opacity(0.6)).padding(.top, 4)
                     Text(maskedNationalID(m.user?.nationalIdentity))
                 }
                 card {
-                    Text("Payment method").font(Theme.heading(24))
+                    Text("Payment method").bruceHeading(24)
                     if let pm = m.paymentMethods.first(where: { $0.isDefault == true }) ?? m.paymentMethods.first {
                         HStack {
-                            Text(pm.type == "APPLE_PAY" ? "Apple Pay" : (pm.type ?? "Card").capitalized).font(.system(size: 17, weight: .medium))
+                            Text(pm.type == "APPLE_PAY" ? "Apple Pay" : (pm.type ?? "Card").capitalized).bruceFont(17, weight: .medium)
                             Spacer()
-                            Text(pm.name ?? "").font(.system(size: 11, weight: .bold)).padding(.horizontal, 6).padding(.vertical, 4)
+                            Text(pm.name ?? "").bruceFont(11, weight: .bold).padding(.horizontal, 6).padding(.vertical, 4)
                                 .background(RoundedRectangle(cornerRadius: 4).fill(.white.opacity(0.15)))
                         }
                         .padding(14).glassEffect(.regular, in: .rect(cornerRadius: 16))
                     }
                     Button("New payment method") { m.flash(noPayments) }.buttonStyle(.glass).frame(maxWidth: .infinity)
                 }
-                Text("Display only: this client never takes payments.").font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
+                Text("Display only: this client never takes payments.").bruceFont(13).foregroundStyle(.white.opacity(0.6))
             }
-            .font(.system(size: 16))
+            .bruceFont(16)
             .padding(Theme.gutter)
         }
         .safeAreaInset(edge: .bottom) {
             Button { m.flash(noPayments) } label: {
-                Text("Pay SEK \(price)").font(.system(size: 17, weight: .bold)).foregroundStyle(.black).frame(maxWidth: .infinity).frame(height: 40)
+                Text("Pay SEK \(price)").bruceFont(17, weight: .bold).foregroundStyle(.black).frame(maxWidth: .infinity).frame(height: 40)
             }
             .buttonStyle(.glassProminent).tint(Theme.neonLime).controlSize(.large).padding(Theme.gutter)
         }

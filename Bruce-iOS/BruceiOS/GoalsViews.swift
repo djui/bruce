@@ -32,12 +32,12 @@ struct GoalsView: View {
                         Button { edit(p.goal.id) } label: { GoalCard(p: p, daysLeft: month.daysLeft) }.buttonStyle(.plain)
                     }
                 }
-                Text("THIS MONTH").font(Theme.heading(18)).padding(.top, 14)
+                Text("THIS MONTH").bruceHeading(18).padding(.top, 14)
                 GoalsCalendar(days: Goals.calendar(goals: m.goals, visits: m.visitHistory ?? [], categoryTitle: { m.categoryTitle(forKey: $0) },
                                                    mainCategory: { m.mainCategory(ofStudio: $0) }),
                               blanks: Goals.leadingBlanks())
                 Text("Counts classes and drop-in visits you checked in to. Goals are saved on this iPhone.")
-                    .font(.system(size: 13)).foregroundStyle(Theme.secondary).padding(.top, 4)
+                    .bruceFont(13).foregroundStyle(Theme.secondary).padding(.top, 4)
             }
             .padding(.horizontal, Theme.gutter).padding(.bottom, 30).padding(.top, 4)
         }
@@ -61,10 +61,10 @@ struct GoalsView: View {
         return HStack(spacing: 18) {
             GoalRing(done: month.done, target: month.target)
             VStack(alignment: .leading, spacing: 4) {
-                Text(month.status).font(.system(size: 19, weight: .heavy))
-                Text(month.hint).font(.system(size: 14)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(month.status).bruceFont(19, weight: .heavy)
+                Text(month.hint).bruceFont(14).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
                 if streak >= 2 {
-                    Label("\(streak) weeks in a row", systemImage: "flame.fill").font(.system(size: 12.5, weight: .semibold)).foregroundStyle(.black)
+                    Label("\(streak) weeks in a row", systemImage: "flame.fill").bruceFont(12.5, weight: .semibold).foregroundStyle(.black)
                         .padding(.horizontal, 10).padding(.vertical, 5).background(Theme.lime, in: .capsule).padding(.top, 6)
                 }
             }
@@ -77,10 +77,10 @@ struct GoalsView: View {
 
     var emptyCard: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Image(systemName: "target").font(.system(size: 30)).foregroundStyle(Theme.limeInk)
-            Text("Set a monthly goal").font(.system(size: 19, weight: .heavy))
+            Image(systemName: "target").bruceFont(30).foregroundStyle(Theme.limeInk)
+            Text("Set a monthly goal").bruceFont(19, weight: .heavy)
             Text("For example 20 gym visits and 2 swims. Progress counts your checked-in visits this month.")
-                .font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                .bruceFont(14).foregroundStyle(Theme.secondary)
             LimeButton(title: "New goal") { edit(nil) }.padding(.top, 4)
         }
         .padding(16)
@@ -110,7 +110,7 @@ struct GoalRing: View {
             if size > 80 {
                 VStack(spacing: 0) {
                     Text("\(done)").font(.system(size: size * 0.23, weight: .black).width(.expanded)).monospacedDigit()
-                    Text("of \(target)").font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                    Text("of \(target)").bruceFont(14).foregroundStyle(Theme.secondary)
                 }
             }
         }
@@ -128,15 +128,15 @@ struct GoalCard: View {
         let pace = min(1, p.expected / Double(max(1, p.goal.target)))
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 12) {
-                Image(systemName: m.goalSymbol(p.goal.category)).font(.system(size: 16, weight: .semibold)).foregroundStyle(.black)
+                Image(systemName: m.goalSymbol(p.goal.category)).bruceFont(16, weight: .semibold).foregroundStyle(.black)
                     .frame(width: 36, height: 36).background(tone, in: .rect(cornerRadius: 10))
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(p.goal.title).font(.system(size: 16, weight: .bold))
-                    if let s = p.goal.studioName { Text("Only at \(s)").font(.system(size: 13)).foregroundStyle(Theme.secondary) }
+                    Text(p.goal.title).bruceFont(16, weight: .bold)
+                    if let s = p.goal.studioName { Text("Only at \(s)").bruceFont(13).foregroundStyle(Theme.secondary) }
                 }
                 Spacer()
-                if p.goal.remind { Image(systemName: "bell.fill").font(.system(size: 12)).foregroundStyle(Theme.secondary) }
-                Text("\(p.done) / \(p.goal.target)").font(.system(size: 17, weight: .bold)).monospacedDigit()
+                if p.goal.remind { Image(systemName: "bell.fill").bruceFont(12).foregroundStyle(Theme.secondary) }
+                Text("\(p.done) / \(p.goal.target)").bruceFont(17, weight: .bold).monospacedDigit()
             }
             GeometryReader { g in
                 ZStack(alignment: .leading) {
@@ -151,7 +151,7 @@ struct GoalCard: View {
                 Spacer()
                 Text(rightMeta)
             }
-            .font(.system(size: 13)).foregroundStyle(p.behind ? Theme.waitlistOrange : Theme.secondary)
+            .bruceFont(13).foregroundStyle(p.behind ? Theme.waitlistOrange : Theme.secondary)
         }
         .foregroundStyle(Theme.ink)
         .padding(.horizontal, 16).padding(.vertical, 14)
@@ -181,7 +181,7 @@ struct GoalsCalendar: View {
         LazyVGrid(columns: cols, spacing: 6) {
             // Ids must not clash with the day numbers (1...31) or the blanks (negative) in the same grid.
             ForEach(Array(100..<107), id: \.self) { i in
-                Text(["M", "T", "W", "T", "F", "S", "S"][i - 100]).font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.tertiary)
+                Text(["M", "T", "W", "T", "F", "S", "S"][i - 100]).bruceFont(11, weight: .semibold).foregroundStyle(Theme.tertiary)
             }
             ForEach(Array(-blanks..<0), id: \.self) { _ in Color.clear.frame(height: 1) }
             ForEach(days) { d in
@@ -189,7 +189,7 @@ struct GoalsCalendar: View {
                 RoundedRectangle(cornerRadius: 9).fill(fill.opacity(d.isFuture ? 0.5 : 1))
                     .aspectRatio(1, contentMode: .fit)
                     .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(d.isToday ? Theme.ink : .clear, lineWidth: 2))
-                    .overlay(Text("\(d.day)").font(.system(size: 11, weight: .semibold))
+                    .overlay(Text("\(d.day)").bruceFont(11, weight: .semibold)
                         .foregroundStyle(d.tone != nil ? Color.black : d.isToday ? Theme.ink : Theme.secondary))
                     .accessibilityLabel("\(d.day): \(d.tone == nil ? "no visit" : "visit")")
             }
@@ -205,21 +205,21 @@ struct GoalsCompactCard: View {
         NavigationLink(value: Route.goals) {
             HStack(spacing: 14) {
                 if m.goals.isEmpty {
-                    Image(systemName: "target").font(.system(size: 20, weight: .semibold)).foregroundStyle(.black)
+                    Image(systemName: "target").bruceFont(20, weight: .semibold).foregroundStyle(.black)
                         .frame(width: 44, height: 44).background(Theme.lime, in: .circle)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Set a monthly goal").font(.system(size: 16, weight: .bold))
-                        Text("Gym visits, swims, yoga… counted from your check-ins").font(.system(size: 13)).foregroundStyle(Theme.secondary).lineLimit(1)
+                        Text("Set a monthly goal").bruceFont(16, weight: .bold)
+                        Text("Gym visits, swims, yoga… counted from your check-ins").bruceFont(13).foregroundStyle(Theme.secondary).lineLimit(1)
                     }
                 } else {
                     GoalRing(done: month.done, target: month.target, size: 44, line: 6)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("\(BruceDate.format(Date(), "MMMM")) goals").font(.system(size: 16, weight: .bold))
-                        Text("\(month.done) of \(month.target) · \(month.status) · \(month.daysLeft) days left").font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                        Text("\(BruceDate.format(Date(), "MMMM")) goals").bruceFont(16, weight: .bold)
+                        Text("\(month.done) of \(month.target) · \(month.status) · \(month.daysLeft) days left").bruceFont(13).foregroundStyle(Theme.secondary)
                     }
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.tertiary)
+                Image(systemName: "chevron.right").bruceFont(14, weight: .semibold).foregroundStyle(Theme.tertiary)
             }
             .foregroundStyle(Theme.ink)
             .padding(12)
@@ -282,7 +282,7 @@ struct GoalEditor: View {
                     Menu {
                         ForEach(m.sortedCategories) { c in Button(c.title ?? "") { key = String(c.id) } }
                     } label: {
-                        Text("More…").font(.system(size: 15, weight: .semibold)).foregroundStyle(Theme.ink)
+                        Text("More…").bruceFont(15, weight: .semibold).foregroundStyle(Theme.ink)
                             .padding(.horizontal, 14).frame(height: 36).glassEffect(.regular.interactive(), in: .capsule)
                     }
                 }
@@ -295,7 +295,7 @@ struct GoalEditor: View {
                     Spacer()
                     HStack(spacing: 0) {
                         Button { target = max(1, target - 1) } label: { Image(systemName: "minus").frame(width: 40, height: 34) }
-                        Text("\(target)").font(.system(size: 17, weight: .bold)).monospacedDigit().frame(minWidth: 34)
+                        Text("\(target)").bruceFont(17, weight: .bold).monospacedDigit().frame(minWidth: 34)
                             .contentTransition(.numericText()).animation(.snappy, value: target)
                         Button { target = min(62, target + 1) } label: { Image(systemName: "plus").frame(width: 40, height: 34) }
                     }
@@ -320,12 +320,12 @@ struct GoalEditor: View {
                 Section("Suggested from your last 3 months") {
                     ForEach(suggestions) { s in
                         HStack(spacing: 12) {
-                            Image(systemName: m.goalSymbol(s.key)).font(.system(size: 14, weight: .semibold)).foregroundStyle(.black)
+                            Image(systemName: m.goalSymbol(s.key)).bruceFont(14, weight: .semibold).foregroundStyle(.black)
                                 .frame(width: 30, height: 30)
                                 .background(GoalStyle.color(GoalCategory.tone(s.key, categoryTitle: m.categoryTitle(forKey: s.key))), in: .rect(cornerRadius: 8))
                             VStack(alignment: .leading, spacing: 1) {
                                 Text("\(s.target) \(m.goalTitle(s.key).lowercased())")
-                                Text("You averaged \(Int(s.average.rounded()))").font(.system(size: 14)).foregroundStyle(Theme.secondary)
+                                Text("You averaged \(Int(s.average.rounded()))").bruceFont(14).foregroundStyle(Theme.secondary)
                             }
                             Spacer()
                             Button("Add") {
