@@ -87,6 +87,8 @@ export function classRow(c, href, opts) {
   let state = '';
   if (badge) state = pill(badge, badgeTone[badge], badgeIcon[badge]);
   else if (c.available_spots != null && c.available_spots <= 0) state = '<span class="full">Fully booked</span>';
+  const chip = o.chipOf ? o.chipOf(c) : null;
+  if (chip) state += pill(chip.text, chip.tone, chip.tone === 'teal' ? 'clock' : 'strike');
   return '<a class="crow' + (o.selected ? ' selected' : '') + '" href="' + href + '" data-class="' + c.id + '">' +
     '<div class="crow-time"><b>' + time(c.start_time) + '</b><small>' + (dur ? dur + ' min' : '') + '</small>' + (isWellness(c.studio_id) ? '<span class="wellness">Wellness</span>' : '') + '</div>' +
     '<div class="crow-body"><h3>' + esc(c.title) + '</h3>' + (o.hideStudio ? '' : '<p>' + esc(st.name || '') + '</p>') +

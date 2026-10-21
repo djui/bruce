@@ -1,5 +1,6 @@
 import SwiftUI
 import CoreLocation
+import UserNotifications
 #if canImport(AppKit)
 import AppKit
 #elseif canImport(UIKit)
@@ -781,7 +782,19 @@ final class AppModel {
         }
         bookmarks = (try? await BruceAPI.fetchBookmarks(token: token, userId: uid)) ?? []
         await loadReviewable()
+        if !AppModel.demo { await CancelReminders.sync(bookings: bookings, studioName: studioName) }
     }
+
+    /// Settings › "Last free cancel reminder" (CancelReminders.swift): asks for notification permission when turned on.
+    func setCancelReminders(_ on: Bool) {
+        CancelReminders.enabled = on
+        cancelRemindersOn = on
+        Task {
+            if on { _ = try? await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) }
+            await CancelReminders.sync(bookings: bookings, studioName: studioName)
+        }
+    }
+    var cancelRemindersOn = CancelReminders.enabled
 
     func loadSocial() async {
         guard tokenUsable, let uid = userId else { return }

@@ -24,6 +24,18 @@ export function nextCancelStep(r, now) {
   return null;
 }
 
+/**
+ * The "Free cancel until 18:30" chip for a booked row: {text, tone: 'teal' | 'orange' | 'red', strikes}, or null
+ * once the class has started. `when(ms)` renders a short time ("18:30", "tomorrow 06:30").
+ */
+export function cancelChip(r, now, when) {
+  if (now >= r.start) return null;
+  const n = cancelStrikes(r, now);
+  if (n === 0) return { text: 'Free cancel until ' + when(r.lateCancel), tone: 'teal', strikes: 0 };
+  const next = nextCancelStep(r, now);
+  return { text: 'Cancel now: ' + n + ' strike' + (n === 1 ? '' : 's') + (next ? ' · ' + next.strikes + ' from ' + when(next.at) : ''), tone: n >= 3 ? 'red' : 'orange', strikes: n };
+}
+
 /** "Cancelling now is free." / "Cancelling now costs 2 strikes." */
 export function cancelCost(strikes) {
   return strikes <= 0 ? 'Cancelling now is free.' : 'Cancelling now costs ' + strikes + ' strike' + (strikes === 1 ? '' : 's') + '.';

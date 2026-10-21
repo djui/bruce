@@ -320,6 +320,7 @@ struct SettingsView: View {
                         InfoRow(title: "Calendar Subscription", subtitle: "Subscribe to your bookings in Calendar")
                     }.buttonStyle(.plain)
                     .contextMenu { Button("Copy link") { copyCalendarURL() } }
+                    toggleRow("Last free cancel reminder", Copy.cancelReminder, isOn: Binding(get: { m.cancelRemindersOn }, set: { m.setCancelReminders($0) }))
                     Button { m.prefs["pushSetupDone"] = true; m.pushSheet(.push) } label: {
                         InfoRow(title: "Push notifications", subtitle: m.prefs["pushSetupDone"] == true ? "On" : "Setup needed") {
                             EmptyView()

@@ -37,6 +37,12 @@ enum BruceDate {
     }
 
     static let calendar: Calendar = { var c = Calendar(identifier: .gregorian); c.timeZone = tz; c.firstWeekday = 2; return c }()
+    /// "18:30" today, "tomorrow 06:30", else "Wed 18:30" (chips and short notices).
+    static func shortWhen(_ d: Date, now: Date = Date()) -> String {
+        if calendar.isDate(d, inSameDayAs: now) { return time(d) }
+        if let t = calendar.date(byAdding: .day, value: 1, to: now), calendar.isDate(d, inSameDayAs: t) { return "tomorrow " + time(d) }
+        return format(d, "EEE") + " " + time(d)
+    }
 
     /// "today, 11 October" / "Monday, 12 October".
     static func dayHeader(_ d: Date?, lowercaseToday: Bool = true) -> String {

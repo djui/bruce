@@ -82,6 +82,9 @@ enum Copy {
     static let calendarAdded = "Added to Calendar"
     static let calendarEventFooter = "Added with Brüce, an unofficial Bruce Studios client. This event is a copy and doesn't follow changes to the class; the calendar subscription in Settings stays in sync."
 
+    /// Settings toggle for CancelReminders.swift.
+    static let cancelReminder = "A notification 1 h before cancelling a booked class starts to cost a strike. Nothing is cancelled for you."
+
     // MARK: Check-in
 
     /// Badge on a My classes row the user already checked in to.

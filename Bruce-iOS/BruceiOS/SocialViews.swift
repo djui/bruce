@@ -166,7 +166,8 @@ struct MyClassesView: View {
             SectionHeaderBar(text: BruceDate.dayHeader(day))
             ForEach(list.sorted { $0.1.startTime < $1.1.startTime }, id: \.0) { item in
                 let c = item.1
-                NavigationLink(value: Route.classDetail(c.id)) { ClassRow(c: c, badge: badge(c)) }
+                let chip = item.2.flatMap { b in b.isCheckedIn ? nil : BookingRules(c)?.cancelChip() }
+                NavigationLink(value: Route.classDetail(c.id)) { ClassRow(c: c, badge: badge(c), cancelChip: chip) }
                     .buttonStyle(.plain)
                     .contextMenu {
                         if let b = item.2, b.isCheckedIn {

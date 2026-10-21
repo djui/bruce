@@ -8,7 +8,7 @@ import { travelMinutes, detourMinutes, recommend, slotOf } from '../js/recommend
 import { wrappedStats, archetype, together, longestStreak, topPercent, cardsFor } from '../js/wrapped-stats.js';
 import { loadState, tierOK, inPolygon, studioInArea, rectangle, studioPasses, classPasses, activeCount, clearFilters, selectedArea } from '../js/filters.js';
 import { challengeIdFromHash, challengeShareUrl, challengeRoute } from '../js/links.js';
-import { cancelStrikes, nextCancelStep, cancelCost, POLICY } from '../js/rules.js';
+import { cancelStrikes, nextCancelStep, cancelCost, cancelChip, POLICY } from '../js/rules.js';
 import { icsFor, icsTime, icsFileName, feedUrl } from '../js/calendar.js';
 
 const Z = 'Europe/Stockholm';
@@ -368,4 +368,15 @@ test('the calendar feed link needs the user secret and is a webcal link', () => 
   assert.equal(feedUrl(1, null), null);
   assert.equal(feedUrl(1, { id: 1 }), null);
   assert.equal(feedUrl(42, { secret: 'abc' }), 'webcal://api.bruce.app/v52/user/42/calendar/abc.ics');
+});
+
+test('the free-cancel chip is green, then amber at 1 and 2 strikes, red at 3, gone once the class started', () => {
+  const start = Date.parse('2026-10-20T16:00:00Z'), H = 3600000;
+  const r = { start, lateCancel: start - 12 * H, shortNotice: start - 3 * H, lastMinute: start - H };
+  const when = (ms) => new Date(ms).toISOString().slice(11, 16);
+  assert.deepEqual(cancelChip(r, start - 13 * H, when), { text: 'Free cancel until 04:00', tone: 'teal', strikes: 0 });
+  assert.deepEqual(cancelChip(r, start - 8 * H, when), { text: 'Cancel now: 1 strike · 2 from 13:00', tone: 'orange', strikes: 1 });
+  assert.deepEqual(cancelChip(r, start - 2 * H, when), { text: 'Cancel now: 2 strikes · 3 from 15:00', tone: 'orange', strikes: 2 });
+  assert.deepEqual(cancelChip(r, start - 0.5 * H, when), { text: 'Cancel now: 3 strikes', tone: 'red', strikes: 3 });
+  assert.equal(cancelChip(r, start, when), null);
 });

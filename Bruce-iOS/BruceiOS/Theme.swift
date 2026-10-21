@@ -294,6 +294,8 @@ struct ClassRow: View {
     var showMenu = true
     var showFriends = true
     var trailing: AnyView? = nil
+    /// "Free cancel until 18:30" on booked rows (BookingRules.cancelChip).
+    var cancelChip: BookingRules.CancelChip? = nil
 
     var body: some View {
         let st = m.studio(c.studioId)
@@ -323,6 +325,7 @@ struct ClassRow: View {
                 } else if let a = c.availableSpots, a <= 0 {
                     Text("Fully booked").font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.red).padding(.top, 2)
                 }
+                if let chip = cancelChip { CancelChipView(chip: chip).padding(.top, 4) }
                 if !friends.isEmpty { FriendFaces(users: friends).padding(.top, 6) }
             }
             .foregroundStyle(Theme.ink)
@@ -332,6 +335,22 @@ struct ClassRow: View {
         }
         .padding(.vertical, 14).padding(.horizontal, Theme.gutter)
         .contentShape(Rectangle())
+    }
+}
+
+/// "Free cancel until 18:30" (green), "Cancel now: 2 strikes · 3 from 18:30" (amber), "Cancel now: 3 strikes" (red).
+struct CancelChipView: View {
+    let chip: BookingRules.CancelChip
+    var body: some View {
+        let tint: Color = switch chip.tone { case .free: Theme.teal; case .warn: Theme.hoursOrange; case .bad: Theme.red }
+        HStack(spacing: 5) {
+            Image(systemName: chip.tone == .free ? "clock" : "exclamationmark.triangle.fill").font(.system(size: 10, weight: .semibold))
+            Text(chip.text).font(.system(size: 13, weight: .semibold))
+        }
+        .foregroundStyle(tint)
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .background(tint.opacity(0.14), in: Capsule())
+        .accessibilityLabel(chip.text)
     }
 }
 

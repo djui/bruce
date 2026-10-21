@@ -105,7 +105,8 @@ struct MyClassesView: View {
                             ClassRow(time: BruceDate.time(c.start), duration: c.durationMinutes.map { "\($0) min" } ?? "",
                                      title: c.title, studio: st?.name ?? c.studio?.name ?? "",
                                      meta: [st?.vicinity, c.instructor].compactMap { $0 }.joined(separator: " | "),
-                                     badge: badge(c), wellness: m.isWellness(studioId: c.studioId), classId: c.id)
+                                     badge: badge(c), wellness: m.isWellness(studioId: c.studioId), classId: c.id,
+                                     cancelChip: item.2.flatMap { b in b.isCheckedIn ? nil : BookingRules(c)?.cancelChip() })
                         }
                         .buttonStyle(.plain)
                         .contextMenu {

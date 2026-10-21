@@ -300,6 +300,8 @@ struct ClassRow: View {
     var wellness = false
     /// When set, the ⋮ button opens the class action sheet.
     var classId: Int? = nil
+    /// "Free cancel until 18:30" on booked rows (BookingRules.cancelChip).
+    var cancelChip: BookingRules.CancelChip? = nil
     var body: some View {
         VStack(spacing: 0) {
             HStack(alignment: .top, spacing: 14) {
@@ -329,6 +331,14 @@ struct ClassRow: View {
                         .padding(.top, 6)
                     } else if full {
                         Text("Fully booked").font(.system(size: 15, weight: .medium)).foregroundStyle(Theme.strikeRed).padding(.top, 4)
+                    }
+                    if let chip = cancelChip {
+                        let tint: Color = switch chip.tone { case .free: Color(red: 0.05, green: 0.5, blue: 0.2); case .warn: Theme.waitlistOrange; case .bad: Theme.strikeRed }
+                        HStack(spacing: 6) {
+                            Image(systemName: chip.tone == .free ? "clock" : "exclamationmark.triangle.fill").font(.system(size: 11))
+                            Text(chip.text).font(.system(size: 14, weight: .medium))
+                        }
+                        .foregroundStyle(tint).padding(.top, 4)
                     }
                     if let classId, case let friends = m.friendsBooked(classId), !friends.isEmpty {
                         FriendFaces(users: friends).padding(.top, 6)

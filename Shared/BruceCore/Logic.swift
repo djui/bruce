@@ -41,6 +41,23 @@ struct BookingRules {
         if now < lastMinute { return (lastMinute, 3) }
         return nil
     }
+
+    /// The "Free cancel until 18:30" chip on a booked row and in widgets: green while cancelling is free, amber
+    /// once it costs 1 or 2 strikes, red at 3 (the same as a no-show). Nil once the class has started.
+    struct CancelChip: Hashable {
+        enum Tone { case free, warn, bad }
+        let text: String
+        let tone: Tone
+        var strikes: Int
+    }
+    func cancelChip(at now: Date = Date()) -> CancelChip? {
+        guard now < start else { return nil }
+        let n = cancelStrikes(at: now)
+        if n == 0 { return CancelChip(text: "Free cancel until \(BruceDate.shortWhen(lateCancel, now: now))", tone: .free, strikes: 0) }
+        var text = "Cancel now: \(n) strike\(n == 1 ? "" : "s")"
+        if let next = nextCancelStep(at: now) { text += " · \(next.strikes) from \(BruceDate.shortWhen(next.at, now: now))" }
+        return CancelChip(text: text, tone: n >= 3 ? .bad : .warn, strikes: n)
+    }
 }
 
 func classDateLine(_ c: BruceAPI.BruceClass) -> String {
