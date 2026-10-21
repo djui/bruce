@@ -8,6 +8,7 @@ import { sheet, toast, run, empty, loading, avatar, classRow, sectionHeader, con
 import { openPlaces } from './foryou.js';
 import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
 import { openWrapped } from './wrapped.js';
+import { cancelStrikes, cancelCost, POLICY, STRIKES_TO_BLOCK, BLOCK_DAYS, STRIKE_EXPIRY_DAYS, NO_SHOW_STRIKES } from './rules.js';
 
 // ---------------------------------------------------------------- booking rules (book / cancel)
 
@@ -16,23 +17,20 @@ export function openRules(c, mode, action) {
   const r = St.rules(c);
   const now = Date.now();
   const rows = [
-    ['checkin', 'Late check-in', 'Check-in after ' + ruleTime(r.lateCheckIn)],
-    ['calendar', 'Late cancellation', 'Cancel after ' + ruleTime(r.lateCancel)],
-    ['calendar', 'Short-notice cancellation', 'Cancel after ' + ruleTime(r.shortNotice)],
-    ['calendar', 'Last-minute cancellation', 'Cancel after ' + ruleTime(r.lastMinute)],
-    ['strike', 'No-show', 'Booked, but never checked in.'],
+    ['checkin', 'Late check-in · 1 strike', 'Check-in after ' + ruleTime(r.lateCheckIn)],
+    ['calendar', 'Late cancellation · 1 strike', 'Cancel after ' + ruleTime(r.lateCancel)],
+    ['calendar', 'Short-notice cancellation · 2 strikes', 'Cancel after ' + ruleTime(r.shortNotice)],
+    ['calendar', 'Last-minute cancellation · 3 strikes', 'Cancel after ' + ruleTime(r.lastMinute)],
+    ['strike', 'No-show · ' + NO_SHOW_STRIKES + ' strikes', 'Booked, but never checked in.'],
   ];
-  let cost = '';
-  if (mode === 'cancel') {
-    cost = now < r.lateCancel ? 'Cancelling now is free.' : now < r.shortNotice ? 'This is a late cancellation and gives 1 strike.' : 'This is a very late cancellation and gives 2 strikes.';
-  }
+  const cost = mode === 'cancel' ? cancelCost(cancelStrikes(r, now)) : '';
   const ore = St.city().user_strike_block_un_lock_price;
   const unlock = ore ? Math.round(ore / 100) : null;
   const s = sheet('', '<h2 class="sheet-title">' + esc(c.title.toUpperCase()) + '</h2><p class="center muted">' + esc(classDateLine(c)) + ' at ' + esc(St.studioName(c.studio_id, c.studio)) + '</p>' +
     '<div class="card rule-list">' + rows.map(([ic, t, d]) => '<div>' + icon(ic) + '<div><b>' + esc(t) + '</b><p class="muted">' + esc(d) + '</p></div></div>').join('') + '</div>' +
     (cost ? '<p class="center"><b>' + esc(cost) + '</b></p>' : '') +
     '<button class="btn ' + (mode === 'cancel' ? 'red' : 'lime') + '" data-go>' + (mode === 'cancel' ? 'Cancel booking' : 'Book') + '</button>' +
-    '<p class="muted small note">' + icon('info') + ' Reaching 3 strikes pauses class booking for 14 days.' + (unlock ? ' You can lift a block early for ' + unlock + ' kr.' : '') + '</p>', { cls: 'tall' });
+    '<p class="muted small note">' + icon('info') + ' Reaching ' + STRIKES_TO_BLOCK + ' strikes pauses class booking for ' + BLOCK_DAYS + ' days; one strike expires every ' + STRIKE_EXPIRY_DAYS + ' days.' + (unlock ? ' You can lift a block early for ' + unlock + ' kr.' : '') + '</p>', { cls: 'tall' });
   const go = s.el.querySelector('[data-go]');
   go.addEventListener('click', () => run(go, async () => { await action(); s.close(); }));
 }
@@ -256,9 +254,9 @@ function openAccount() {
       (limits.length ? '<h3 class="sec-title">VISITS</h3><div class="card">' + limits.map((l) => '<div class="meter-row"><div class="row-between"><span>' + names[l.type] + '</span><b>' +
         (l.total > 0 ? (l.used || 0) + ' / ' + l.total : (l.used || 0) + ' · unlimited') + '</b></div>' + (l.total > 0 ? '<div class="meter"><i style="width:' + Math.min(100, Math.round(100 * (l.used || 0) / l.total)) + '%"></i></div>' : '') + '</div>').join('') + '</div>' : '') +
       '<h3 class="sec-title">STRIKES</h3><div class="card"><div class="strikes">' + [0, 1, 2].map((i) => '<i class="' + (i < strikes ? 'on' : '') + '"></i>').join('') + '<b>' + strikes + ' of 3</b></div>' +
-      '<p class="muted small">' + esc(b.blocked ? 'Class booking is blocked' + (b.block_end_date ? ' until ' + fmt(b.block_end_date, { day: 'numeric', month: 'long' }) : '') + '.' : 'At 3 strikes, class booking pauses for 14 days.') +
+      '<p class="muted small">' + esc(b.blocked ? 'Class booking is blocked' + (b.block_end_date ? ' until ' + fmt(b.block_end_date, { day: 'numeric', month: 'long' }) : '') + '.' : 'At ' + STRIKES_TO_BLOCK + ' strikes, class booking pauses for ' + BLOCK_DAYS + ' days.') +
       ' Free unlocks left: ' + (b.free_unlocks_remaining || 0) + (b.total_free_unlocks ? ' of ' + b.total_free_unlocks : '') + '.</p>' +
-      '<ul class="muted small"><li>Late cancellation (3 to 12 hours before) or late check-in: 1 strike</li><li>Very late cancellation (under 3 hours) or no-show: 2 strikes</li></ul></div>' +
+      '<ul class="muted small">' + POLICY.map((t) => '<li>' + esc(t) + '</li>').join('') + '</ul></div>' +
       '<p class="muted small note">Edit your profile, pause or change your plan in the official Bruce app.</p>';
   });
 }

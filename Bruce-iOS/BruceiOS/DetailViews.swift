@@ -239,8 +239,9 @@ struct ClassDetailView: View {
             RuleRow(icon: "qrcode.viewfinder", title: "Check in",
                     text: "\(BruceDate.format(r.start, "d MMM yyyy")), \(BruceDate.time(r.checkInFrom)) – \(BruceDate.time(r.lateCheckIn))")
             if checkedIn == nil {
-                RuleRow(icon: "calendar.badge.minus", title: "Late cancellation", text: "Cancel after \(BookingRules.long(r.lateCancel))")
-                RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation", text: "Cancel after \(BookingRules.long(r.shortNotice))")
+                RuleRow(icon: "calendar.badge.minus", title: "Late cancellation · 1 strike", text: "Cancel after \(BookingRules.long(r.lateCancel))")
+                RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation · 2 strikes", text: "Cancel after \(BookingRules.long(r.shortNotice))")
+                RuleRow(icon: "calendar.badge.minus", title: "Last-minute cancellation · 3 strikes", text: "Cancel after \(BookingRules.long(r.lastMinute))")
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -435,14 +436,18 @@ struct BookingRulesSheet: View {
                     }
                     .frame(maxWidth: .infinity).padding(.bottom, 22)
                     VStack(alignment: .leading, spacing: 16) {
-                        RuleRow(icon: "qrcode.viewfinder", title: "Late check-in", text: "Check-in after \(BookingRules.long(r.lateCheckIn))")
-                        RuleRow(icon: "calendar.badge.minus", title: "Late cancellation", text: "Cancel after \(BookingRules.long(r.lateCancel))")
-                        RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation", text: "Cancel after \(BookingRules.long(r.shortNotice))")
-                        RuleRow(icon: "calendar.badge.minus", title: "Last-minute cancellation", text: "Cancel after \(BookingRules.long(r.lastMinute))")
-                        RuleRow(icon: "calendar.badge.exclamationmark", title: "No-show", text: Copy.noShow)
+                        RuleRow(icon: "qrcode.viewfinder", title: "Late check-in · 1 strike", text: "Check-in after \(BookingRules.long(r.lateCheckIn))")
+                        RuleRow(icon: "calendar.badge.minus", title: "Late cancellation · 1 strike", text: "Cancel after \(BookingRules.long(r.lateCancel))")
+                        RuleRow(icon: "calendar.badge.minus", title: "Short-notice cancellation · 2 strikes", text: "Cancel after \(BookingRules.long(r.shortNotice))")
+                        RuleRow(icon: "calendar.badge.minus", title: "Last-minute cancellation · 3 strikes", text: "Cancel after \(BookingRules.long(r.lastMinute))")
+                        RuleRow(icon: "calendar.badge.exclamationmark", title: "No-show · \(Policy.noShowStrikes) strikes", text: Copy.noShow)
                     }
                     .padding(18)
                     .glassEffect(.regular, in: .rect(cornerRadius: 26))
+                    if booking != nil {
+                        Text(Copy.cancelCost(strikes: r.cancelStrikes()))
+                            .font(.system(size: 16, weight: .semibold)).frame(maxWidth: .infinity).padding(.top, 20)
+                    }
                     Group {
                         if let b = booking {
                             RedButton(title: m.loading ? "Cancelling…" : "Cancel booking") { Task { await m.cancel(b); m.dismissSheets() } }

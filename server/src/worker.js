@@ -47,12 +47,14 @@ const WATCH_FAR_EVERY_MIN = 5;
 /// After a failed booking attempt on a free spot the watch waits this long, and is dropped after MAX_WATCH_FAILS.
 const WATCH_RETRY_MS = 5 * 60_000;
 const MAX_WATCH_FAILS = 5;
-/// Late spots (Bruce's strike policy, Copy.swift): cancelling is free until the class's `unbookable_latest_time`
-/// (12 h before when the class does not say), costs 1 strike until 3 h before, then 2, as does a no-show. A spot that
-/// frees up after the free cancellation is booked or offered as the user chose (`lateSpots`, default "ask"); under 3 h
-/// before the class it is always offered: a push with a Book button (category LATE_SPOT), not a booking.
+/// Late spots (Bruce's strike policy since June 2026, Copy.swift): cancelling is free until the class's
+/// `unbookable_latest_time` (12 h before when the class does not say), costs 1 strike until 3 h before, 2 until 1 h
+/// before, then 3, as does a no-show (3 strikes block booking for 14 days). A spot that frees up after the free
+/// cancellation is booked or offered as the user chose (`lateSpots`, default "ask"); from 3 h before the class, when
+/// cancelling costs 2 strikes or more, it is always offered: a push with a Book button (category LATE_SPOT), not a booking.
 const FREE_CANCEL_S = 12 * 3600;
 const ALWAYS_ASK_MS = 3 * 3600_000;
+const LAST_MINUTE_MS = 3600_000;
 /// The daily history refresh (challenges, goal reminders, Wrapped percentiles); must match a cron in wrangler.toml.
 export const DAILY_CRON = "30 2 * * *";
 /// Bruce requests (booking pages of 30) one daily run may spend; users not refreshed today go first. The Workers free
@@ -147,19 +149,27 @@ export function lateSpotAction(start, freeUntil, now, lateSpots) {
   return lateSpots === "book" ? "book" : "ask";
 }
 
-const strikes = (start, now) => (start - now < ALWAYS_ASK_MS ? "2 strikes" : "1 strike");
+/** Strikes a cancellation costs at `now`: 0 while free, 1 until 3 h before, 2 until 1 h before, then 3. */
+export function cancelStrikes(start, freeUntil, now) {
+  if (now < freeUntil) return 0;
+  return start - now < LAST_MINUTE_MS ? 3 : start - now < ALWAYS_ASK_MS ? 2 : 1;
+}
+const strikes = (n) => `${n} strike${n === 1 ? "" : "s"}`;
 
 /** The line about cancelling under a "Booked" push. */
 export function cancelNote(start, freeUntil, now) {
-  if (now < freeUntil) return `Free cancel until ${clock(freeUntil)}.`;
-  if (start - now < ALWAYS_ASK_MS) return "Cancelling or a no-show now costs 2 strikes.";
-  return `Can't make it? Cancel before ${clock(start - ALWAYS_ASK_MS)}: 1 strike. After that, or a no-show: 2.`;
+  switch (cancelStrikes(start, freeUntil, now)) {
+    case 0: return `Free cancel until ${clock(freeUntil)}.`;
+    case 1: return `Can't make it? Cancel before ${clock(start - ALWAYS_ASK_MS)}: 1 strike. Before ${clock(start - LAST_MINUTE_MS)}: 2. After that, or a no-show: 3.`;
+    case 2: return `Can't make it? Cancel before ${clock(start - LAST_MINUTE_MS)}: 2 strikes. After that, or a no-show: 3.`;
+    default: return "Cancelling or a no-show now costs 3 strikes.";
+  }
 }
 
-/** The push for a spot that is offered instead of booked. */
+/** The push for a spot that is offered instead of booked (always after the free cancellation). */
 export function askMessage(title, start, now, waitlist) {
   return { title: `${waitlist ? "Spot free" : "Open for booking"}: ${title}`,
-           body: `${when(start)}. Cancelling after booking costs ${strikes(start, now)}. Book only if you'll go.` };
+           body: `${when(start)}. Cancelling after booking costs ${strikes(cancelStrikes(start, now, now))}. Book only if you'll go.` };
 }
 
 // MARK: Bruce API
