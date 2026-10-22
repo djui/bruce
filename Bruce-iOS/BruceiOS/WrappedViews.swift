@@ -19,8 +19,8 @@ private enum W {
     /// Seconds per story card.
     static let duration: Double = 6
 
-    /// The wide black display face of the app (the mockup's Unbounded).
-    static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .black).width(.expanded) }
+    /// The wide black display face of the app: Unbounded Black (`Theme.display`).
+    static func display(_ size: CGFloat) -> Font { Theme.display(size, weight: .black) }
     /// A display size at which the longest word of `text` fits `width` on one line (wide black caps are up to ~0.95 em).
     static func fit(_ text: String, max: CGFloat, width: CGFloat) -> CGFloat {
         let longest = text.split(whereSeparator: { $0 == " " || $0 == "\n" }).map(\.count).max() ?? 1

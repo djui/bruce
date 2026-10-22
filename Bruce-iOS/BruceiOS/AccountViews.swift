@@ -109,14 +109,14 @@ struct WellnessSheet: View {
             switch w?.state ?? .unknown {
             case .limited(let total):
                 Text("\(Text("\(w?.used ?? 0)").foregroundStyle(Theme.limeInk))\(Text("/\(total)").foregroundStyle(Theme.secondary))")
-                    .bruceFont(52, weight: .black, width: .expanded)
+                    .bruceDisplay(52, weight: .black)
                 Text("VISITS USED THIS MONTH · \(m.tier) PLAN").bruceFont(12, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
                 Text("\(max(0, w?.remaining ?? total - (w?.used ?? 0))) remaining").bruceFont(15)
             case .unlimited:
                 Image(systemName: "infinity").bruceFont(48, weight: .black).foregroundStyle(Theme.limeInk)
                 Text("UNLIMITED VISITS · \(m.tier) PLAN").bruceFont(12, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
             case .notIncluded:
-                Text("0/0").bruceFont(52, weight: .black, width: .expanded).foregroundStyle(Theme.secondary)
+                Text("0/0").bruceDisplay(52, weight: .black).foregroundStyle(Theme.secondary)
                 Text("NOT INCLUDED IN THE \(m.tier) PLAN").bruceFont(12, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
                 Text("Wellness studios can still be booked as paid tickets.").bruceFont(15)
             case .unknown:
@@ -231,7 +231,7 @@ struct StrikesView: View {
                                 .glassEffect(.regular, in: .circle)
                         }
                     }
-                    Text("\(count) strike\(count == 1 ? "" : "s")").bruceFont(38, weight: .black, width: .expanded)
+                    Text("\(count) strike\(count == 1 ? "" : "s")").bruceDisplay(38, weight: .black)
                         .foregroundStyle(count > 0 ? Theme.strikeRed : Theme.teal)
                     Text(Copy.strikeSummary(m.blockInfo, unlockPrice: m.unblockPriceKr))
                         .bruceFont(16, weight: .semibold)
@@ -485,7 +485,7 @@ struct PauseMembershipView: View {
     func box(_ title: String, _ value: Int) -> some View {
         VStack(spacing: 14) {
             Text(title).bruceFont(14).foregroundStyle(.white.opacity(0.75))
-            Text("\(value)").bruceFont(34, weight: .black, width: .expanded)
+            Text("\(value)").bruceDisplay(34, weight: .black)
         }
         .frame(width: 140, height: 124)
         .glassEffect(.regular, in: .rect(cornerRadius: 26))
@@ -618,7 +618,7 @@ struct MembershipPlansView: View {
         let en = Locale(identifier: "en_US")
         return VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(plan.code).bruceFont(34, weight: .black, width: .expanded)
+                Text(plan.code).bruceDisplay(34, weight: .black)
                 Spacer()
                 if let p = price, annual, p.monthly > p.annual {
                     Text("Save SEK \(((p.monthly - p.annual) * 12).formatted(.number.locale(en)))").bruceFont(14, weight: .bold).foregroundStyle(Theme.tealPrice)
@@ -631,7 +631,7 @@ struct MembershipPlansView: View {
                     Text("SEK \(p.monthly.formatted(.number.locale(en)))").strikethrough().bruceFont(22).foregroundStyle(.white.opacity(0.7))
                 }
                 HStack(alignment: .lastTextBaseline, spacing: 4) {
-                    Text((annual ? p.annual : p.monthly).formatted(.number.locale(en))).bruceFont(60, weight: .black)
+                    Text((annual ? p.annual : p.monthly).formatted(.number.locale(en))).bruceDisplay(60, weight: .black)
                     Text("SEK / mo").bruceFont(16)
                 }
                 .foregroundStyle(Theme.tealPrice)

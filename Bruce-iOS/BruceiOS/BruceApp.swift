@@ -238,7 +238,8 @@ struct SheetScreen: View {
         case .settings: SettingsView()
         case .login: LoginView()
         case .checkIn: CheckInScanner()
-        case .info(let title): PlaceholderPage(title: title)
+        case .info(let title):
+            if title == "Open source licenses" { LicensesView() } else { PlaceholderPage(title: title) }
         case .parakey(let id): ParakeySheet(studioId: id)
         case .search: EmptyView()
         case .selectCity: SelectCitySheet()
@@ -319,6 +320,26 @@ struct PlaceholderPage: View {
     var body: some View {
         EmptyState(system: "info.circle", text: "Not available in this unofficial client. Use the official Bruce Studios app for this.")
             .sheetChrome(title)
+    }
+}
+
+/// "Open source licenses": the third-party fonts bundled with the app, each with its license text.
+struct LicensesView: View {
+    private var ofl: String {
+        Bundle.main.url(forResource: "Unbounded-OFL", withExtension: "txt").flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? "SIL Open Font License 1.1, https://openfontlicense.org"
+    }
+    var body: some View {
+        List {
+            Section {
+                Text("Unbounded").bruceDisplay(22, weight: .heavy)
+                Text("Used for headlines and numbers. Copyright 2022 The Unbounded Project Authors (github.com/googlefonts/unbounded). Licensed under the SIL Open Font License, Version 1.1.")
+                    .bruceFont(14).foregroundStyle(Theme.secondary)
+            }
+            Section("SIL Open Font License 1.1") {
+                Text(ofl).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.secondary)
+            }
+        }
+        .sheetChrome("Open source licenses")
     }
 }
 

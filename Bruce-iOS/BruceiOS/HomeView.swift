@@ -112,7 +112,7 @@ struct HomeView: View {
                                 RemotePhoto(fileId: it.photo, symbol: "figure.highintensity.intervaltraining")
                                 LinearGradient(colors: [.clear, .black.opacity(0.55)], startPoint: .center, endPoint: .bottom)
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(it.className ?? "").bruceFont(26, weight: .heavy, width: .expanded).lineLimit(2)
+                                    Text(it.className ?? "").bruceDisplay(26, weight: .heavy).lineLimit(2)
                                     Text(BruceDate.format(it.startTime.flatMap(BruceDate.parse), "EEEE | d MMMM | HH:mm"))
                                         .bruceFont(15, weight: .medium)
                                 }

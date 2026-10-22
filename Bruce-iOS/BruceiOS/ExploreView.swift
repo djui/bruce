@@ -283,7 +283,7 @@ struct StudioCard: View, Equatable {
             RemotePhoto(fileId: studio.photo, symbol: symbol)
             LinearGradient(colors: [.clear, .black.opacity(0.6)], startPoint: .center, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 3) {
-                Text(studio.name).bruceFont(24, weight: .heavy, width: .expanded).lineLimit(2)
+                Text(studio.name).bruceDisplay(24, weight: .heavy).lineLimit(2)
                 Text(([studio.vicinity] + [distance.map { formatDistance(Int($0)) }]).compactMap { $0 }.joined(separator: " | "))
                     .bruceFont(15, weight: .medium)
             }

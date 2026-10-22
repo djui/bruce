@@ -100,7 +100,7 @@ struct DropCard: View {
                     Spacer()
                     Image(systemName: product?.kind.symbol ?? "tshirt").font(.system(size: 44, weight: .ultraLight)).foregroundStyle(.white.opacity(0.35))
                 }
-                Text(drop.title).bruceFont(19, weight: .heavy, width: .expanded).lineLimit(2).minimumScaleFactor(0.8)
+                Text(drop.title).bruceDisplay(19, weight: .heavy).lineLimit(2).minimumScaleFactor(0.8)
                 Text(Copy.shopPickup(m.studioName(drop.studioId))).bruceFont(13).opacity(0.85)
                 HStack {
                     Label(drop.countdownText(), systemImage: "clock").bruceFont(12, weight: .bold)

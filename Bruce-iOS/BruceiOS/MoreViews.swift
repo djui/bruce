@@ -12,7 +12,7 @@ struct WelcomeView: View {
         VStack(spacing: 0) {
                 Spacer()
                 VStack(spacing: 14) {
-                    Text(appDisplayName.uppercased()).bruceFont(54, weight: .black, width: .expanded)
+                    Text(appDisplayName.uppercased()).bruceDisplay(54, weight: .black)
                         .minimumScaleFactor(0.6).lineLimit(1)
                     Text(Copy.tagline).bruceFont(14, weight: .heavy, width: .expanded).kerning(1)
                 }
