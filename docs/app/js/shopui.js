@@ -1,7 +1,8 @@
 // Studio shop on the web (shop.js; ShopViews.swift on the iPhone): Home's Shop section with the drop card, Home › Shop
 // (#/home/shop/all) with its chips, a product page (#/<tab>/product/<id>), the "Shop at the desk" rail on a studio page
 // and "Forgot your towel?" on the ticket. Everything shows only while the city's catalogue has something in it. The
-// studio sells: the buttons say "Ask at the desk" or open its webshop, and Notify me only reminds.
+// studio sells: the buttons say "Ask at the desk" or open its webshop, and Notify me only reminds. Sample listings
+// (shop.js, SampleShop.swift) wear a "Sample" tag and their buttons only say "Sample item, not for sale" (`data-sample`).
 import { $, esc, icon, fmt } from './util.js';
 import * as St from './store.js';
 import { S } from './store.js';
@@ -15,9 +16,14 @@ export const productRoute = (tab, id) => '#/' + (tab || 'home') + '/product/' + 
 /** A product's picture: the kind's tint and icon (listings carry no photos). */
 export const art = (kind, cls) => '<span class="part k-' + esc(kind) + (cls ? ' ' + cls : '') + '" aria-hidden="true">' + icon(Sh.kindIcon(kind)) + '</span>';
 
+/** "SAMPLE" on a listing that is not real: on the picture, the drop card and the product page. */
+export const sampleTag = () => '<span class="stag">' + esc(Sh.SAMPLE_TAG) + '</span>';
+/** The line at the top of Home › Shop while a sample listing is in it. */
+export const sampleNote = () => '<p class="sample-note">' + icon('info') + ' ' + esc(Sh.SAMPLE_NOTE) + '</p>';
+
 /** A product in the grid and the rail: picture, title, "449 kr · Ångan". */
 export function tileHTML(p, href, compact) {
-  return '<a class="ptile' + (compact ? ' compact' : '') + '" href="' + href + '" aria-label="' + esc(p.title + ', ' + Sh.kr(p.priceOre) + ', ' + St.studioName(p.studioId)) + '">' + art(p.kind) +
+  return '<a class="ptile' + (compact ? ' compact' : '') + '" href="' + href + '" aria-label="' + esc((p.sample ? 'Sample, ' : '') + p.title + ', ' + Sh.kr(p.priceOre) + ', ' + St.studioName(p.studioId)) + '">' + art(p.kind) + (p.sample ? sampleTag() : '') +
     '<b>' + esc(p.title) + '</b><span><em>' + esc(Sh.kr(p.priceOre)) + '</em>' + (compact ? '' : ' · ' + esc(studioShort(p.studioId))) + '</span></a>';
 }
 
@@ -26,6 +32,7 @@ const tag = (unlocked) => '<span class="mtag">' + (unlocked ? 'Unlocked' : 'Drop
 function dropButton(d) {
   const now = Date.now();
   const state = Sh.dropState(d, now), on = S.shopNotify.has(d.id), url = Sh.reserveUrl(d, now);
+  if (d.sample && state === 'open') return '<button class="btn sm lime" data-sample>' + icon('external') + ' Reserve</button>';
   if (state === 'ready') return '<span class="btn sm lime">' + icon('checkSeal') + ' ' + Sh.READY + '</span>';
   if (state === 'closed') return '<span class="btn sm glass on">' + icon('clock') + ' Closed</span>';
   if (url) return '<a class="btn sm lime" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' Reserve</a>';
@@ -37,8 +44,8 @@ function dropButton(d) {
 export function dropCardHTML(d, href) {
   const now = Date.now();
   const p = Sh.product(S.shop, d.productId);
-  return '<div class="drop-card" role="group" aria-label="' + esc('Drop: ' + d.title + ', ' + Sh.countdownText(d, now) + ', ' + Sh.progressText(d) + ' reserved') + '">' +
-    '<a class="drop-body" href="' + href + '"><span class="row-between">' + tag(d.unlocked) + icon(p ? Sh.kindIcon(p.kind) : 'brief', 'drop-glyph') + '</span>' +
+  return '<div class="drop-card" role="group" aria-label="' + esc((d.sample ? 'Sample drop: ' : 'Drop: ') + d.title + ', ' + Sh.countdownText(d, now) + ', ' + Sh.progressText(d) + ' reserved') + '">' +
+    '<a class="drop-body" href="' + href + '"><span class="row-between"><span class="tags">' + tag(d.unlocked) + (d.sample ? sampleTag() : '') + '</span>' + icon(p ? Sh.kindIcon(p.kind) : 'brief', 'drop-glyph') + '</span>' +
     '<b>' + esc(d.title) + '</b><span>Pick up at ' + esc(St.studioName(d.studioId)) + '</span>' +
     '<span class="drop-meta"><span>' + icon(Sh.dropState(d, now) === 'ready' ? 'checkSeal' : 'clock') + esc(Sh.countdownText(d, now)) + '</span><span>' + esc(Sh.progressText(d)) + '</span></span>' +
     '<span class="meter"><i style="width:' + Math.round(100 * Sh.progress(d)) + '%"></i></span></a>' +
@@ -76,10 +83,13 @@ export function shopHomeHTML(tab) {
 export function shopClick(e, rerender) {
   const sz = e.target.closest('[data-size]');
   if (sz) { sz.parentElement.querySelectorAll('[data-size]').forEach((x) => x.setAttribute('aria-pressed', x === sz)); return true; }
+  // Buy, Reserve and Webshop on a sample: a short message, nothing sent.
+  if (e.target.closest('[data-sample]')) { toast(Sh.SAMPLE_TOAST); return true; }
   const b = e.target.closest('[data-notify]');
   if (!b) return false;
   const d = S.shop && S.shop.drops.find((x) => x.id === b.dataset.notify);
   if (!d) return true;
+  if (d.sample) { toast(Sh.SAMPLE_TOAST); if (rerender) rerender(); return true; }
   run(b, async () => { await St.setNotify(d, !S.shopNotify.has(d.id)); if (rerender) rerender(); });
   return true;
 }
@@ -97,12 +107,12 @@ export function renderShop(el, ctx) {
     const products = state.chip === 'drops' ? [] : Sh.filtered(c, state.chip);
     el.innerHTML = '<div class="pane-pad"><div class="pane-bar">' + close + '</div><h1 class="screen-title">SHOP</h1>' +
       (!c ? loading('Loading the shop…') :
-        '<div class="chips">' + chip('All', !state.chip, 'data-schip=""') + (drops.length ? chip('Drops', state.chip === 'drops', 'data-schip="drops"') : '') +
+        (Sh.hasSamples(c) ? sampleNote() : '') + '<div class="chips">' + chip('All', !state.chip, 'data-schip=""') + (drops.length ? chip('Drops', state.chip === 'drops', 'data-schip="drops"') : '') +
         Sh.kinds(c).map((k) => chip(esc(Sh.kindTitle(k)), state.chip === k, 'data-schip="' + k + '"')).join('') + '</div>' +
         (!state.chip || state.chip === 'drops' ? drops.map((d) => dropCardHTML(d, productRoute(ctx.tab, d.productId))).join('') : '') +
         (products.length ? (!state.chip ? '<h2 class="sec-title">Near you</h2>' : '') + '<div class="shop-grid">' + products.map((p) => tileHTML(p, productRoute(ctx.tab, p.id))).join('') + '</div>'
           : state.chip === 'drops' ? '' : empty('gift', Sh.isEmpty(c) ? 'Nothing listed in ' + St.city().name + ' yet.' : 'Nothing in this group right now.')) +
-        '<p class="muted small note">' + esc(Sh.CATALOG_FOOTER) + '</p>') + '</div>';
+        (Sh.hasReal(c) ? '<p class="muted small note">' + esc(Sh.CATALOG_FOOTER) + '</p>' : '')) + '</div>';
   };
   el.onclick = (e) => {
     if (e.target.closest('[data-sact="back"]')) { ctx.close(); return; }
@@ -138,7 +148,9 @@ export function renderProduct(el, id, ctx) {
       p.variants.map((v) => (buy && v.inStock ? '<button class="chip" data-variant="' + esc(v.id) + '" aria-pressed="' + (draft && draft.variant && draft.variant.id === v.id) + '">' + esc(v.label) + '</button>'
         : '<span class="chip' + (v.inStock ? '' : ' off') + '">' + esc(v.label) + (v.inStock ? '' : ' · out') + '</span>')).join('') + '</div>' : '';
     // A drop's Reserve opens the studio's own checkout while the window is open; before it, Notify me; at the desk, "Ready for pickup".
-    const actions = buy ? '<button class="btn lime" data-buy>' + icon('gift') + ' ' + esc('Buy · ' + Sh.kr(Sh.totals(draft).totalOre)) + '</button>'
+    const actions = p.sample ? '<button class="btn lime" data-sample>' + icon(d && dstate === 'open' ? 'external' : p.fulfilment === 'link' ? 'external' : 'gift') + ' ' +
+        esc(d && dstate === 'open' ? 'Reserve · ' + Sh.kr(p.priceOre) : p.fulfilment === 'link' ? 'Webshop' : 'Buy · ' + Sh.kr(p.priceOre)) + '</button>'
+      : buy ? '<button class="btn lime" data-buy>' + icon('gift') + ' ' + esc('Buy · ' + Sh.kr(Sh.totals(draft).totalOre)) + '</button>'
       : d && dstate === 'open' ? (reserve ? '<a class="btn lime" href="' + esc(reserve) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' ' + esc('Reserve · ' + Sh.kr(p.priceOre)) + '</a><p class="muted small center">' + esc(Sh.RESERVE_HINT) + '</p>'
         : '<span class="btn glass" aria-disabled="true">' + icon('person') + ' ' + esc(Sh.RESERVE_DESK) + '</span>')
       : d && dstate === 'ready' ? '<span class="btn lime" aria-disabled="true">' + icon('checkSeal') + ' ' + Sh.READY + '</span>'
@@ -146,15 +158,15 @@ export function renderProduct(el, id, ctx) {
       : link ? '<a class="btn lime" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + (p.linkUrl ? 'Open in the webshop' : 'Webshop') + icon('external') + '</a>'
       : '<span class="btn glass" aria-disabled="true">' + icon('person') + ' Ask at the desk</span>';
     el.innerHTML = '<header class="hero product-hero k-' + esc(p.kind) + '">' + icon(Sh.kindIcon(p.kind), 'product-glyph') + '<div class="hero-bar">' + close + '</div></header>' +
-      '<div class="pane-pad"><h1 class="product-title">' + esc(p.title) + '</h1>' +
+      '<div class="pane-pad"><h1 class="product-title">' + esc(p.title) + '</h1>' + (p.sample ? '<p>' + sampleTag() + '</p>' : '') +
       '<p class="muted small">' + esc([studio, p.description].filter(Boolean).join(' · ')) + '</p>' +
       '<p class="price-row"><b>' + esc(Sh.kr(p.priceOre)) + '</b><span class="muted small">incl. VAT</span></p>' +
       variants +
       (d ? dropBlockHTML(d, studio) : '') +
       (buy ? deliveryHTML(front, studio, draft.delivery, 'data-delivery') : '') +
-      '<a class="card row-card" href="' + ctx.link('studio', p.studioId) + '">' + icon('building') + '<div class="grow"><b>' + esc(studio) + '</b><p class="muted">' + esc(front ? Sh.soldBy(front.sellerName, p.fulfilment === 'desk', front.checkout) : 'Studio page') + '</p></div>' + icon('chevron') + '</a>' +
+      '<a class="card row-card" href="' + ctx.link('studio', p.studioId) + '">' + icon('building') + '<div class="grow"><b>' + esc(studio) + '</b><p class="muted">' + esc(front ? Sh.soldBy(front.sellerName, p.fulfilment === 'desk' && !front.sample, front.checkout) : 'Studio page') + '</p></div>' + icon('chevron') + '</a>' +
       (front && front.pickupNote ? '<p class="muted small">' + icon('pin') + ' ' + esc(front.pickupNote) + '</p>' : '') +
-      '<p class="muted small note">' + esc(Sh.NOT_AFFILIATED) + '</p>' +
+      '<p class="muted small note">' + esc(p.sample ? Sh.SAMPLE_PRODUCT_NOTE : Sh.NOT_AFFILIATED) + '</p>' +
       '<div class="actions sticky">' + actions + '</div></div>';
   };
   el.onclick = (e) => {
@@ -241,7 +253,7 @@ function dropBlockHTML(d, studio) {
   const now = Date.now();
   const on = S.shopNotify.has(d.id), state = Sh.dropState(d, now);
   const line = state === 'ready' ? Sh.readyBody(Sh.storefront(S.shop, d.studioId)) : state === 'closed' ? Sh.DROP_CLOSED : d.unlocked ? Sh.FINISHER_HINT + ' ' + Sh.dropLine(d) + '.' : Sh.dropLine(d);
-  return '<div class="card drop-block"><div class="row-between">' + tag(d.unlocked) + '<b class="small">' + icon(state === 'ready' ? 'checkSeal' : 'clock') + ' ' + esc(Sh.countdownText(d, now)) + '</b></div>' +
+  return '<div class="card drop-block"><div class="row-between"><span class="tags">' + tag(d.unlocked) + (d.sample ? sampleTag() : '') + '</span><b class="small">' + icon(state === 'ready' ? 'checkSeal' : 'clock') + ' ' + esc(Sh.countdownText(d, now)) + '</b></div>' +
     '<p>' + esc(line) + '</p><div class="row-between small"><span class="muted">Pick up at ' + esc(studio) + '</span><b>' + esc(Sh.progressText(d)) + '</b></div>' +
     '<span class="meter"><i style="width:' + Math.round(100 * Sh.progress(d)) + '%"></i></span>' +
     (state === 'upcoming' || state === 'open' ? '<label class="toggle"><span>Notify me<small class="muted">' + esc(state === 'open' ? 'A push to the Brüce iPhone app and an email when it is ready for pickup.' : Sh.NOTIFY_HINT) + '</small></span><input type="checkbox" data-notify="' + esc(d.id) + '"' + (on ? ' checked' : '') + '><i></i></label>' : '') + '</div>';
@@ -255,16 +267,17 @@ export function shopRailHTML(studioId, tab) {
   const products = Sh.productsFor(S.shop, studioId);
   if (!front || !products.length) return '';
   const url = Sh.httpsUrl(front.webshopUrl);
+  const seller = front.sample ? '<button class="btn glass sm" data-sample>' + icon('external') + ' Webshop</button>'
+    : url ? '<a class="btn glass sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' Webshop</a>' : '<span class="chip">Ask at the desk</span>';
   return '<div class="card shop-rail"><div class="row-between"><h3 class="section-head">Shop at the desk</h3><span class="muted small">' + products.length + (products.length === 1 ? ' item' : ' items') + '</span></div>' +
     '<div class="hscroll shop-row">' + products.map((p) => tileHTML(p, productRoute(tab, p.id), true)).join('') + '</div>' +
-    '<div class="row-between seller"><span class="muted small">' + esc(Sh.soldBy(front.sellerName, products.some((p) => p.fulfilment === 'desk'), front.checkout)) + '</span>' +
-    (url ? '<a class="btn glass sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' Webshop</a>' : '<span class="chip">Ask at the desk</span>') + '</div></div>';
+    '<div class="row-between seller"><span class="muted small">' + esc(Sh.soldBy(front.sellerName, products.some((p) => p.fulfilment === 'desk') && !front.sample, front.checkout)) + '</span>' + seller + '</div></div>';
 }
 
 /** "Forgot your towel?" on the ticket after a check-in at a sauna or spa whose storefront lists a towel. */
 export function towelCardHTML(studioId) {
   if (!St.isWellness(studioId)) return '';
-  const t = Sh.towelFor(S.shop, studioId);
+  const t = Sh.towelFor(S.shopReal, studioId);   // never a sample
   if (!t) return '';
   return '<a class="card row-card towel-card" href="' + productRoute('home', t.id) + '" data-close>' + art('towel', 'small') + '<div class="grow"><b>Forgot your towel?</b><p class="muted">' + esc(Sh.towelBody(t)) + '</p></div>' + icon('chevron') + '</a>';
 }

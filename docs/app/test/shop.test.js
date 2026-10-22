@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as Sh from '../js/shop.js';
 import { DEMO_SHOP, DEMO_ORDERS, handleServer } from '../js/demo.js';
+import * as St from '../js/store.js';
 
 const at = (s) => Date.parse(s);
 const drop = { id: 'race-day', studioId: 9840, productId: 'tee', title: 'Race Day tee', opensAt: at('2027-01-25T08:00:00Z'), closesAt: at('2027-02-07T22:00:00Z'), minQty: 25, maxQty: 40, reserved: 31, pickupFrom: '2027-02-20' };
@@ -242,4 +243,143 @@ test('demo: the sauna is connected, its checkout answers, and the orders', () =>
   assert.equal(orders[0].pickupCode, 'K7P2Q');
   assert.equal(DEMO_ORDERS().length, 2);
   for (const o of DEMO_ORDERS()) assert.ok(!/br[uü]ce/i.test(JSON.stringify(o.items)), 'no product carries a Bruce or Brüce mark');
+});
+
+// ---------------------------------------------------------------- sample shop (SampleShop.swift)
+
+const studio = (id, name, cats, cityId) => ({ id, name, cats: cats || [], cityId: cityId == null ? 1 : cityId });
+
+test('sample shop: the yoga studio', () => {
+  const i = { studios: [studio(1, 'Flow Södermalm', ['Yoga']), studio(2, 'Flow Vasastan', ['Yoga', 'Pilates']), studio(3, 'Hot Room', ['Yoga']), studio(4, 'Iron Works', ['Gym'])],
+    cityId: 1, distances: { 1: 3000, 2: 1500, 3: 500, 4: 100 } };
+  assert.equal(Sh.samplePicks(i).yoga, 3, 'nothing visited, no favourite: the nearest yoga studio');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { favourites: [1, 4] })).yoga, 1, 'a favourite yoga studio beats a nearer one');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { favourites: [1, 4], visits: { 2: 5, 1: 2, 4: 40 } })).yoga, 2, 'the yoga studio visited most; visits to a gym count for nothing');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { visits: { 2: 3, 3: 3 } })).yoga, 3, 'a tie goes to the nearer studio');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { visits: { 2: 3, 3: 3 }, distances: {} })).yoga, 2, 'without distances a tie goes to the lower id');
+});
+
+test('sample shop: the STC studio', () => {
+  assert.ok(Sh.isSTC('STC Rosenlundsparken'));
+  assert.ok(Sh.isSTC('stc Sundbyberg'));
+  assert.ok(Sh.isSTC('STC'));
+  assert.ok(!Sh.isSTC('Stcokholm Yoga'), 'STC must be a word of its own');
+  assert.ok(!Sh.isSTC('Gym by STC'), 'the name starts with it');
+  const i = { studios: [studio(10, 'STC Rosenlundsparken', ['Gym']), studio(11, 'STC Sturegatan Park', ['Gym']), studio(12, 'Iron Works', ['Gym'])], cityId: 1, distances: { 10: 2000, 11: 900, 12: 100 } };
+  assert.equal(Sh.samplePicks(i).gym, 11, 'the nearest STC studio');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { favourites: [10] })).gym, 10, 'a favourite STC studio');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { favourites: [10], visits: { 11: 4, 12: 30 } })).gym, 11, 'the STC studio visited most');
+  assert.equal(Sh.samplePicks({ studios: [studio(12, 'Iron Works', ['Gym'])], cityId: 1 }).gym, null, 'no STC studio: no gym samples');
+});
+
+test('sample shop: the Hyrox studio', () => {
+  const i = { studios: [studio(20, 'STC Sturegatan Park', ['Gym']), studio(21, 'STC Hornstull', ['Gym', 'Hyrox']), studio(22, 'Box 22', ['CrossFit']), studio(23, 'Flow', ['Yoga'])],
+    cityId: 1, distances: { 20: 500, 21: 4000, 22: 100, 23: 50 } };
+  assert.equal(Sh.samplePicks(i).hyrox, 21, 'only a studio that runs Hyrox: the one with the category');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { hyroxClassStudios: [20] })).hyrox, 20, 'a studio with a Hyrox class listed counts, and it is nearer');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { hyroxClassStudios: [20], visits: { 21: 12, 20: 1 } })).hyrox, 21, 'a visited Hyrox studio beats a nearer one');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { hyroxClassStudios: [20], visits: { 21: 12, 20: 1 }, hyroxVisits: { 20: 2 } })).hyrox, 20, 'visits to a Hyrox class count most, even where the studio has no category');
+  assert.equal(Sh.samplePicks({ studios: [studio(22, 'Box 22', ['CrossFit'])], cityId: 1 }).hyrox, null, 'no Hyrox studio: no Hyrox samples');
+});
+
+test('sample shop: the member\'s city, and no studio that has a real storefront', () => {
+  const i = { studios: [studio(30, 'Flow Göteborg', ['Yoga'], 2), studio(31, 'Flow Södermalm', ['Yoga'])], cityId: 1, visits: { 30: 50 } };
+  assert.equal(Sh.samplePicks(i).yoga, 31, 'another city\'s studio is left out');
+  assert.equal(Sh.samplePicks(Object.assign({}, i, { listed: [31] })).yoga, null, 'a studio with a real storefront keeps its own listings');
+});
+
+const NOW = at('2027-02-05T08:00:00Z');
+test('sample shop: the catalogue, in kronor, flagged, with no marks', () => {
+  const c = Sh.sampleCatalog({ yoga: 1, gym: 10, hyrox: 10 }, (id) => (id === 1 ? 'Flow Södermalm' : 'STC Sturegatan Park'), 'STO', NOW);
+  assert.deepEqual(c.storefronts.map((f) => f.studioId), [1, 10], 'one storefront per studio, even when the gym and Hyrox samples share one');
+  assert.deepEqual(c.storefronts.map((f) => f.sellerName), ['Flow Södermalm', 'STC Sturegatan Park'], 'the studio\'s own name');
+  assert.ok(c.storefronts.every((f) => f.sample && !f.checkout && f.webshopUrl === null));
+  assert.deepEqual(Sh.productsFor(c, 1).map((p) => p.title), ['Cork yoga mat', 'Grip socks', 'Mat towel']);
+  assert.deepEqual(Sh.productsFor(c, 1).map((p) => Sh.kr(p.priceOre)), ['795 kr', '149 kr', '299 kr']);
+  assert.deepEqual(Sh.productsFor(c, 10).map((p) => p.title), ['Gym towel', 'Shaker bottle', 'Lifting straps', 'Race-day tee', 'Grip gloves']);
+  assert.deepEqual(Sh.productsFor(c, 10).map((p) => Sh.kr(p.priceOre)), ['199 kr', '129 kr', '179 kr', '349 kr', '249 kr']);
+  assert.ok(c.products.every((p) => p.sample && Sh.isSampleId(p.id) && p.vatRate === 25), 'every product is a sample, in kronor incl. 25% VAT');
+  assert.equal(new Set(c.products.map((p) => p.id)).size, c.products.length, 'ids are unique');
+  for (const p of c.products) assert.doesNotMatch(p.title + ' ' + p.description + ' ' + p.id, /bru[ce]|stc|hyrox/i, 'no Bruce, Brüce, STC or Hyrox mark on ' + p.title);
+  assert.equal(c.drops.length, 1);
+  const d = c.drops[0];
+  assert.ok(d.sample);
+  assert.equal(d.studioId, 10, 'picked up at the Hyrox studio');
+  assert.equal(Sh.dropState(d, NOW), 'open');
+  assert.equal(Sh.countdownText(d, NOW), 'Closes in 2 d 14 h');
+  assert.equal(Sh.progressText(d), '31 of 40');
+  assert.equal(Sh.reserveUrl(d, NOW), null, 'no link to open');
+  assert.equal(Sh.dropFor(c, 'sample-10-race-day-tee').id, d.id);
+  assert.ok(Sh.isEmpty(Sh.sampleCatalog({ yoga: null, gym: null, hyrox: null }, () => '', 'STO', NOW)), 'no studio fits: nothing is listed');
+  assert.deepEqual(Sh.sampleCatalog({ hyrox: 7 }, () => 'Box', 'STO', NOW).products.map((p) => p.title), ['Race-day tee', 'Grip gloves'], 'each set stands alone');
+});
+
+test('sample shop: laid over the real catalogue, never the other way round', () => {
+  const real = DEMO_SHOP(NOW);
+  const sample = Sh.sampleCatalog({ yoga: 1, gym: 9840 }, (id) => 'Studio ' + id, 'STO', NOW);
+  const c = Sh.overlay(real, sample);
+  assert.deepEqual(c.products.slice(0, real.products.length).map((p) => p.id), real.products.map((p) => p.id), 'the real listings come first');
+  assert.ok(!c.products.some((p) => p.studioId === 9840 && p.sample), 'a studio with a real storefront gets no samples');
+  assert.deepEqual(c.products.filter((p) => p.sample).map((p) => p.studioId), [1, 1, 1]);
+  assert.ok(Sh.hasSamples(c) && Sh.hasReal(c) && !Sh.hasSamples(real));
+  assert.equal(Sh.overlay(real, null), real, 'nothing to lay over');
+  assert.equal(Sh.overlay(real, Sh.EMPTY), real);
+  const only = Sh.overlay(null, sample);
+  assert.ok(Sh.hasSamples(only) && !Sh.hasReal(only), 'samples alone: the footer must not claim the studios approved them');
+  assert.ok(!Sh.isEmpty(only), 'the shop shows');
+  // Home\'s drop card: a real drop closing later still beats a sample drop closing sooner.
+  const withDrop = Sh.sampleCatalog({ hyrox: 5 }, () => 'Box', 'STO', NOW);
+  withDrop.drops[0].closesAt = at('2027-02-05T20:00:00Z');
+  const realOnly = Object.assign({}, real, { drops: real.drops.filter((d) => !d.unlocked) });
+  assert.equal(Sh.homeDrop(Sh.overlay(realOnly, withDrop), NOW).id, 'hornstull-race-day-2027', 'a real drop before the sample');
+  assert.equal(Sh.homeDrop(Sh.overlay(Sh.EMPTY, withDrop), NOW).sample, true);
+  // The server\'s JSON can\'t say "sample".
+  const decoded = Sh.decode({ storefronts: [{ studioId: 9850, sellerName: 'Ångan Bastu AB', consentAt: '2026-11-09', sample: true }],
+    products: [{ id: 'sample-x', studioId: 9850, title: 'Towel', kind: 'towel', priceOre: 100, fulfilment: 'desk', sample: true }],
+    drops: [{ id: 'sample-d', productId: 'sample-x', title: 'Drop', opensAt: 1, closesAt: 2, sample: true }] });
+  assert.equal(decoded.storefronts[0].sample, false);
+  assert.equal(decoded.products[0].sample, false);
+  assert.equal(decoded.drops[0].sample, false);
+});
+
+test('sample shop in the app state: S.shop shows them, S.shopReal never does, and nothing leaves the device', async () => {
+  const S = St.S;
+  S.settings.showSampleShop = true;
+  S.settings.cityId = 1;
+  S.categories = [{ id: 13, title: 'Hyrox' }];
+  S.studios.set(1, { id: 1, name: 'Flow Södermalm', city_id: 1, cats: ['Yoga'], lat: 59.31, lon: 18.07 });
+  S.studios.set(2, { id: 2, name: 'Flow Vasastan', city_id: 1, cats: ['Yoga'], lat: 59.35, lon: 18.05 });
+  S.studios.set(3, { id: 3, name: 'STC Hornstull', city_id: 1, cats: ['Gym'], lat: 59.31, lon: 18.03 });
+  assert.equal(S.shopReal, null);
+  const first = S.shop;
+  assert.ok(Sh.hasSamples(first), 'no server, no login, nothing read yet: the samples are there to look at');
+  assert.equal(first.storefronts.find((f) => f.studioId === 1) && first.storefronts.find((f) => f.studioId === 3).sellerName, 'STC Hornstull');
+  assert.equal(S.shop, first, 'kept while nothing it reads changes');
+  S.favorites.set(2, 7);
+  assert.deepEqual([...new Set(S.shop.products.filter((p) => p.title === 'Cork yoga mat').map((p) => p.studioId))], [2], 'a favourite changes the pick without a reload');
+  S.history = [{ id: 1, studio_id: 1, checked_in_at: '2026-10-20T08:00:00Z', class_id: null, class: null }];
+  assert.deepEqual(S.shop.products.filter((p) => p.title === 'Cork yoga mat').map((p) => p.studioId), [1], 'so does the visit history');
+  S.history = [{ id: 2, studio_id: 3, checked_in_at: '2026-10-20T08:00:00Z', class_id: 5, class: { id: 5, title: 'Hyrox', start_time: '2026-10-20T08:00:00Z', end_time: '2026-10-20T09:00:00Z', class_categories: [{ category_id: 13 }] } }];
+  assert.deepEqual(S.shop.products.filter((p) => p.title === 'Race-day tee').map((p) => p.studioId), [3], 'a Hyrox class visited puts the tee at that studio');
+  // The real catalogue is set and read apart.
+  S.shop = Sh.decode({ city: 'STO', storefronts: [{ studioId: 1, sellerName: 'Flow Södermalm AB', consentAt: '2026-11-09' }], products: [{ id: 'mat', studioId: 1, title: 'Mat', kind: 'mat', priceOre: 100, fulfilment: 'desk' }] });
+  assert.deepEqual(S.shopReal.products.map((p) => p.id), ['mat'], 'what is set is the real catalogue');
+  assert.ok(S.shop.products.some((p) => p.sample) && S.shop.products[0].id === 'mat', 'the real listing first, the samples after');
+  assert.ok(!S.shop.products.some((p) => p.sample && p.studioId === 1), 'the studio that listed for real gets no samples');
+  assert.ok(!S.shopReal.products.some((p) => p.sample));
+  // Notify me, the checkout and the tap counter know nothing of a sample.
+  const drop = S.shop.drops.find((d) => d.sample);
+  await assert.rejects(() => St.setNotify(drop, true), { message: Sh.SAMPLE_TOAST });
+  assert.ok(!S.shopNotify.has(drop.id));
+  await assert.rejects(() => St.startCheckout({ product: { sample: true } }), { message: Sh.SAMPLE_TOAST });
+  St.tapProduct('sample-3-gym-towel');
+  assert.equal(S.shopTapped.size, 0, 'no tap counter for a sample');
+  // The towel prompt and Orders look at the real catalogue only.
+  assert.ok(Sh.isEmpty(Sh.overlay(Sh.EMPTY, null)));
+  // Switched off: the real catalogue alone.
+  S.settings.showSampleShop = false;
+  assert.equal(S.shop, S.shopReal);
+  assert.equal(St.samplesOn(), false);
+  S.shop = null;
+  assert.equal(S.shop, null, 'nothing real, no samples: no shop at all');
 });

@@ -176,6 +176,11 @@ struct SettingsView: View {
                     InfoRow(title: "Push notifications", subtitle: "Reminders and studio news", chevron: false)
                 }
             }
+            Section {
+                Toggle(isOn: Binding(get: { m.showSampleShop }, set: { m.showSampleShop = $0 })) {
+                    InfoRow(title: Copy.shopSampleSetting, subtitle: "Preview the shop with sample items", chevron: false)
+                }
+            } header: { Text(Copy.shopTitle) } footer: { Text(Copy.shopSampleSettingNote) }
             HealthSyncSection()
             Section {
                 NavigationLink(value: SheetRoute.info("Terms and conditions")) { Text("Terms and conditions") }

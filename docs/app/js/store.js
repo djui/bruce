@@ -1,6 +1,6 @@
 // App state and loaders, in the spirit of AppModel.swift: one shared store that views read and re-render from.
 import { Bruce, Autobook, Server, session, DEFAULT_API } from './api.js';
-import { ls, setZone, dayKey, todayKey, getZone, byStart, byInstant, onDay, time, ruleTime, instructor, slug } from './util.js';
+import { ls, setZone, dayKey, todayKey, getZone, byStart, byInstant, onDay, time, ruleTime, instructor, slug, metres } from './util.js';
 import { icsFor, icsFileName, feedUrl } from './calendar.js';
 import { visitsFrom } from './visits.js';
 import { remindPayload, goalTitle } from './goals.js';
@@ -43,7 +43,10 @@ export const S = {
   races: null, racesError: null, racesLoading: null,   // the race catalog (races.js), null until read
   trainingClubs: [],                                   // studios with an organiser's training status (the catalog's trainingClubs)
   raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0, raceGoingLoading: null,   // friends going (crews.js)
-  shop: null, shopAt: 0, shopLoading: null, shopNotify: new Set(), shopTapped: new Set(),       // the studio shop (shop.js), null until read
+  shopReal: null, shopAt: 0, shopLoading: null, shopNotify: new Set(), shopTapped: new Set(),   // the studio shop (shop.js): the server's catalogue, null until read
+  get shop() { return effectiveShop(); },                                                       // what the views show: it with the sample listings laid over it
+  set shop(c) { this.shopReal = c; },                                                           // only the real catalogue is ever set, read or sent
+  demoSamples: typeof location !== 'undefined' && new URLSearchParams(location.search).get('samples') === '1',   // the demo shows no samples unless asked
   orders: [], ordersLoaded: false,                                                             // Menu › Orders (shop.js, phase 4)
 };
 
@@ -94,7 +97,7 @@ export function homeCountry() { const c = city().country && city().country.code;
 
 /** Switches the city (Settings and the Explore filter): drops city caches and tells the app. */
 export function selectCity(id) {
-  S.settings.cityId = +id; saveSettings(); S.classCache.clear(); S.home = null; S.shop = null; S.shopAt = 0;
+  S.settings.cityId = +id; saveSettings(); S.classCache.clear(); S.home = null; S.shopReal = null; S.shopAt = 0;
   window.dispatchEvent(new Event('bruce:city'));
 }
 
@@ -503,22 +506,78 @@ function raceDevice() {
 // ---------------------------------------------------------------- the studio shop (shop.js, shopui.js)
 
 /** The city's catalogue from our server (GET /shop?city=), at most every 10 minutes unless `force`; the demo answers in the
- *  browser. With the server off nothing is listed. A failed read keeps whatever is shown. */
+ *  browser. With the server off nothing real is listed. A failed read keeps whatever is shown. `S.shop` adds the sample
+ *  listings (below) and needs no server. */
 export function loadShop(force) {
-  if (!serverOn() && !isDemo()) { S.shop = decodeShop(null); return Promise.resolve(S.shop); }
+  // The samples pick studios by the visit history; Home's For you reads it as well, so it is usually there already.
+  if (samplesOn() && loggedIn() && !isDemo() && !S.history && !historyAsked) { historyAsked = true; loadHistory().catch(() => {}); }
+  if (!serverOn() && !isDemo()) { S.shopReal = decodeShop(null); return Promise.resolve(S.shop); }
   if (S.shopLoading) return S.shopLoading;
   const code = city().code || 'STO';
-  if (!force && S.shop && S.shop.city === code && Date.now() - S.shopAt < 600000) return Promise.resolve(S.shop);
+  if (!force && S.shopReal && S.shopReal.city === code && Date.now() - S.shopAt < 600000) return Promise.resolve(S.shop);
   S.shopLoading = Server.shop(code).then(async (json) => {
-    S.shop = decodeShop(json); S.shopAt = Date.now();
+    S.shopReal = decodeShop(json); S.shopAt = Date.now();
     // Notify me on every device, and the drops a finished challenge unlocked, laid over the catalogue.
-    if (loggedIn()) await Server.myShop().then((r) => { S.shopNotify = new Set(r.notify || []); S.shop = mergeShop(S.shop, r); }).catch(() => {});
-  }).catch(() => { if (!S.shop) S.shop = decodeShop(null); })
+    if (loggedIn()) await Server.myShop().then((r) => { S.shopNotify = new Set(r.notify || []); S.shopReal = mergeShop(S.shopReal, r); }).catch(() => {});
+  }).catch(() => { if (!S.shopReal) S.shopReal = decodeShop(null); })
     .then(() => { S.shopLoading = null; emit(); return S.shop; });
   return S.shopLoading;
 }
+let historyAsked = false;
+
+// Sample shop (shop.js, SampleShop.swift): while Settings › Show sample shop is on, clearly marked listings are laid over the
+// real catalogue, so the shop can be looked at before any studio has approved one. They are made here from the studios, the
+// favourites, the visit history and the classes already loaded, and go nowhere.
+
+/** On by default, per device. The demo shows none unless `?samples=1` or the switch is turned on. */
+export const samplesOn = () => (isDemo() ? !!S.demoSamples : S.settings.showSampleShop !== false);
+export function setSamples(on) {
+  if (isDemo()) S.demoSamples = on; else { S.settings.showSampleShop = on; saveSettings(); }
+  emit();
+}
+function sampleInput() {
+  const hyroxId = (S.categories.find((c) => /hyrox/i.test(c.title || '')) || {}).id;
+  const isHyrox = (title, ids) => /hyrox/i.test(title || '') || (hyroxId != null && ids.includes(String(hyroxId)));
+  const visits = {}, hyrox = {}, classStudios = new Set();
+  // Check-ins, at the class's studio (the studio of the booking for a drop-in), as the apps' visit history counts them.
+  for (const b of S.history || []) {
+    if (!b.checked_in_at || b.deleted || b.deleted_at) continue;
+    const c = b.class || null, studioId = (c && (c.studio_id || (c.studio && c.studio.id))) || b.studio_id;
+    if (studioId == null) continue;
+    visits[studioId] = (visits[studioId] || 0) + 1;
+    if (c && isHyrox(c.title, (c.class_categories || []).map((x) => String(x.category_id)))) hyrox[studioId] = (hyrox[studioId] || 0) + 1;
+  }
+  for (const e of S.classCache.values()) for (const c of e.classes || []) if (isHyrox(c.title, (c.class_categories || []).map((x) => String(x.category_id)))) classStudios.add(c.studio_id);
+  const c = city().coordinates, here = S.here || (c && { lat: c.latitude, lon: c.longitude });
+  const studios = [...S.studios.values()], distances = {};
+  for (const s of studios) if (here && s.lat != null && s.lon != null) distances[s.id] = metres(here.lat, here.lon, s.lat, s.lon);
+  return { studios: studios.map((s) => ({ id: s.id, name: s.name, cityId: s.city_id, cats: s.cats })), cityId: S.settings.cityId, visits, hyroxVisits: hyrox,
+    hyroxClassStudios: [...classStudios], favourites: [...S.favorites.keys()], distances, listed: S.shopReal ? S.shopReal.storefronts.map((f) => f.studioId) : [] };
+}
+const sampleMemo = { key: null, value: null, real: undefined, sample: undefined, merged: null };
+/** The sample listings for this member, null with the switch off or when no studio fits. Picked again when what the pick reads
+ *  changes (studios, favourites, visits, loaded classes, position, the day), else kept. */
+export function sampleShop() {
+  if (!samplesOn()) return null;
+  const key = JSON.stringify([isDemo(), S.settings.cityId, S.studios.size, S.categories.length, [...S.favorites.keys()].sort(), S.history ? [S.history.length, S.history.length ? S.history[0].id : 0] : -1,
+    [...S.classCache.values()].reduce((n, e) => n + (e.classes || []).length, 0), S.shopReal ? S.shopReal.storefronts.map((f) => f.studioId) : [],
+    S.here ? [Math.round(S.here.lat * 100), Math.round(S.here.lon * 100)] : null, new Date().toISOString().slice(0, 10)]);
+  if (sampleMemo.key !== key) {
+    const c = Sh.sampleCatalog(Sh.samplePicks(sampleInput()), (id) => studioName(id), city().code || 'STO');
+    sampleMemo.key = key; sampleMemo.value = Sh.isEmpty(c) ? null : c;
+  }
+  return sampleMemo.value;
+}
+/** What the views show (`S.shop`): the real catalogue with the sample listings after it. */
+export function effectiveShop() {
+  const sample = sampleShop();
+  if (!sample) return S.shopReal;
+  if (sampleMemo.real !== S.shopReal || sampleMemo.sample !== sample) { sampleMemo.real = S.shopReal; sampleMemo.sample = sample; sampleMemo.merged = Sh.overlay(S.shopReal, sample); }
+  return sampleMemo.merged;
+}
 /** Notify me on a drop: a push (to the iPhone app) and an email from our server when the pre-order opens. */
 export async function setNotify(d, on) {
+  if (d.sample) throw new Error(Sh.SAMPLE_TOAST);
   if (!serverOn() && !isDemo()) throw new Error('Notify me goes through our server, which is off in Settings.');
   await Server.notify(d.id, on);
   if (on) S.shopNotify.add(d.id); else S.shopNotify.delete(d.id);
@@ -527,6 +586,7 @@ export async function setNotify(d, on) {
 /** Phase 4: Stripe Checkout for a draft (shop.js `draft`): the URL to send the browser to, or null with a toast's worth
  *  of reason thrown. The demo opens nothing. */
 export async function startCheckout(d) {
+  if (d.product.sample) throw new Error(Sh.SAMPLE_TOAST);
   const problem = Sh.draftProblem(d);
   if (problem) throw new Error(problem);
   if (isDemo()) return null;
@@ -545,7 +605,7 @@ export async function loadOrders() {
 }
 /** One to the day's anonymous counter when a listing is opened; never in the demo, once per listing and visit. */
 export function tapProduct(id) {
-  if (isDemo() || !serverOn() || S.shopTapped.has(id)) return;
+  if (isDemo() || !serverOn() || Sh.isSampleId(id) || S.shopTapped.has(id)) return;
   S.shopTapped.add(id);
   Server.tap(id).catch(() => {});
 }

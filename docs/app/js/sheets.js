@@ -277,7 +277,7 @@ function relTime(iso) {
 const MENU = [
   ['person', 'Account', openAccount], ['chart', 'Statistics', openStatistics], ['receipt', 'Payments and receipts', openPayments],
   // Orders (the studio shop, shop.js) only where a shop is listed or something was bought.
-  ['gift', 'Orders', () => openOrders(), () => !Sh.isEmpty(S.shop) || S.orders.length > 0],
+  ['gift', 'Orders', () => openOrders(), () => !Sh.isEmpty(S.shopReal) || S.orders.length > 0],
   ['gift', 'Invite friends', openVouchers], ['spark', 'Your ' + new Date().getFullYear() + ' Wrapped', () => openWrapped()], ['gear', 'Settings', openSettings],
 ];
 export function openMenu() {
@@ -401,6 +401,7 @@ function openSettings() {
     '<h3 class="sec-title">CALENDAR</h3><div class="card menu"><button class="mrow" data-subscribe>' + icon('calendar') + '<span class="grow">Subscribe to your bookings<small class="muted block">Opens Calendar with Bruce\'s feed of all your bookings. Each class page also has Add to Calendar.</small></span>' + icon('chevron') + '</button>' +
     '<button class="mrow" data-copy-feed>' + icon('link') + '<span class="grow">Copy the feed link<small class="muted block">For another calendar app. The link is personal: paste it only there.</small></span></button></div>' +
     '<h3 class="sec-title">OUR SERVER</h3><div class="card"><label class="toggle"><span>Use our server<small class="muted">Books a waitlisted class the moment a spot opens, sends goal reminders and runs challenges. It stores your Bruce login. Off: only challenges you join use it.</small></span><input type="checkbox" id="set-server"' + (St.serverOn() ? ' checked' : '') + '><i></i></label></div>' +
+    '<h3 class="sec-title">SHOP</h3><div class="card"><label class="toggle"><span>' + esc(Sh.SAMPLE_SETTING) + '<small class="muted">' + esc(Sh.SAMPLE_SETTING_NOTE) + '</small></span><input type="checkbox" id="set-samples"' + (St.samplesOn() ? ' checked' : '') + '><i></i></label></div>' +
     '<h3 class="sec-title">SOCIAL</h3><div class="card"><label class="toggle"><span>Bruce Studios Social<small class="muted">Friends and classmates see your name and photo on classes you book.</small></span><input type="checkbox" id="set-social"' + (S.user && S.user.social ? ' checked' : '') + '><i></i></label></div>' +
     '<h3 class="sec-title">NOTIFICATIONS</h3><div class="card" id="set-push">' + loading() + '</div>' +
     '<details class="card"><summary>Advanced</summary><label class="form"><span>API server</span><input type="url" id="set-api" value="' + esc(S.settings.apiBase) + '"></label><p class="muted small">Only change this to route requests through your own proxy.</p></details>');
@@ -409,6 +410,7 @@ function openSettings() {
   s.el.querySelector('[data-subscribe]').addEventListener('click', () => feed().then((u) => { if (u) window.location.href = u; }));
   s.el.querySelector('[data-copy-feed]').addEventListener('click', () => feed().then((u) => u && navigator.clipboard.writeText(u).then(() => toast('Calendar link copied'), () => toast('Could not copy the link'))));
   $('#set-server', s.el).addEventListener('change', (e) => { S.settings.serverOn = e.target.checked; St.saveSettings(); if (e.target.checked) St.syncGoals(); toast(e.target.checked ? 'Our server is on' : 'Our server is off'); });
+  $('#set-samples', s.el).addEventListener('change', (e) => { St.setSamples(e.target.checked); toast(e.target.checked ? 'Sample shop is on' : 'Sample shop is off'); });
   const th = $('#set-theme', s.el); th.value = theme;
   th.addEventListener('change', () => {
     try { if (th.value) localStorage.setItem('theme', th.value); else localStorage.removeItem('theme'); } catch (e) { /* private mode */ }

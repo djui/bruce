@@ -234,7 +234,7 @@ export async function renderStudio(el, id, ctx) {
   loadSchedule();
   loadDay();
   // The studio's listings arrive with the city's catalogue; the rail is drawn once it is there.
-  if (!S.shop) St.loadShop().then(() => { if (t === token && state.tab === 'info') draw(); });
+  if (!S.shopReal) St.loadShop().then(() => { if (t === token && state.tab === 'info') draw(); });
 
   function draw() {
     const lite = St.studio(id) || {};

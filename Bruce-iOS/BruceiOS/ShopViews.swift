@@ -4,7 +4,8 @@ import SafariServices
 // Studio shop on the iPhone (Shop.swift): Home's Shop section with the drop card, Home › Shop with its chips, a
 // product page, the "Shop at the desk" rail on a studio page and the "Forgot your towel?" card on the ticket after a
 // check-in at a sauna. Everything shows only while the city's catalogue has something in it (`m.showsShop`). The
-// studio sells: the buttons say "Ask at the desk" or open its webshop, and Notify me only reminds.
+// studio sells: the buttons say "Ask at the desk" or open its webshop, and Notify me only reminds. Sample listings
+// (SampleShop.swift) wear a "Sample" tag and their buttons only say "Sample item, not for sale".
 
 /// A product's picture: the kind's tint and symbol (listings carry no photos; nothing is loaded from anywhere).
 struct ProductArt: View {
@@ -28,6 +29,23 @@ struct ProductArt: View {
     }
 }
 
+/// "SAMPLE" on a listing that is not real (SampleShop.swift), on the picture, the drop card and the product page.
+struct SampleTag: View {
+    var body: some View {
+        Text(Copy.shopSampleTag.uppercased()).bruceFont(10, weight: .heavy, width: .expanded).foregroundStyle(.white)
+            .padding(.horizontal, 8).padding(.vertical, 4).background(Color.black.opacity(0.78), in: .capsule)
+    }
+}
+
+/// The line at the top of Home › Shop while a sample listing is in it.
+struct SampleNote: View {
+    var body: some View {
+        Label(Copy.shopSampleNote, systemImage: "info.circle").bruceFont(13, weight: .semibold).fixedSize(horizontal: false, vertical: true)
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .glassEffect(.regular.tint(Theme.lime.opacity(0.14)), in: .rect(cornerRadius: 16))
+    }
+}
+
 /// A product in the Shop grid and the studio rail: picture, title, "449 kr · Ångan".
 struct ProductTile: View {
     @Environment(AppModel.self) var m
@@ -37,6 +55,7 @@ struct ProductTile: View {
         NavigationLink(value: Route.product(product.id)) {
             VStack(alignment: .leading, spacing: 4) {
                 ProductArt(kind: product.kind, corner: 16, symbolSize: compact ? 30 : 36).aspectRatio(compact ? 4 / 3 : 2 / 1, contentMode: .fit)
+                    .overlay(alignment: .topLeading) { if product.sample { SampleTag().padding(6) } }
                 Text(product.title).bruceFont(14, weight: .bold).lineLimit(1).padding(.top, 2)
                 HStack(spacing: 4) {
                     Text(product.priceText).bruceFont(13, weight: .heavy)
@@ -49,7 +68,7 @@ struct ProductTile: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("\(product.title), \(product.priceText), \(m.studioName(product.studioId))")
+        .accessibilityLabel("\(product.sample ? "Sample, " : "")\(product.title), \(product.priceText), \(m.studioName(product.studioId))")
     }
     /// "Yogaloft", "Kärnan", "Ångan": the studio's first word, as the mockup lists them.
     var shortStudio: String { String(m.studioName(product.studioId).split(separator: " ").first ?? "") }
@@ -77,6 +96,7 @@ struct DropCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top) {
                     DropTag(unlocked: drop.unlocked)
+                    if drop.sample { SampleTag() }
                     Spacer()
                     Image(systemName: product?.kind.symbol ?? "tshirt").font(.system(size: 44, weight: .ultraLight)).foregroundStyle(.white.opacity(0.35))
                 }
@@ -101,7 +121,9 @@ struct DropCard: View {
                     Spacer()
                     switch drop.state() {
                     case .open:
-                        if let u = drop.reserveURL() {
+                        if drop.sample {
+                            Button { m.flashSample() } label: { cardButton("Reserve", "arrow.up.right.square", lime: true) }.buttonStyle(.plain)
+                        } else if let u = drop.reserveURL() {
                             Button { openURL(u) } label: { cardButton("Reserve", "arrow.up.right.square", lime: true) }.buttonStyle(.plain)
                         } else {
                             Button { Task { await m.setNotify(drop, !on) } } label: { cardButton(on ? "Notifying" : Copy.shopNotifyMe, on ? "bell.fill" : "bell", lime: !on) }
@@ -124,7 +146,7 @@ struct DropCard: View {
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Drop: \(drop.title), \(drop.countdownText()), \(drop.progressText) reserved, \(Copy.shopPickup(m.studioName(drop.studioId)))")
+        .accessibilityLabel("\(drop.sample ? "Sample drop" : "Drop"): \(drop.title), \(drop.countdownText()), \(drop.progressText) reserved, \(Copy.shopPickup(m.studioName(drop.studioId)))")
     }
 
     func cardButton(_ title: String, _ symbol: String, lime: Bool) -> some View {
@@ -181,6 +203,7 @@ struct ShopView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 PageHeading(text: Copy.shopTitle)
+                if shop.hasSamples { SampleNote() }
                 ScrollView(.horizontal, showsIndicators: false) {
                     GlassEffectContainer {
                         HStack(spacing: 8) {
@@ -203,7 +226,7 @@ struct ShopView: View {
                 } else if chip != "drops" {
                     EmptyState(system: "bag", text: shop.isEmpty ? "Nothing listed in \(m.cityName) yet." : Copy.shopEmptyKind)
                 }
-                Text(Copy.shopCatalogFooter).bruceFont(13).foregroundStyle(Theme.secondary).padding(.top, 8)
+                if shop.hasReal { Text(Copy.shopCatalogFooter).bruceFont(13).foregroundStyle(Theme.secondary).padding(.top, 8) }
             }
             .padding(.horizontal, Theme.gutter).padding(.bottom, 30)
         }
@@ -245,6 +268,7 @@ struct ProductView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 ProductArt(kind: p.kind, corner: 26, symbolSize: 72).frame(height: 220)
+                    .overlay(alignment: .topLeading) { if p.sample { SampleTag().padding(12) } }
                 Text(p.title.uppercased()).bruceScreenTitle(26).lineLimit(3).minimumScaleFactor(0.7)
                 Text([studio, p.description].compactMap { $0 }.joined(separator: " · ")).bruceFont(14).foregroundStyle(Theme.secondary)
                 HStack(alignment: .firstTextBaseline) {
@@ -256,14 +280,14 @@ struct ProductView: View {
                 if let drop { dropBlock(drop, p, studio) }
                 if buyable(p, drop), let front { deliveryBlock(p, front, studio) }
                 NavigationLink(value: Route.studio(p.studioId)) {
-                    InfoRow(title: studio, subtitle: front.map { Copy.shopSoldBy($0.sellerName, desk: p.fulfilment == .desk, checkout: $0.checkout) } ?? "Studio page").padding(14)
+                    InfoRow(title: studio, subtitle: front.map { Copy.shopSoldBy($0.sellerName, desk: p.fulfilment == .desk && !$0.sample, checkout: $0.checkout) } ?? "Studio page").padding(14)
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
                 if let note = front?.pickupNote {
                     Label(note, systemImage: "mappin.and.ellipse").bruceFont(14).foregroundStyle(Theme.secondary)
                 }
-                Text(Copy.shopNotAffiliated).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(p.sample ? Copy.shopSampleProductNote : Copy.shopNotAffiliated).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(Theme.gutter).padding(.bottom, 90)
         }
@@ -319,6 +343,7 @@ struct ProductView: View {
         return VStack(alignment: .leading, spacing: 10) {
             HStack {
                 DropTag(unlocked: d.unlocked)
+                if d.sample { SampleTag() }
                 Spacer()
                 Label(d.countdownText(), systemImage: state == .ready ? "checkmark.seal.fill" : "clock").bruceFont(13, weight: .bold)
             }
@@ -361,7 +386,12 @@ struct ProductView: View {
     /// No checkout yet. A drop's Reserve opens the studio's own checkout while the window is open; else the desk, the
     /// product's own page or the studio's webshop.
     @ViewBuilder func actions(_ p: Product, _ front: Storefront?, _ drop: Drop?) -> some View {
-        if buyable(p, drop), let front {
+        if p.sample {
+            // Sample: the buttons are there to look at; each only says it is not for sale.
+            let open = drop?.state() == .open
+            LimeButton(title: open ? Copy.shopReserve(p.priceText) : p.fulfilment == .link ? Copy.shopWebshop : Copy.shopBuy(p.priceText),
+                       systemImage: open || p.fulfilment == .link ? "arrow.up.right.square" : "bag") { m.flashSample() }
+        } else if buyable(p, drop), let front {
             let draft = CheckoutDraft(product: p, storefront: front, variant: picked(p), qty: 1, delivery: front.ships ? delivery : .pickup)
             LimeButton(title: Copy.shopBuy(ShopMoney.kr(draft.totalOre)), systemImage: "bag") {
                 m.checkoutDraft = draft
@@ -637,9 +667,12 @@ struct ShopRail: View {
                 .padding(.horizontal, -Theme.gutter)
                 .scrollClipDisabled()
                 HStack {
-                    Text(Copy.shopSoldBy(front.sellerName, desk: products.contains { $0.fulfilment == .desk }, checkout: front.checkout)).bruceFont(13).foregroundStyle(Theme.secondary)
+                    Text(Copy.shopSoldBy(front.sellerName, desk: products.contains { $0.fulfilment == .desk } && !front.sample, checkout: front.checkout)).bruceFont(13).foregroundStyle(Theme.secondary)
                     Spacer(minLength: 8)
-                    if let u = front.webshop {
+                    if front.sample {
+                        Button { m.flashSample() } label: { Label(Copy.shopWebshop, systemImage: "arrow.up.right.square").bruceFont(13, weight: .bold) }
+                            .buttonStyle(.glass).controlSize(.small)
+                    } else if let u = front.webshop {
                         Button { openURL(u) } label: { Label(Copy.shopWebshop, systemImage: "arrow.up.right.square").bruceFont(13, weight: .bold) }
                             .buttonStyle(.glass).controlSize(.small)
                     } else {
