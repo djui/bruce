@@ -40,8 +40,16 @@ enum Theme {
     static let gutter: CGFloat = 16
 
     /// Heavy, wide uppercase heading ("HOME", "EXPLORE", ...), the Bruce identity.
-    static func screenTitle(_ size: CGFloat = 30) -> Font { .system(size: size, weight: .black).width(.expanded) }
-    static func heading(_ size: CGFloat = 22) -> Font { .system(size: size, weight: .heavy).width(.expanded) }
+    static func screenTitle(_ size: CGFloat = 30) -> Font { display(size, weight: .black) }
+    static func heading(_ size: CGFloat = 22) -> Font { display(size, weight: .heavy) }
+
+    /// Unbounded (Google Fonts, SIL OFL 1.1; Fonts/Unbounded[wght].ttf, registered under UIAppFonts), the brand display face of
+    /// the website. Headlines, hero numbers and wordmarks only; body text, buttons, rows and form fields stay SF.
+    /// One variable font (wght 200...900), the weight applied with `.weight()`. A fixed size like `.system(size:)`;
+    /// the view modifiers scale it for Dynamic Type through `Theme.scaled`.
+    static func display(_ size: CGFloat, weight: Font.Weight = .black) -> Font {
+        Font.custom("Unbounded", fixedSize: size).weight(weight)
+    }
 
     // MARK: Dynamic Type
 
@@ -80,6 +88,16 @@ enum Theme {
     }
 }
 
+/// `.bruceDisplay(30)`: Unbounded at a fixed design size, following Dynamic Type (Theme.scaled).
+struct BruceDisplay: ViewModifier {
+    @Environment(\.dynamicTypeSize) private var dts
+    let size: CGFloat
+    let weight: Font.Weight
+    func body(content: Content) -> some View {
+        content.font(Theme.display(Theme.scaled(size, for: dts), weight: weight))
+    }
+}
+
 /// `.bruceFont(15, weight: .semibold)`: the app's fixed design sizes, following Dynamic Type (Theme.scaled).
 struct BruceFont: ViewModifier {
     @Environment(\.dynamicTypeSize) private var dts
@@ -98,8 +116,10 @@ extension View {
         modifier(BruceFont(size: size, weight: weight, design: design, width: width, monospacedDigit: monospacedDigit))
     }
     /// The wide black screen titles and headings (`Theme.heading`), following Dynamic Type.
-    func bruceHeading(_ size: CGFloat = 22) -> some View { bruceFont(size, weight: .heavy, width: .expanded) }
-    func bruceScreenTitle(_ size: CGFloat = 30) -> some View { bruceFont(size, weight: .black, width: .expanded) }
+    func bruceHeading(_ size: CGFloat = 22) -> some View { bruceDisplay(size, weight: .heavy) }
+    func bruceScreenTitle(_ size: CGFloat = 30) -> some View { bruceDisplay(size, weight: .black) }
+    /// Unbounded for hero numbers, big titles and wordmarks (`Theme.display`), following Dynamic Type.
+    func bruceDisplay(_ size: CGFloat, weight: Font.Weight = .black) -> some View { modifier(BruceDisplay(size: size, weight: weight)) }
 }
 
 extension Color {

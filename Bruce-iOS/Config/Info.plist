@@ -11,6 +11,11 @@
 			<string>Bruce</string>
 		</dict>
 	</array>
+	<!-- Unbounded (SIL OFL 1.1), the brand display face: BruceiOS/Fonts. -->
+	<key>UIAppFonts</key>
+	<array>
+		<string>Unbounded[wght].ttf</string>
+	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<!-- Opened by the widgets and the check-in Control (Shared/BruceWidgetKit): bruece://checkin, /visits, /class/<id>. -->

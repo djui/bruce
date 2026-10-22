@@ -102,7 +102,7 @@ struct ChallengeHeaderCard: View {
                          : (left == 0 ? "Last day" : "\(left) day\(left == 1 ? "" : "s") left")).bruceFont(13).opacity(0.8)
                 }
             }
-            Text(c.displayTitle).bruceFont(22, weight: .heavy, width: .expanded).padding(.top, 12).padding(.bottom, 2)
+            Text(c.displayTitle).bruceDisplay(22, weight: .heavy).padding(.top, 12).padding(.bottom, 2)
             Text(line).bruceFont(14).opacity(0.85)
         }
         .foregroundStyle(.white)
@@ -478,7 +478,7 @@ struct ParticipantSheet: View {
 
     func stat(_ v: String, _ l: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(v).bruceFont(26, weight: .black, width: .expanded).monospacedDigit()
+            Text(v).bruceDisplay(26, weight: .black).monospacedDigit()
             Text(l).bruceFont(13, weight: .semibold).foregroundStyle(Theme.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)

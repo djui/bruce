@@ -41,7 +41,7 @@ struct RaceCard: View {
             BibDate(race: race)
             VStack(alignment: .leading, spacing: 3) {
                 Text(race.kindLabel.uppercased()).bruceFont(11, weight: .heavy, width: .expanded).opacity(0.85).lineLimit(1)
-                Text(race.name).bruceFont(19, weight: .heavy, width: .expanded).lineLimit(2).minimumScaleFactor(0.75)
+                Text(race.name).bruceDisplay(19, weight: .heavy).lineLimit(2).minimumScaleFactor(0.75)
                 Text(subtitle).bruceFont(14, weight: .medium).opacity(0.9).lineLimit(2)
                 let pill = race.pillText()
                 if !pill.isEmpty || !going.isEmpty {
@@ -268,7 +268,7 @@ struct RaceDetailView: View {
                 Text(r.sport?.title ?? r.type.title).bruceFont(13, weight: .semibold)
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .glassEffect(.regular, in: .capsule)
-                Text(r.name.uppercased()).bruceFont(28, weight: .black, width: .expanded).lineLimit(3).minimumScaleFactor(0.6)
+                Text(r.name.uppercased()).bruceDisplay(28, weight: .black).lineLimit(3).minimumScaleFactor(0.6)
                 if !r.placeLine.isEmpty { Text(r.placeLine).bruceFont(16, weight: .medium) }
             }
             .foregroundStyle(.white).padding(Theme.gutter)
@@ -691,7 +691,7 @@ struct RaceDayCard: View {
                 Spacer()
                 Image(systemName: r.symbol).bruceFont(22, weight: .medium)
             }
-            Text(r.name.uppercased()).bruceFont(22, weight: .black, width: .expanded).lineLimit(2).minimumScaleFactor(0.7)
+            Text(r.name.uppercased()).bruceDisplay(22, weight: .black).lineLimit(2).minimumScaleFactor(0.7)
             HStack(spacing: 8) {
                 cell("Bib", ticket.bib ?? "—")
                 cell("Start wave", ticket.wave ?? "—")
@@ -722,7 +722,7 @@ struct RaceDayCard: View {
     func cell(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(label.uppercased()).bruceFont(10, weight: .heavy).opacity(0.7)
-            Text(value).bruceFont(20, weight: .black, width: .expanded).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
+            Text(value).bruceDisplay(20, weight: .black).monospacedDigit().lineLimit(1).minimumScaleFactor(0.6)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 12).padding(.vertical, 10)
@@ -744,9 +744,9 @@ struct NextRaceBanner: View {
                     .padding(.horizontal, 10).padding(.vertical, 5)
                     .background(.white.opacity(0.22), in: Capsule())
                 Spacer(minLength: 8)
-                Text(r.countdownShort(day: entry.mine.day)).bruceFont(22, weight: .black, width: .expanded).lineLimit(1).minimumScaleFactor(0.7)
+                Text(r.countdownShort(day: entry.mine.day)).bruceDisplay(22, weight: .black).lineLimit(1).minimumScaleFactor(0.7)
             }
-            Text(r.name).bruceFont(22, weight: .heavy, width: .expanded).lineLimit(2).minimumScaleFactor(0.75).padding(.top, 4)
+            Text(r.name).bruceDisplay(22, weight: .heavy).lineLimit(2).minimumScaleFactor(0.75).padding(.top, 4)
             Text(([RaceDay.format(entry.day, "EEE d MMM")] + [r.venue ?? (r.city.isEmpty ? nil : r.city)].compactMap { $0 }).joined(separator: " · "))
                 .bruceFont(15, weight: .medium).opacity(0.9)
             if let h = entry.hint() {
@@ -885,7 +885,7 @@ struct RaceResultBlock: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
-                Text(result.dnf ? Copy.raceResultDNF : result.timeText).bruceFont(28, weight: .black, width: .expanded).monospacedDigit()
+                Text(result.dnf ? Copy.raceResultDNF : result.timeText).bruceDisplay(28, weight: .black).monospacedDigit()
                 Spacer()
                 if let p = result.placeText { Text(p).bruceFont(15, weight: .semibold).foregroundStyle(Theme.secondary) }
             }
@@ -921,13 +921,13 @@ struct NextRaceCard: View {
                     VStack(alignment: .leading, spacing: 12) {
                         HStack(alignment: .top, spacing: 16) {
                             VStack(alignment: .leading, spacing: 0) {
-                                Text(days <= 0 ? "RACE" : "\(days)").bruceFont(days <= 0 ? 34 : 56, weight: .black, width: .expanded)
+                                Text(days <= 0 ? "RACE" : "\(days)").bruceDisplay(days <= 0 ? 34 : 56, weight: .black)
                                     .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
                                 Text(days <= 0 ? "DAY" : days == 1 ? "DAY" : "DAYS").bruceFont(12, weight: .heavy, width: .expanded).opacity(0.85)
                             }
                             .fixedSize()
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(r.name).bruceFont(19, weight: .heavy, width: .expanded).lineLimit(3).minimumScaleFactor(0.75)
+                                Text(r.name).bruceDisplay(19, weight: .heavy).lineLimit(3).minimumScaleFactor(0.75)
                                 Text(e.whenLine).bruceFont(14, weight: .medium).opacity(0.9)
                                 if !r.placeLine.isEmpty { Text(r.placeLine.replacingOccurrences(of: " | ", with: ", ")).bruceFont(14).opacity(0.85) }
                             }

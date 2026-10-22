@@ -316,7 +316,7 @@ struct ClassDetailView: View {
                     Text(cat).bruceFont(13, weight: .semibold).padding(.horizontal, 10).padding(.vertical, 5)
                         .glassEffect(.regular, in: .capsule)
                 }
-                Text(c.title.uppercased()).bruceFont(28, weight: .black, width: .expanded).lineLimit(3).minimumScaleFactor(0.7)
+                Text(c.title.uppercased()).bruceDisplay(28, weight: .black).lineLimit(3).minimumScaleFactor(0.7)
                 Text([studio?.name ?? c.studio?.name, studio?.vicinity ?? c.studio?.vicinity].compactMap { $0 }.joined(separator: " | "))
                     .bruceFont(16, weight: .medium)
             }
@@ -716,7 +716,7 @@ struct StudioDetailView: View {
                     Text("WELLNESS").bruceFont(11, weight: .heavy, width: .expanded)
                         .padding(.horizontal, 8).padding(.vertical, 4).glassEffect(.regular, in: .capsule)
                 }
-                Text((studio?.name ?? "").uppercased()).bruceFont(26, weight: .black, width: .expanded).lineLimit(2).minimumScaleFactor(0.7)
+                Text((studio?.name ?? "").uppercased()).bruceDisplay(26, weight: .black).lineLimit(2).minimumScaleFactor(0.7)
                 HStack(spacing: 6) {
                     if let r = studio?.rating?.average, r > 0 {
                         Image(systemName: "star.fill").bruceFont(12)
@@ -967,7 +967,7 @@ struct TicketSheet: View {
                     VStack(spacing: 16) {
                         Avatar(fileId: m.user?.photo, initials: m.user?.initials ?? "", size: 150)
                             .overlay(Circle().stroke(Theme.lime, lineWidth: 5))
-                        Text(m.user?.fullName ?? "").bruceFont(22, weight: .heavy, width: .expanded)
+                        Text(m.user?.fullName ?? "").bruceDisplay(22, weight: .heavy)
                         Text(BruceDate.format(checkedIn, "EEEE, d MMMM")).bruceFont(16).foregroundStyle(Theme.secondary)
                     }
                     .padding(.top, 30)

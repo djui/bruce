@@ -57,7 +57,7 @@ struct RecentRatingRow: View {
             Text(title).bruceFont(12, weight: .semibold).foregroundStyle(Theme.secondary)
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "star.fill").bruceFont(12).foregroundStyle(Theme.ink)
-                Text(value).bruceFont(24, weight: .black, width: .expanded)
+                Text(value).bruceDisplay(24, weight: .black)
             }
             Text(sub).bruceFont(12).foregroundStyle(Theme.secondary)
         }

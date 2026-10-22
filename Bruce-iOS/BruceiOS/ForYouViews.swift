@@ -83,7 +83,7 @@ struct RecHeroCard: View {
                 .bruceFont(130, weight: .ultraLight).foregroundStyle(.white.opacity(0.10))
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing).offset(x: 20, y: 30)
             VStack(alignment: .leading, spacing: 4) {
-                Text(c.title).bruceFont(25, weight: .heavy, width: .expanded).lineLimit(2)
+                Text(c.title).bruceDisplay(25, weight: .heavy).lineLimit(2)
                 Text("\(BruceDate.format(c.start, "EEEE | d MMMM | HH:mm"))\(c.durationMinutes.map { " · \($0) min" } ?? "")")
                     .bruceFont(14, weight: .medium).opacity(0.9)
                 ReasonChips(rec: rec, limit: 2, onDark: true).padding(.top, 8)

@@ -248,7 +248,7 @@ struct SuggestedCheckInCard: View {
                 .foregroundStyle(suggestion.kind == .booking ? Color.black : Theme.ink)
                 .padding(.horizontal, 10).padding(.vertical, 6)
                 .background(Capsule().fill(suggestion.kind == .booking ? Theme.lime : Theme.chipGrey))
-            Text(t.name).bruceFont(26, weight: .black, width: .expanded).lineLimit(2).minimumScaleFactor(0.7)
+            Text(t.name).bruceDisplay(26, weight: .black).lineLimit(2).minimumScaleFactor(0.7)
             if !t.subtitle.isEmpty, suggestion.kind == .booking || !t.subtitle.hasPrefix("Checked in") {
                 Text(t.subtitle).bruceFont(15).foregroundStyle(Theme.secondary)
             }
