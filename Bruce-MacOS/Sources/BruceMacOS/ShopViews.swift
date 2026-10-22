@@ -3,7 +3,8 @@ import SwiftUI
 // Studio shop on the Mac (Shop.swift; ShopViews.swift on the iPhone): Home's Shop section with the drop card, Home › Shop
 // with its chips, a product page, the "Shop at the desk" rail on a studio page and "Forgot your towel?" on the ticket.
 // Everything shows only while the city's catalogue has something in it. The studio sells; the buttons say "Ask at the
-// desk" or open its webshop in the browser, and Notify me only reminds.
+// desk" or open its webshop in the browser, and Notify me only reminds. Sample listings (SampleShop.swift) wear a
+// "Sample" tag and their buttons only say "Sample item, not for sale".
 
 /// A product's picture: the kind's tint and symbol (listings carry no photos).
 struct ProductArt: View {
@@ -27,6 +28,23 @@ struct ProductArt: View {
     }
 }
 
+/// "SAMPLE" on a listing that is not real (SampleShop.swift), on the picture, the drop card and the product page.
+struct SampleTag: View {
+    var body: some View {
+        Text(Copy.shopSampleTag.uppercased()).font(.system(size: 10, weight: .heavy).width(.expanded)).foregroundStyle(.white)
+            .padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Color.black.opacity(0.78)))
+    }
+}
+
+/// The line at the top of Home › Shop while a sample listing is in it.
+struct SampleNote: View {
+    var body: some View {
+        Label(Copy.shopSampleNote, systemImage: "info.circle").font(.system(size: 13, weight: .semibold)).fixedSize(horizontal: false, vertical: true)
+            .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 12).fill(Theme.lime.opacity(0.18)))
+    }
+}
+
 /// A product in the grid and the studio rail: picture, title, "449 kr · Ångan".
 struct ProductTile: View {
     @Environment(AppModel.self) var m
@@ -36,6 +54,7 @@ struct ProductTile: View {
         Button { m.push(.product(product.id)) } label: {
             VStack(alignment: .leading, spacing: 3) {
                 ProductArt(kind: product.kind, symbolSize: compact ? 26 : 32).aspectRatio(compact ? 4 / 3 : 2 / 1, contentMode: .fit)
+                    .overlay(alignment: .topLeading) { if product.sample { SampleTag().padding(6) } }
                 Text(product.title).font(.system(size: 14, weight: .bold)).lineLimit(1).padding(.top, 2)
                 Text(product.priceText + (compact ? "" : " · " + String(m.studioName(product.studioId).split(separator: " ").first ?? "")))
                     .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.secondary).lineLimit(1)
@@ -56,6 +75,7 @@ struct DropCard: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .top) {
                 DropTag(unlocked: drop.unlocked)
+                if drop.sample { SampleTag() }
                 Spacer()
                 Image(systemName: product?.kind.symbol ?? "tshirt").font(.system(size: 40, weight: .ultraLight)).foregroundStyle(.white.opacity(0.35))
             }
@@ -83,6 +103,8 @@ struct DropCard: View {
                 if let product { Text(product.priceText).font(.system(size: 15, weight: .heavy)) }
                 Spacer()
                 switch drop.state() {
+                case .open where drop.sample:
+                    Button { m.flashSample() } label: { cardButton("Reserve", "arrow.up.right.square", lime: true) }.buttonStyle(.plain)
                 case .open where drop.reserveURL() != nil:
                     Button { NSWorkspace.shared.open(drop.reserveURL()!) } label: { cardButton("Reserve", "arrow.up.right.square", lime: true) }.buttonStyle(.plain)
                 case .open, .upcoming:
@@ -157,6 +179,7 @@ struct ShopView: View {
             NavBar(title: Copy.shopTitle, leading: .back) { m.pop() }
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
+                    if shop.hasSamples { SampleNote() }
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 8) {
                             chipButton("All", nil)
@@ -171,7 +194,7 @@ struct ShopView: View {
                     } else if chip != "drops" {
                         Text(shop.isEmpty ? "Nothing listed in \(m.cityName) yet." : Copy.shopEmptyKind).foregroundStyle(Theme.secondary).padding(.top, 30)
                     }
-                    Text(Copy.shopCatalogFooter).font(.system(size: 13)).foregroundStyle(Theme.secondary).padding(.top, 8)
+                    if shop.hasReal { Text(Copy.shopCatalogFooter).font(.system(size: 13)).foregroundStyle(Theme.secondary).padding(.top, 8) }
                 }
                 .padding(Theme.gutter)
             }
@@ -213,6 +236,7 @@ struct ProductView: View {
         return ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 ProductArt(kind: p.kind, corner: 18, symbolSize: 64).frame(height: 200)
+                    .overlay(alignment: .topLeading) { if p.sample { SampleTag().padding(12) } }
                 Text(p.title.uppercased()).font(Theme.screenTitle(24)).lineLimit(3).minimumScaleFactor(0.7)
                 Text([studio, p.description].compactMap { $0 }.joined(separator: " · ")).font(.system(size: 14)).foregroundStyle(Theme.secondary)
                 HStack(alignment: .firstTextBaseline, spacing: 6) {
@@ -236,11 +260,11 @@ struct ProductView: View {
                 if buyable(p, drop), let front { deliveryBlock(p, front, studio) }
                 actions(p, front)
                 Button { m.push(.studio(p.studioId)) } label: {
-                    InfoRow(title: studio, subtitle: front.map { Copy.shopSoldBy($0.sellerName, desk: p.fulfilment == .desk, checkout: $0.checkout) } ?? "Studio page")
+                    InfoRow(title: studio, subtitle: front.map { Copy.shopSoldBy($0.sellerName, desk: p.fulfilment == .desk && !$0.sample, checkout: $0.checkout) } ?? "Studio page")
                 }
                 .buttonStyle(.plain)
                 if let note = front?.pickupNote { Label(note, systemImage: "mappin.and.ellipse").font(.system(size: 14)).foregroundStyle(Theme.secondary) }
-                Text(Copy.shopNotAffiliated).font(.system(size: 13)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(p.sample ? Copy.shopSampleProductNote : Copy.shopNotAffiliated).font(.system(size: 13)).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .padding(Theme.gutter)
         }
@@ -252,6 +276,7 @@ struct ProductView: View {
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
                 DropTag(unlocked: d.unlocked)
+                if d.sample { SampleTag() }
                 Spacer()
                 Label(d.countdownText(), systemImage: state == .ready ? "checkmark.seal.fill" : "clock").font(.system(size: 13, weight: .bold))
             }
@@ -278,7 +303,9 @@ struct ProductView: View {
                 }
                 .toggleStyle(.switch)
             }
-            if state == .open, let u = d.reserveURL() {
+            if state == .open, d.sample {
+                LimeButton(title: Copy.shopReserve(m.shopProduct(d.productId)?.priceText ?? "")) { m.flashSample() }
+            } else if state == .open, let u = d.reserveURL() {
                 LimeButton(title: Copy.shopReserve(m.shopProduct(d.productId)?.priceText ?? "")) { NSWorkspace.shared.open(u) }
                 Text(Copy.shopReserveHint).font(.system(size: 11)).foregroundStyle(Theme.secondary)
             } else if state == .open {
@@ -306,7 +333,10 @@ struct ProductView: View {
     /// Buy (the checkout sheet) where the studio is connected; else a drop's Reserve is in its block, or the desk, the
     /// product's own page or the studio's webshop (in the browser).
     @ViewBuilder func actions(_ p: Product, _ front: Storefront?) -> some View {
-        if buyable(p, m.shopDrop(for: p)), let front {
+        if p.sample {
+            // Sample: the buttons are there to look at; each only says it is not for sale (a drop's Reserve is in its block).
+            if m.shopDrop(for: p)?.state() != .open { LimeButton(title: p.fulfilment == .link ? Copy.shopWebshop : Copy.shopBuy(p.priceText)) { m.flashSample() } }
+        } else if buyable(p, m.shopDrop(for: p)), let front {
             let draft = CheckoutDraft(product: p, storefront: front, variant: picked(p), qty: 1, delivery: front.ships ? delivery : .pickup)
             LimeButton(title: Copy.shopBuy(ShopMoney.kr(draft.totalOre))) { m.checkoutDraft = draft; m.present(.shopCheckout(p.id)) }
         } else if let d = m.shopDrop(for: p), d.state() == .open || d.state() == .ready {
@@ -490,9 +520,10 @@ struct ShopRail: View {
                     HStack(spacing: 10) { ForEach(products) { p in ProductTile(product: p, compact: true).frame(width: 120) } }
                 }
                 HStack {
-                    Text(Copy.shopSoldBy(front.sellerName, desk: products.contains { $0.fulfilment == .desk }, checkout: front.checkout)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
+                    Text(Copy.shopSoldBy(front.sellerName, desk: products.contains { $0.fulfilment == .desk } && !front.sample, checkout: front.checkout)).font(.system(size: 13)).foregroundStyle(Theme.secondary)
                     Spacer(minLength: 8)
-                    if let u = front.webshop { Button(Copy.shopWebshop) { NSWorkspace.shared.open(u) }.font(.system(size: 13, weight: .semibold)) }
+                    if front.sample { Button(Copy.shopWebshop) { m.flashSample() }.font(.system(size: 13, weight: .semibold)) }
+                    else if let u = front.webshop { Button(Copy.shopWebshop) { NSWorkspace.shared.open(u) }.font(.system(size: 13, weight: .semibold)) }
                     else { Text(Copy.shopAskAtDesk).font(.system(size: 13, weight: .bold)) }
                 }
             }

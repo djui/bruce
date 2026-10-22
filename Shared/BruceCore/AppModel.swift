@@ -134,6 +134,7 @@ final class AppModel {
     func enterDemo() {
         AppModel.demo = true
         AppModel.demoAtRuntime = true
+        showSampleShop = AppModel.savedSampleShop()
         session = nil
         demoLoggedOut = false
         sneakPeek = false
@@ -266,8 +267,15 @@ final class AppModel {
     /// Explore switches to this segment when set (0 Studios, 1 Classes, 2 Races), then clears it.
     var exploreTabRequest: Int?
     /// Studio shop (Shop.swift): the city's catalogue from our server (nil until read, empty when nothing is listed), the
-    /// drops the member asked to be told about, and the listings already counted this run.
-    var shop: ShopCatalog?
+    /// drops the member asked to be told about, and the listings already counted this run. `shop` (SampleShop.swift) is
+    /// this catalogue with the sample listings laid over it; only the real one ever comes from or goes to the server.
+    var shopReal: ShopCatalog?
+    /// Settings › Show sample shop (SampleShop.swift): on by default, per device. The demo shows none unless
+    /// BRUCE_SAMPLE_SHOP=1 or the switch is turned on, so its catalogue stays as it was.
+    var showSampleShop = AppModel.savedSampleShop() {
+        didSet { if !AppModel.demo { UserDefaults.standard.set(showSampleShop, forKey: "showSampleShop") } }
+    }
+    @ObservationIgnored var sampleCache: (key: Int, value: ShopCatalog?)?
     var shopNotify: Set<String> = []
     var shopLoading = false
     @ObservationIgnored var shopFetchedAt: Date?
@@ -710,6 +718,7 @@ final class AppModel {
         if AppModel.demo && AppModel.demoAtRuntime {
             // Leave the runtime demo completely so a later real login loads real data and real images.
             AppModel.demo = false; AppModel.demoAtRuntime = false
+            showSampleShop = AppModel.savedSampleShop()
             resetLoadedData()
         } else if AppModel.demo { demoLoggedOut = true }
         bookings = []; standbys = []; promotedStandbys = []; bookmarks = []; notifications = []; friends = []; reviewable = []

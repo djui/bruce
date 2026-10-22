@@ -92,8 +92,11 @@ extension AppModel {
             let now = Date()
             schedules[ShopCatalog.demoAngan] = [BruceAPI.ScheduleEntry(start: iso.string(from: now.addingTimeInterval(-6 * 3600)), end: iso.string(from: now.addingTimeInterval(5 * 3600)), isAllDay: false)]
         }
-        shop = ShopCatalog.demo()
+        shopReal = ShopCatalog.demo()
     }
+
+    /// The id of a sample product by its title, for the demo screens.
+    func sampleProductId(_ title: String) -> String { sampleShop?.products.first { $0.title == title }?.id ?? "" }
 
     /// Demo screen "towel": a check-in at the sauna just now, so the ticket shows the "Forgot your towel?" card.
     func loadDemoSaunaCheckIn() {

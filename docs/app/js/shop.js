@@ -1,7 +1,8 @@
 // Studio shop (Shared/BruceCore/Shop.swift), as pure functions on plain objects (tests in test/shop.test.js); shopui.js
 // draws them. The studio is the seller: Brüce lists what it approved (our server's GET /shop?city=), shows planned
 // drops with Notify me and reminds. Prices are in öre incl. VAT; no address and no money pass through here, and no
-// product carries a Bruce or Brüce mark.
+// product carries a Bruce or Brüce mark. Sample listings (Shared/BruceCore/SampleShop.swift; "Sample shop" below) are made
+// in the browser from the member's own studios, flagged `sample`, and never leave it.
 
 /** The Shop screen's chips, in this order. */
 export const KINDS = [
@@ -19,16 +20,16 @@ export function httpsUrl(s) {
 /** The catalogue as the apps need it, skipping entries they can't read (a new kind, say) instead of failing the answer. */
 export function decode(json) {
   const fronts = ((json && json.storefronts) || []).filter((s) => s && Number.isInteger(s.studioId) && typeof s.sellerName === 'string' && typeof s.consentAt === 'string')
-    .map((s) => Object.assign({ city: '', webshopUrl: null, pickupNote: null, checkout: false, shippingOre: null }, s, { checkout: s.checkout === true, shippingOre: Number.isInteger(s.shippingOre) && s.shippingOre >= 0 ? s.shippingOre : null }));
+    .map((s) => Object.assign({ city: '', webshopUrl: null, pickupNote: null, checkout: false, shippingOre: null }, s, { checkout: s.checkout === true, shippingOre: Number.isInteger(s.shippingOre) && s.shippingOre >= 0 ? s.shippingOre : null, sample: false }));
   const ids = new Set(fronts.map((s) => s.studioId));
   const products = ((json && json.products) || []).filter((p) => p && typeof p.id === 'string' && ids.has(p.studioId) && typeof p.title === 'string'
     && KINDS.some((k) => k[0] === p.kind) && Number.isInteger(p.priceOre) && p.priceOre >= 0 && FULFILMENTS.includes(p.fulfilment))
     .map((p) => Object.assign({ description: null, vatRate: 25, linkUrl: null }, p, {
-      variants: (Array.isArray(p.variants) ? p.variants : []).filter((v) => v && typeof v.id === 'string' && typeof v.label === 'string').map((v) => Object.assign({ inStock: true }, v)) }));
+      variants: (Array.isArray(p.variants) ? p.variants : []).filter((v) => v && typeof v.id === 'string' && typeof v.label === 'string').map((v) => Object.assign({ inStock: true }, v)), sample: false }));
   const pids = new Set(products.map((p) => p.id));
   const drops = ((json && json.drops) || []).filter((d) => d && typeof d.id === 'string' && pids.has(d.productId) && typeof d.title === 'string'
     && Number.isFinite(d.opensAt) && Number.isFinite(d.closesAt) && d.closesAt > d.opensAt)
-    .map((d) => Object.assign({ challengeId: null, minQty: 0, maxQty: null, reserved: 0, pickupFrom: null, linkUrl: null, ready: false, unlocked: false }, d));
+    .map((d) => Object.assign({ challengeId: null, minQty: 0, maxQty: null, reserved: 0, pickupFrom: null, linkUrl: null, ready: false, unlocked: false }, d, { sample: false }));
   return { city: (json && json.city) || '', storefronts: fronts, products, drops };
 }
 /** The member's unlocked drops and their products (GET /me/shop) laid over the public catalogue, by id. */
@@ -61,8 +62,8 @@ export function dropState(d, now) {
 }
 /** Drops not over yet (or ready at the desk), soonest closing first. */
 export const liveDrops = (c, now) => (c ? c.drops.filter((d) => dropState(d, now) !== 'closed').sort((a, b) => a.closesAt - b.closesAt) : []);
-/** Home's drop card: an unlocked drop first (it is the member's), else the live drop closing first. */
-export const homeDrop = (c, now) => liveDrops(c, now).find((d) => d.unlocked) || liveDrops(c, now)[0] || null;
+/** Home's drop card: an unlocked drop first (it is the member's), then a real drop closing first, then a sample. */
+export const homeDrop = (c, now) => liveDrops(c, now).find((d) => d.unlocked) || liveDrops(c, now).find((d) => !d.sample) || liveDrops(c, now)[0] || null;
 /** The drop a finished challenge unlocked, if the member has it. */
 export const dropForChallenge = (c, id) => (c ? c.drops.find((d) => d.challengeId === id && d.unlocked) || null : null);
 /** Reserve (phase 3): the studio's own checkout, while the window is open. The studio sells; Brüce only links. */
@@ -207,3 +208,92 @@ export const ORDERS_EMPTY = "Nothing bought yet. What you buy from a studio's sh
 export const ORDERS_NOTE = 'The studio is the seller and sends the receipt. Brüce keeps what you bought, the status and your pickup code; never a card or an address.';
 export const PAID_OPEN = 'Back from Stripe. Your order shows here once Stripe confirms the payment, usually within a minute.';
 export const DEMO_CHECKOUT = 'Demo: Stripe Checkout would open now (offline, nothing sent)';
+
+// ---------------------------------------------------------------- sample shop (SampleShop.swift)
+
+export const SAMPLE_PREFIX = 'sample-';
+export const isSampleId = (id) => typeof id === 'string' && id.startsWith(SAMPLE_PREFIX);
+export const SAMPLE_TAG = 'Sample';
+export const SAMPLE_TOAST = 'Sample item, not for sale';
+export const SAMPLE_NOTE = 'Sample items to preview the shop. Not for sale. Settings › Show sample shop turns them off.';
+export const SAMPLE_PRODUCT_NOTE = 'A sample item to preview the shop. The studio does not sell it and nothing here can be bought.';
+export const SAMPLE_SETTING = 'Show sample shop';
+export const SAMPLE_SETTING_NOTE = 'Sample items on your own studios, to preview the shop. They are not for sale and never leave this device.';
+
+/** Any sample listing in it (the Shop screen then says so at the top), and anything real (only then the footer says the
+ *  studios approved the listings). */
+export const hasSamples = (c) => !!c && c.products.some((p) => p.sample);
+export const hasReal = (c) => !!c && c.products.some((p) => !p.sample);
+
+/** "STC Rosenlundsparken": the name starts with STC as a word. */
+export const isSTC = (name) => /^stc(?![\p{L}])/iu.test(String(name || '').trim());
+
+/** Which studios the samples sit on: the yoga studio visited most, else a favourite one, else the nearest; the same among
+ *  STC studios; and the studio whose Hyrox classes (or Hyrox category) were visited most, else a favourite, else the nearest
+ *  that runs Hyrox. All in the member's city; ties go to the nearer studio, then the lower id. A studio with a real storefront
+ *  (`listed`) keeps its own listings. `i`: {studios: [{id, name, cityId, cats: [titles]}], cityId, visits: {id: n},
+ *  hyroxVisits: {id: n}, hyroxClassStudios: [ids], favourites: [ids], distances: {id: metres}, listed: [ids]}. */
+export function samplePicks(i) {
+  const fav = new Set(i.favourites || []), listed = new Set(i.listed || []), hx = new Set(i.hyroxClassStudios || []);
+  const visits = i.visits || {}, hyrox = i.hyroxVisits || {}, dist = i.distances || {};
+  const city = (i.studios || []).filter((s) => (s.cityId == null ? i.cityId : s.cityId) === i.cityId && !listed.has(s.id));
+  const has = (s, word) => (s.cats || []).some((c) => String(c).toLowerCase().includes(word));
+  const near = (a, b) => { const da = dist[a.id] == null ? Infinity : dist[a.id], db = dist[b.id] == null ? Infinity : dist[b.id]; return da !== db ? da - db : a.id - b.id; };
+  const best = (list, score) => {
+    const went = list.filter((s) => score(s) > 0).sort((a, b) => score(b) - score(a) || near(a, b));
+    if (went.length) return went[0].id;
+    const favs = list.filter((s) => fav.has(s.id)).sort(near);
+    if (favs.length) return favs[0].id;
+    const nearest = list.slice().sort(near)[0];
+    return nearest ? nearest.id : null;
+  };
+  const visited = (s) => visits[s.id] || 0;
+  return {
+    yoga: best(city.filter((s) => has(s, 'yoga')), visited),
+    gym: best(city.filter((s) => isSTC(s.name)), visited),
+    hyrox: best(city.filter((s) => has(s, 'hyrox') || hx.has(s.id) || (hyrox[s.id] || 0) > 0), (s) => (hyrox[s.id] || 0) * 1000 + visited(s)),
+  };
+}
+
+/** The sample catalogue for the picked studios, in kronor incl. VAT. The seller is the studio itself, under its own name;
+ *  every storefront, product and drop carries `sample`. The race-day tee is open, 31 of 40 reserved. */
+export function sampleCatalog(picks, studioName, city, now) {
+  const c = { city: city || '', storefronts: [], products: [], drops: [] };
+  const add = (studio, slug, title, kind, description, kr, fulfilment, sizes) => {
+    if (!c.storefronts.some((f) => f.studioId === studio)) {
+      c.storefronts.push({ studioId: studio, sellerName: studioName(studio), city: c.city, webshopUrl: null, pickupNote: null, consentAt: '', checkout: false, shippingOre: null, sample: true });
+    }
+    c.products.push({ id: SAMPLE_PREFIX + studio + '-' + slug, studioId: studio, title, kind, description, priceOre: kr * 100, vatRate: 25, fulfilment: fulfilment || 'desk', linkUrl: null,
+      variants: (sizes || []).map((l) => ({ id: l.toLowerCase().replace('/', '-'), label: l, inStock: true })), sample: true });
+  };
+  if (picks.yoga != null) {
+    add(picks.yoga, 'cork-mat', 'Cork yoga mat', 'mat', 'Natural cork on rubber · 183 × 61 cm · 4 mm', 795, 'link');
+    add(picks.yoga, 'grip-socks', 'Grip socks', 'socks', 'Cotton with silicone grip · 2-pack', 149, 'desk', ['S/M', 'L/XL']);
+    add(picks.yoga, 'mat-towel', 'Mat towel', 'towel', 'Microfibre with grip dots · 183 × 63 cm', 299);
+  }
+  if (picks.gym != null) {
+    add(picks.gym, 'gym-towel', 'Gym towel', 'towel', 'Quick-dry microfibre · 50 × 100 cm', 199);
+    add(picks.gym, 'shaker', 'Shaker bottle', 'other', '700 ml, leak-proof lid', 129);
+    add(picks.gym, 'lifting-straps', 'Lifting straps', 'other', 'Cotton with a padded wrist loop · pair', 179);
+  }
+  if (picks.hyrox != null) {
+    const h = picks.hyrox, t = now == null ? Date.now() : now;
+    add(h, 'race-day-tee', 'Race-day tee', 'apparel', 'Organic cotton, printed in the EU · unisex', 349, 'pod', ['XS', 'S', 'M', 'L', 'XL']);
+    add(h, 'grip-gloves', 'Grip gloves', 'other', 'Padded palm, open fingers · for pull-ups and wall balls', 249);
+    const day = new Date(t); day.setUTCDate(day.getUTCDate() + 12);
+    c.drops.push({ id: SAMPLE_PREFIX + h + '-race-day', studioId: h, productId: SAMPLE_PREFIX + h + '-race-day-tee', challengeId: null, title: 'Race-day tee',
+      opensAt: t - 5 * 86400000, closesAt: t + 2 * 86400000 + 14 * 3600000, minQty: 25, maxQty: 40, reserved: 31, pickupFrom: day.toISOString().slice(0, 10), linkUrl: null, ready: false, unlocked: false, sample: true });
+  }
+  return c;
+}
+
+/** Sample listings after the real ones; a studio with a real storefront keeps only its own. */
+export function overlay(real, samples) {
+  if (isEmpty(samples)) return real;
+  const base = real || { city: samples.city, storefronts: [], products: [], drops: [] };
+  const taken = new Set(base.storefronts.map((f) => f.studioId));
+  const fronts = samples.storefronts.filter((f) => !taken.has(f.studioId));
+  const ids = new Set(fronts.map((f) => f.studioId));
+  return { city: base.city || samples.city, storefronts: base.storefronts.concat(fronts), products: base.products.concat(samples.products.filter((p) => ids.has(p.studioId))),
+    drops: base.drops.concat(samples.drops.filter((d) => ids.has(d.studioId))) };
+}

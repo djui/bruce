@@ -189,6 +189,8 @@ extension AppModel {
         visitHistory = Self.demoVisits
         loadDemoRaces()   // after the history: Train for it adds this week's check-ins
         loadDemoShop()    // the three shop studios and the catalogue (DemoShop.swift)
+        // Sample shop (SampleShop.swift): the demo shows none unless BRUCE_SAMPLE_SHOP=1 or a `sample…` screen asks for it.
+        if (AppModel.setting("BRUCE_SCREEN") ?? "").hasPrefix("sample") { showSampleShop = true }
         Task { await refreshRecommendations() }
 
         // BRUCE_SCREEN=<name> opens a screen directly (for screenshots).
@@ -243,12 +245,19 @@ extension AppModel {
         case "finisher": tab = .friends; demoFriendsTab = 1; push(.challenge("demoDone")); demoScrollBottom = true
         case "finishertee": push(.product("karnan-finisher-tee"))
         case "dropready":
-            if let i = shop?.drops.firstIndex(where: { $0.id == "hornstull-race-day-2027" }) { shop?.drops[i].ready = true }
+            if let i = shopReal?.drops.firstIndex(where: { $0.id == "hornstull-race-day-2027" }) { shopReal?.drops[i].ready = true }
             push(.product("karnan-race-day-tee"))
         // Phase 4: the towel's page with the delivery choice, the checkout sheet (mockup 5) and Menu › Orders.
         case "buy": push(.product("angan-bastu-towel")); demoScrollBottom = true
         case "shopcheckout": push(.product("angan-bastu-towel")); present(.shopCheckout("angan-bastu-towel"))
         case "orders": present(.orders)
+        // Sample shop: Home's Shop section, Home › Shop, a sample product and its drop, the yoga studio's rail, and Settings.
+        case "samplehome": tab = .home; demoScrollBottom = true
+        case "sampleshop": push(.shop)
+        case "sampleproduct": push(.product(sampleProductId("Cork yoga mat")))
+        case "sampledrop": push(.product(sampleProductId("Race-day tee")))
+        case "samplestudio": if let y = samplePicks.yoga { push(.studio(y)); demoScrollBottom = true }
+        case "samplesettings": present(.settings)
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
         case "detail": push(.classDetail(9001))

@@ -983,7 +983,7 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .part.small .i { width: 22px; height: 22px; }
 .k-towel { background: var(--t-towel); } .k-mat { background: var(--t-mat); } .k-socks { background: var(--t-socks); }
 .k-apparel { background: var(--t-apparel); } .k-sauna { background: var(--t-sauna); } .k-other { background: var(--t-other); }
-.ptile { display: grid; gap: 2px; min-width: 0; color: var(--label); text-decoration: none; }
+.ptile { position: relative; display: grid; gap: 2px; min-width: 0; color: var(--label); text-decoration: none; }
 .ptile > b { margin-top: 4px; font-size: 14px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ptile > span { font-size: 12px; color: var(--label-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ptile > span em { font-style: normal; font-weight: 800; color: var(--label); }
@@ -992,6 +992,12 @@ dialog.sheet .row2 .btn + .btn { margin-top: 0; }
 .shop-rail .hscroll.shop-row .ptile { width: 116px; }
 .shop-grid { display: grid; gap: 16px 12px; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 .mtag { display: inline-block; padding: 3px 8px; border-radius: 9px; background: var(--lime); color: var(--on-lime); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+/* Sample listings (shop.js): the tag on the picture, the drop card and the product page, and the line on Home › Shop. */
+.stag { display: inline-block; padding: 3px 8px; border-radius: 9px; background: rgba(0, 0, 0, 0.78); color: #fff; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.ptile > .stag { position: absolute; top: 6px; left: 6px; color: #fff; font-size: 10px; }
+.tags { display: inline-flex; gap: 6px; align-items: center; }
+.sample-note { display: flex; gap: 8px; align-items: flex-start; margin: 12px 0; padding: 12px; border-radius: 16px; font-size: 13px; font-weight: 600; line-height: 1.4; background: color-mix(in srgb, var(--lime) 18%, transparent); }
+.sample-note .i { flex: none; width: 18px; height: 18px; }
 .drop-card { display: grid; gap: 10px; margin: 12px 0; padding: 16px; border-radius: 24px; color: #fff; background: linear-gradient(140deg, var(--drop-a), var(--drop-b)); }
 .drop-card .drop-body { display: grid; gap: 6px; color: inherit; text-decoration: none; }
 .drop-card .drop-body > b { font: 900 18px/1.15 var(--display); }

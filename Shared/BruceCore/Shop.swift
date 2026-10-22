@@ -5,6 +5,7 @@ import Foundation
 // sells at the desk or in its webshop, shows planned drops with Notify me, and reminds. Nothing here takes money or
 // an address, and no product carries a Bruce or Brüce mark. Prices are in öre and include VAT, as the Bruce API's.
 // The same logic lives in docs/app/js/shop.js; ShopTests checks both against the same cases.
+// SampleShop.swift lays clearly marked sample listings over the real catalogue (`sample`); the server never sees them.
 
 /// The Shop screen's chips, in this order.
 enum ProductKind: String, Codable, CaseIterable, Hashable {
@@ -66,11 +67,13 @@ struct Product: Codable, Hashable, Identifiable {
     /// The product's own page in the studio's webshop (https).
     var linkUrl: String? = nil
     var variants: [ProductVariant] = []
+    /// A sample listing (SampleShop.swift): made on this device, never decoded from the server, never for sale.
+    var sample = false
 
     init(id: String, studioId: Int, title: String, kind: ProductKind, description: String? = nil, priceOre: Int, vatRate: Int = 25, fulfilment: Fulfilment,
-         linkUrl: String? = nil, variants: [ProductVariant] = []) {
+         linkUrl: String? = nil, variants: [ProductVariant] = [], sample: Bool = false) {
         self.id = id; self.studioId = studioId; self.title = title; self.kind = kind; self.description = description; self.priceOre = priceOre
-        self.vatRate = vatRate; self.fulfilment = fulfilment; self.linkUrl = linkUrl; self.variants = variants
+        self.vatRate = vatRate; self.fulfilment = fulfilment; self.linkUrl = linkUrl; self.variants = variants; self.sample = sample
     }
     /// Required: id, studioId, title, kind, priceOre, fulfilment. A variant this version can't read is dropped, not the product.
     init(from decoder: Decoder) throws {
@@ -114,12 +117,14 @@ struct Drop: Codable, Hashable, Identifiable {
     var ready = false
     /// Tied to a challenge the member finished (`GET /me/shop`): only they see it.
     var unlocked = false
+    /// A sample drop (SampleShop.swift): Reserve and Notify me only answer "Sample item, not for sale".
+    var sample = false
 
     init(id: String, studioId: Int, productId: String, challengeId: String? = nil, title: String, opensAt: Int, closesAt: Int, minQty: Int = 0, maxQty: Int? = nil,
-         reserved: Int = 0, pickupFrom: String? = nil, linkUrl: String? = nil, ready: Bool = false, unlocked: Bool = false) {
+         reserved: Int = 0, pickupFrom: String? = nil, linkUrl: String? = nil, ready: Bool = false, unlocked: Bool = false, sample: Bool = false) {
         self.id = id; self.studioId = studioId; self.productId = productId; self.challengeId = challengeId; self.title = title; self.opensAt = opensAt
         self.closesAt = closesAt; self.minQty = minQty; self.maxQty = maxQty; self.reserved = reserved; self.pickupFrom = pickupFrom; self.linkUrl = linkUrl
-        self.ready = ready; self.unlocked = unlocked
+        self.ready = ready; self.unlocked = unlocked; self.sample = sample
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -184,13 +189,16 @@ struct Storefront: Codable, Hashable, Identifiable {
     var checkout = false
     /// Shipping incl. VAT when the studio ships ("Ship to me · 49 kr"); nil = pickup only.
     var shippingOre: Int? = nil
+    /// The storefront of sample listings (SampleShop.swift): the studio did not approve anything.
+    var sample = false
     var id: Int { studioId }
     var webshop: URL? { ShopLink.https(webshopUrl) }
     var ships: Bool { shippingOre != nil }
 
-    init(studioId: Int, sellerName: String, city: String, webshopUrl: String? = nil, pickupNote: String? = nil, consentAt: String, checkout: Bool = false, shippingOre: Int? = nil) {
+    init(studioId: Int, sellerName: String, city: String, webshopUrl: String? = nil, pickupNote: String? = nil, consentAt: String, checkout: Bool = false, shippingOre: Int? = nil,
+         sample: Bool = false) {
         self.studioId = studioId; self.sellerName = sellerName; self.city = city; self.webshopUrl = webshopUrl; self.pickupNote = pickupNote; self.consentAt = consentAt
-        self.checkout = checkout; self.shippingOre = shippingOre
+        self.checkout = checkout; self.shippingOre = shippingOre; self.sample = sample
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -322,10 +330,31 @@ struct ShopCatalog: Codable, Hashable {
     func towel(for studioId: Int) -> Product? { products(for: studioId).first { $0.kind == .towel } }
     /// Drops not over yet (or ready at the desk), soonest closing first.
     func liveDrops(now: Date = Date()) -> [Drop] { drops.filter { $0.state(now: now) != .closed }.sorted { $0.closesAt < $1.closesAt } }
-    /// Home's drop card: an unlocked drop first (it is the member's), else the live drop closing first.
-    func homeDrop(now: Date = Date()) -> Drop? { liveDrops(now: now).first { $0.unlocked } ?? liveDrops(now: now).first }
+    /// Home's drop card: an unlocked drop first (it is the member's), then a real drop closing first, then a sample.
+    func homeDrop(now: Date = Date()) -> Drop? {
+        let live = liveDrops(now: now)
+        return live.first { $0.unlocked } ?? live.first { !$0.sample } ?? live.first
+    }
+    /// Any sample listing in it (SampleShop.swift): the Shop screen then says so at the top.
+    var hasSamples: Bool { products.contains { $0.sample } }
+    /// Something real in it: only then the footer says the studios approved the listings.
+    var hasReal: Bool { products.contains { !$0.sample } }
     /// The drop a finished challenge unlocked, if the member has it (phase 3).
     func drop(forChallenge id: String) -> Drop? { drops.first { $0.challengeId == id && $0.unlocked } }
+
+    /// Sample listings (SampleShop.swift) after the real ones; a studio with a real storefront keeps only its own.
+    func overlaying(_ samples: ShopCatalog?) -> ShopCatalog {
+        guard let samples, !samples.isEmpty else { return self }
+        var c = self
+        if c.city.isEmpty { c.city = samples.city }
+        let real = Set(storefronts.map(\.studioId))
+        let fronts = samples.storefronts.filter { !real.contains($0.studioId) }
+        let ids = Set(fronts.map(\.studioId))
+        c.storefronts += fronts
+        c.products += samples.products.filter { ids.contains($0.studioId) }
+        c.drops += samples.drops.filter { ids.contains($0.studioId) }
+        return c
+    }
 
     /// The member's unlocked drops and their products (`GET /me/shop`) laid over the public catalogue, by id.
     func merging(drops mine: [Drop], products theirs: [Product]) -> ShopCatalog {
@@ -457,23 +486,29 @@ enum ShopServer {
 // MARK: - App state
 
 extension AppModel {
-    /// Something is listed in the city: Home's Shop section, the studio rails and the towel card show only then.
+    /// Something is listed in the city: Home's Shop section, the studio rails and the towel card show only then. Sample
+    /// listings (SampleShop.swift) count: with "Show sample shop" on, the shop is there to look at.
     var showsShop: Bool { shop?.isEmpty == false }
+    /// Menu › Orders: only where a real shop is listed or something was bought (a sample shop has no orders).
+    var showsOrders: Bool { shopReal?.isEmpty == false || !orders.isEmpty }
 
     /// Loads the city's catalogue: the demo's in demo mode, else `GET /shop?city=` at most every 10 minutes (or `force`).
-    /// A failed read keeps whatever is shown; with the server switched off nothing is listed.
+    /// A failed read keeps whatever is shown; with the server switched off nothing real is listed. Sample listings are
+    /// laid over it by `shop` and need no server.
     func loadShop(force: Bool = false) async {
-        if AppModel.demo { if shop == nil { loadDemoShop() }; return }
-        guard AutoBookServer.isConfigured, let code = city?.code ?? (cityId == 1 ? "STO" : nil) else { shop = nil; return }
-        if !force, let at = shopFetchedAt, Date().timeIntervalSince(at) < 600, shop?.city == code { return }
+        if AppModel.demo { if shopReal == nil { loadDemoShop() }; return }
+        // The samples pick studios by the visit history; Home's For you reads it as well, so it is usually there already.
+        if showSampleShop, tokenUsable, visitHistory == nil { Task { await fetchVisitHistory() } }
+        guard AutoBookServer.isConfigured, let code = city?.code ?? (cityId == 1 ? "STO" : nil) else { shopReal = nil; return }
+        if !force, let at = shopFetchedAt, Date().timeIntervalSince(at) < 600, shopReal?.city == code { return }
         guard !shopLoading else { return }
         shopLoading = true
         defer { shopLoading = false }
-        if let c = try? await ShopServer.catalogue(city: code) { shop = c; shopFetchedAt = Date() }
+        if let c = try? await ShopServer.catalogue(city: code) { shopReal = c; shopFetchedAt = Date() }
         // Notify me on every device, and the drops a finished challenge unlocked, laid over the catalogue.
         if tokenUsable, let s = session, AutoBookServer.booksForMe, let mine = try? await ShopServer.mine(session: s) {
             shopNotify = Set(mine.notify)
-            if let c = shop { shop = c.merging(drops: mine.drops, products: mine.products) }
+            if let c = shopReal { shopReal = c.merging(drops: mine.drops, products: mine.products) }
         }
     }
 
@@ -487,14 +522,15 @@ extension AppModel {
     func shopDrop(for product: Product) -> Drop? { shop?.drop(for: product) }
     func isNotified(_ dropId: String) -> Bool { shopNotify.contains(dropId) }
 
-    /// "Forgot your towel?" after a check-in: a Wellness studio (sauna, spa) whose storefront lists a towel.
+    /// "Forgot your towel?" after a check-in: a Wellness studio (sauna, spa) whose storefront lists a towel. Never a sample.
     func towelPrompt(studioId: Int) -> Product? {
         guard isWellness(studioId: studioId) else { return nil }
-        return shop?.towel(for: studioId)
+        return shopReal?.towel(for: studioId)
     }
 
     /// Notify me on a drop: a push and an email from our server when the pre-order opens. Needs the server; the demo pretends.
     func setNotify(_ drop: Drop, _ on: Bool) async {
+        if drop.sample { flashSample(); return }
         if AppModel.demo {
             if on { shopNotify.insert(drop.id) } else { shopNotify.remove(drop.id) }
             flash(on ? Copy.shopNotifyOn : Copy.shopNotifyOff, icon: on ? "bell.fill" : "bell.slash")
@@ -517,7 +553,7 @@ extension AppModel {
 
     /// One to the day's anonymous counter when a listing is opened (the KPI "taps per studio-page view"). Never in the demo.
     func tapProduct(_ id: String) {
-        guard !AppModel.demo, AutoBookServer.isConfigured, !shopTapped.contains(id) else { return }
+        guard !AppModel.demo, AutoBookServer.isConfigured, !SampleShop.isSample(id), !shopTapped.contains(id) else { return }
         shopTapped.insert(id)
         Task { await ShopServer.tap(productId: id) }
     }
@@ -543,6 +579,7 @@ extension AppModel {
     /// Opens Stripe Checkout for the draft: the URL to show in the browser (SFSafariViewController on the iPhone), or nil
     /// with a toast. The demo opens nothing. Apple's guideline 3.1.3(e): physical goods are never in-app purchases.
     func startCheckout(_ draft: CheckoutDraft) async -> URL? {
+        if draft.product.sample { flashSample(); return nil }
         if let p = draft.problem { flash(p); return nil }
         if AppModel.demo { flash("Demo: Stripe Checkout would open now (offline, nothing sent)"); return nil }
         guard tokenUsable, let s = session else { present(.login); return nil }

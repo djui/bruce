@@ -199,6 +199,14 @@ My classes tabs, with class and studio pages and account sheets.
   for pickup" arrives by push and email. Prices are in kronor incl. 25% VAT. The studio is the seller: Brüce lists,
   reminds and never holds money or an address, no product carries a Bruce or Brüce mark, and the whole feature stays
   hidden where nothing is listed. Production starts with an empty catalogue; the demo has three fictional studios.
+- **Sample shop** (iPhone, Mac and web; Settings › Show sample shop, on by default, per device): until a studio has
+  approved a listing, a few clearly marked sample items sit on your own studios so the shop can be looked at: a mat,
+  grip socks and a mat towel at the yoga studio you visit most (else a favourite one, else the nearest), a gym towel,
+  shaker bottle and lifting straps at an STC studio (visited, favourited or nearest), and a race-day tee drop with grip
+  gloves at a studio that runs Hyrox (the one whose Hyrox classes you visit, else a favourite, else the nearest). A
+  studio that has a real listing keeps only its own. Every sample wears a **"Sample"** tag, Home › Shop says at the top
+  that they are not for sale, and Buy, Reserve, Notify me and Webshop only answer "Sample item, not for sale": the
+  items are made on the device from the studios, favourites and visits the app has loaded, and nothing reaches the server.
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.
@@ -525,9 +533,11 @@ friends card: Show friends I'm going and Start a crew), `crewrace` (a race page 
 sauna's Shop at the desk rail), `towel` (the ticket with Forgot your towel?), `homeshop` (Home's Shop section), `finisher`
 (a finished challenge with its finisher tee), `finishertee` (the unlocked drop's page), `dropready` (a drop ready at the
 desk), `buy` (the towel's page with the pickup or shipping choice and Buy), `shopcheckout` (the checkout sheet), `orders`
-(Menu › Orders with a pickup code), …; the full list is in
+(Menu › Orders with a pickup code), `samplehome`, `sampleshop`, `sampleproduct`, `sampledrop`, `samplestudio` and
+`samplesettings` (the sample listings on the demo's own studios), …; the full list is in
 [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)). Demo Home shows the Next race card with the plan's week.
-Demo mode is not reachable from the UI.
+The demo shows no sample listings unless `BRUCE_SAMPLE_SHOP=1`, a `sample…` screen or the Settings switch asks for them (the web demo
+takes `?samples=1`). Demo mode is not reachable from the UI.
 
 ```sh
 # macOS

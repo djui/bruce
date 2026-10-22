@@ -99,7 +99,7 @@ struct MenuSheet: View {
             ("person.crop.circle", "Account", .account),
             ("gearshape", "Settings", .settings),
             ("calendar.badge.clock", "Auto-book", .autoBook),
-        ] + (m.showsShop || !m.orders.isEmpty ? [("bag", Copy.shopOrdersTitle, .orders)] : []) + [
+        ] + (m.showsOrders ? [("bag", Copy.shopOrdersTitle, .orders)] : []) + [
             ("person.2", "Invite friends", .invite),
             ("gift", "Redeem voucher", .voucher),
             ("bubble.left.and.bubble.right", "Chat with support", .support),

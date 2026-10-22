@@ -12,7 +12,7 @@ struct MenuSheet: View {
             ("gearshape", "Settings", .settings),
             ("calendar.badge.clock", "Auto-book", .autoBook),
             ("target", "Monthly goals", .goals),
-        ] + (m.showsShop || !m.orders.isEmpty ? [("bag", Copy.shopOrdersTitle, .orders)] : []) + [
+        ] + (m.showsOrders ? [("bag", Copy.shopOrdersTitle, .orders)] : []) + [
             ("person.2", "Invite friends", .invite),
             ("gift", "Redeem voucher", .voucher),
             ("bubble.left.and.bubble.right", "Support", .support),

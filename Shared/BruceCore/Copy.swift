@@ -196,6 +196,13 @@ enum Copy {
     static func shopPickup(_ studio: String) -> String { "Pick up at \(studio)" }
     /// Under "Forgot your towel?": "Rent one at the desk, or take a bastu towel home for 449 kr."
     static func shopTowelBody(_ towel: Product) -> String { "Rent one at the desk, or take a \(towel.title.lowercased()) home for \(towel.priceText)." }
+    // Sample shop (SampleShop.swift): listings made on this device so the shop can be looked at; nothing is for sale.
+    static let shopSampleTag = "Sample"
+    static let shopSampleToast = "Sample item, not for sale"
+    static let shopSampleNote = "Sample items to preview the shop. Not for sale. Settings › Show sample shop turns them off."
+    static let shopSampleProductNote = "A sample item to preview the shop. The studio does not sell it and nothing here can be bought."
+    static let shopSampleSetting = "Show sample shop"
+    static let shopSampleSettingNote = "Sample items on your own studios, to preview the shop. They are not for sale and never leave this device."
     // Phase 3: drops.
     static let shopUnlocked = "Unlocked"
     static let shopReadyTitle = "Ready for pickup"

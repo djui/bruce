@@ -266,3 +266,205 @@ extension ShopTests {
         XCTAssertEqual(m.orders[1].statusLine, "Being printed")
     }
 }
+
+// MARK: - Sample shop (SampleShop.swift)
+
+extension ShopTests {
+    func studio(_ id: Int, _ name: String, _ cats: [String] = [], city: Int = 1, status: String = "LIVE") -> BruceAPI.Studio {
+        let cs = cats.enumerated().map { #"{"category_id":\#(100 + $0.offset),"order":\#($0.offset),"category":{"id":\#(100 + $0.offset),"title":"\#($0.element)"}}"# }.joined(separator: ",")
+        return try! JSONDecoder().decode(BruceAPI.Studio.self, from: Data(#"{"id":\#(id),"name":"\#(name)","status":"\#(status)","city_id":\#(city),"studio_categories":[\#(cs)]}"#.utf8))
+    }
+
+    func testSamplePicksYogaStudio() {
+        var i = SampleInput(studios: [studio(1, "Flow Södermalm", ["Yoga"]), studio(2, "Flow Vasastan", ["Yoga", "Pilates"]), studio(3, "Hot Room", ["Yoga"]), studio(4, "Iron Works", ["Gym"])])
+        i.distances = [1: 3000, 2: 1500, 3: 500, 4: 100]
+        XCTAssertEqual(SampleShop.picks(i).yoga, 3, "nothing visited, no favourite: the nearest yoga studio")
+        i.favourites = [1, 4]
+        XCTAssertEqual(SampleShop.picks(i).yoga, 1, "a favourite yoga studio beats a nearer one")
+        i.visits = [2: 5, 1: 2, 4: 40]
+        XCTAssertEqual(SampleShop.picks(i).yoga, 2, "the yoga studio visited most; visits to a gym count for nothing")
+        i.visits = [2: 3, 3: 3]
+        XCTAssertEqual(SampleShop.picks(i).yoga, 3, "a tie goes to the nearer studio")
+        i.distances = [:]
+        XCTAssertEqual(SampleShop.picks(i).yoga, 2, "without distances a tie goes to the lower id")
+    }
+
+    func testSamplePicksStcStudio() {
+        XCTAssertTrue(SampleShop.isSTC("STC Rosenlundsparken"))
+        XCTAssertTrue(SampleShop.isSTC("stc Sundbyberg"))
+        XCTAssertTrue(SampleShop.isSTC("STC"))
+        XCTAssertFalse(SampleShop.isSTC("Stcokholm Yoga"), "STC must be a word of its own")
+        XCTAssertFalse(SampleShop.isSTC("Gym by STC"), "the name starts with it")
+        var i = SampleInput(studios: [studio(10, "STC Rosenlundsparken", ["Gym"]), studio(11, "STC Sturegatan Park", ["Gym"]), studio(12, "Iron Works", ["Gym"])])
+        i.distances = [10: 2000, 11: 900, 12: 100]
+        XCTAssertEqual(SampleShop.picks(i).gym, 11, "the nearest STC studio")
+        i.favourites = [10]
+        XCTAssertEqual(SampleShop.picks(i).gym, 10, "a favourite STC studio")
+        i.visits = [11: 4, 12: 30]
+        XCTAssertEqual(SampleShop.picks(i).gym, 11, "the STC studio visited most")
+        XCTAssertNil(SampleShop.picks(SampleInput(studios: [studio(12, "Iron Works", ["Gym"])])).gym, "no STC studio: no gym samples")
+    }
+
+    func testSamplePicksHyroxStudio() {
+        var i = SampleInput(studios: [studio(20, "STC Sturegatan Park", ["Gym"]), studio(21, "STC Hornstull", ["Gym", "Hyrox"]), studio(22, "Box 22", ["CrossFit"]), studio(23, "Flow", ["Yoga"])])
+        i.distances = [20: 500, 21: 4000, 22: 100, 23: 50]
+        XCTAssertEqual(SampleShop.picks(i).hyrox, 21, "only a studio that runs Hyrox: the one with the category")
+        i.hyroxClassStudios = [20]
+        XCTAssertEqual(SampleShop.picks(i).hyrox, 20, "a studio with a Hyrox class listed counts, and it is nearer")
+        i.visits = [21: 12, 20: 1]
+        XCTAssertEqual(SampleShop.picks(i).hyrox, 21, "a visited Hyrox studio beats a nearer one")
+        i.hyroxVisits = [20: 2]
+        XCTAssertEqual(SampleShop.picks(i).hyrox, 20, "visits to a Hyrox class count most, even where the studio has no category")
+        XCTAssertNil(SampleShop.picks(SampleInput(studios: [studio(22, "Box 22", ["CrossFit"])])).hyrox, "no Hyrox studio: no Hyrox samples")
+    }
+
+    func testSamplePicksStayInTheCityAndOffRealStorefronts() {
+        var i = SampleInput(studios: [studio(30, "Flow Göteborg", ["Yoga"], city: 2), studio(31, "Flow Södermalm", ["Yoga"]), studio(32, "Flow Closed", ["Yoga"], status: "CLOSED")], cityId: 1)
+        i.visits = [30: 50, 32: 50]
+        XCTAssertEqual(SampleShop.picks(i).yoga, 31, "another city's studio and a closed one are left out")
+        i.listed = [31]
+        XCTAssertNil(SampleShop.picks(i).yoga, "a studio with a real storefront keeps its own listings")
+        i.studios = [studio(33, "Yoga by title", [])]
+        i.categoryTitle = { $0 == 100 ? "Yoga" : nil }
+        XCTAssertNil(SampleShop.picks(i).yoga, "a studio without categories is not a yoga studio")
+    }
+
+    func testSampleCatalogue() {
+        let c = SampleShop.catalog(SamplePicks(yoga: 1, gym: 10, hyrox: 10), studioName: { $0 == 1 ? "Flow Södermalm" : "STC Sturegatan Park" }, city: "STO", now: now)
+        XCTAssertEqual(c.storefronts.map(\.studioId), [1, 10], "one storefront per studio, even when the gym and Hyrox samples share one")
+        XCTAssertEqual(c.storefronts.map(\.sellerName), ["Flow Södermalm", "STC Sturegatan Park"], "the studio's own name")
+        XCTAssertTrue(c.storefronts.allSatisfy { $0.sample && !$0.checkout && $0.webshopUrl == nil })
+        XCTAssertEqual(c.products(for: 1).map(\.title), ["Cork yoga mat", "Grip socks", "Mat towel"])
+        XCTAssertEqual(c.products(for: 1).map(\.priceText), ["795 kr", "149 kr", "299 kr"])
+        XCTAssertEqual(c.products(for: 10).map(\.title), ["Gym towel", "Shaker bottle", "Lifting straps", "Race-day tee", "Grip gloves"])
+        XCTAssertEqual(c.products(for: 10).map(\.priceText), ["199 kr", "129 kr", "179 kr", "349 kr", "249 kr"])
+        XCTAssertTrue(c.products.allSatisfy { $0.sample && SampleShop.isSample($0.id) && $0.vatRate == 25 }, "every product is a sample, in kronor incl. 25% VAT")
+        XCTAssertEqual(c.products.count, Set(c.products.map(\.id)).count, "ids are unique")
+        for p in c.products {
+            let text = [p.id, p.title, p.description ?? "", p.kind.title].joined(separator: " ") + c.storefronts.map(\.sellerName).joined()
+            XCTAssertNil(p.title.range(of: "bru[ce]|stc|hyrox", options: [.regularExpression, .caseInsensitive]), "no Bruce, Brüce, STC or Hyrox mark on \(p.title)")
+            XCTAssertNil(((p.description ?? "") + p.id).range(of: "bru[ce]|stc|hyrox", options: [.regularExpression, .caseInsensitive]), "nor in its description: \(text)")
+        }
+        let d = try! XCTUnwrap(c.drops.first)
+        XCTAssertEqual(c.drops.count, 1)
+        XCTAssertTrue(d.sample)
+        XCTAssertEqual(d.studioId, 10, "picked up at the Hyrox studio")
+        XCTAssertEqual(d.state(now: now), .open)
+        XCTAssertEqual(d.countdownText(now: now), "Closes in 2 d 14 h")
+        XCTAssertEqual(d.progressText, "31 of 40")
+        XCTAssertNil(d.reserveURL(now: now), "no link to open")
+        XCTAssertEqual(c.drop(for: try! XCTUnwrap(c.product("sample-10-race-day-tee")))?.id, d.id)
+        XCTAssertEqual(SampleShop.catalog(SamplePicks(), studioName: { _ in "" }, city: "STO").isEmpty, true, "no studio fits: nothing is listed")
+        XCTAssertEqual(SampleShop.catalog(SamplePicks(hyrox: 7), studioName: { _ in "Box" }, city: "STO", now: now).products.map(\.title), ["Race-day tee", "Grip gloves"], "each set stands alone")
+    }
+
+    func testSamplesLayOverTheRealCatalogue() throws {
+        let real = ShopCatalog.demo(now: now)
+        let sample = SampleShop.catalog(SamplePicks(yoga: 1, gym: ShopCatalog.demoKarnan), studioName: { "Studio \($0)" }, city: "STO", now: now)
+        let c = real.overlaying(sample)
+        XCTAssertEqual(c.products.prefix(real.products.count).map(\.id), real.products.map(\.id), "the real listings come first")
+        XCTAssertFalse(c.products.contains { $0.studioId == ShopCatalog.demoKarnan && $0.sample }, "a studio with a real storefront gets no samples")
+        XCTAssertEqual(c.products.filter(\.sample).map(\.studioId), [1, 1, 1])
+        XCTAssertTrue(c.hasSamples)
+        XCTAssertTrue(c.hasReal)
+        XCTAssertFalse(real.hasSamples)
+        XCTAssertEqual(real.overlaying(nil), real, "nothing to lay over")
+        XCTAssertEqual(real.overlaying(ShopCatalog()), real)
+        let only = ShopCatalog(city: "STO").overlaying(sample)
+        XCTAssertTrue(only.hasSamples)
+        XCTAssertFalse(only.hasReal, "samples alone: the footer must not claim the studios approved them")
+        XCTAssertFalse(only.isEmpty, "the shop shows")
+        // Home's drop card: a real drop closing later still beats a sample drop closing sooner.
+        var withDrop = SampleShop.catalog(SamplePicks(hyrox: 5), studioName: { _ in "Box" }, city: "STO", now: now)
+        withDrop.drops[0].closesAt = ms("2027-02-07T00:00:00Z")   // sooner than the real drop (07 Feb 22:00Z)
+        let both = real.overlaying(withDrop)
+        XCTAssertEqual(both.homeDrop(now: now)?.id, "finisher-tee-2026", "the member's own unlocked drop first")
+        var realDrops = real
+        realDrops.drops.removeAll { $0.unlocked }
+        XCTAssertEqual(realDrops.overlaying(withDrop).homeDrop(now: now)?.id, "hornstull-race-day-2027", "a real drop before the sample")
+        XCTAssertEqual(ShopCatalog(city: "STO").overlaying(withDrop).homeDrop(now: now)?.sample, true)
+        // The server's JSON can't say "sample".
+        let json = #"{"city":"STO","storefronts":[{"studioId":9850,"sellerName":"Ångan Bastu AB","city":"STO","consentAt":"2026-11-09","sample":true}],"products":[{"id":"sample-x","studioId":9850,"title":"Towel","kind":"towel","priceOre":100,"fulfilment":"desk","sample":true}]}"#
+        let decoded = try ShopCatalog.decode(Data(json.utf8))
+        XCTAssertFalse(decoded.storefronts[0].sample)
+        XCTAssertFalse(decoded.products[0].sample)
+    }
+
+    @MainActor func testDemoSampleShop() async {
+        let was = AppModel.demo
+        defer { AppModel.demo = was }
+        AppModel.demo = true
+        let m = AppModel()
+        m.loadDemo()
+        XCTAssertFalse(m.showSampleShop, "the demo stays as it was unless asked")
+        XCTAssertNil(m.sampleShop)
+        XCTAssertEqual(m.shop, m.shopReal)
+        m.showSampleShop = true
+        XCTAssertEqual(m.samplePicks, SamplePicks(yoga: 1491, gym: 1724, hyrox: 9810), "the demo's most visited yoga and STC studios, and the box it took Hyrox classes at")
+        let shop = try! XCTUnwrap(m.shop)
+        XCTAssertEqual(shop.products.filter(\.sample).count, 8)
+        XCTAssertEqual(shop.products.filter { !$0.sample }.map(\.id), ShopCatalog.demo().products.map(\.id), "the demo's own listings are untouched")
+        XCTAssertEqual(m.shopStorefront(1491)?.sellerName, "Example Yoga Södermalm")
+        XCTAssertEqual(m.shopProducts(for: 1724).map(\.title), ["Gym towel", "Shaker bottle", "Lifting straps"])
+        XCTAssertFalse(m.canBuy(try! XCTUnwrap(m.shopProduct("sample-1491-cork-mat"))), "a sample has no checkout")
+        XCTAssertTrue(m.showsOrders, "the demo's own shop is real as far as Orders go")
+        XCTAssertEqual(m.towelPrompt(studioId: ShopCatalog.demoAngan)?.id, "angan-bastu-towel", "the real towel prompt is unchanged")
+        // Buy, Reserve, Notify me and the checkout answer with the message and send nothing.
+        let drop = try! XCTUnwrap(shop.drops.first { $0.sample })
+        await m.setNotify(drop, true)
+        XCTAssertEqual(m.toast, Copy.shopSampleToast)
+        XCTAssertFalse(m.isNotified(drop.id), "Notify me is not stored for a sample")
+        m.dismissToast()
+        let tee = try! XCTUnwrap(m.shopProduct("sample-9810-race-day-tee"))
+        let draft = CheckoutDraft(product: tee, storefront: try! XCTUnwrap(m.shopStorefront(9810)), variant: tee.variants.first)
+        let opened = await m.startCheckout(draft)
+        XCTAssertNil(opened)
+        XCTAssertEqual(m.toast, Copy.shopSampleToast)
+        m.tapProduct(tee.id)
+        XCTAssertTrue(m.shopTapped.isEmpty, "no tap counter for a sample")
+        // Switched off: back to the demo's own catalogue.
+        m.showSampleShop = false
+        XCTAssertNil(m.sampleShop)
+        XCTAssertEqual(m.shop, m.shopReal)
+        XCTAssertEqual(Copy.shopSampleNote, "Sample items to preview the shop. Not for sale. Settings › Show sample shop turns them off.")
+    }
+
+    @MainActor func testSampleShopFollowsTheMembersData() {
+        let was = AppModel.demo
+        defer { AppModel.demo = was }
+        AppModel.demo = true
+        let m = AppModel()
+        m.cities = [try! JSONDecoder().decode(BruceAPI.City.self, from: Data(#"{"id":1,"name":"Stockholm","code":"STO"}"#.utf8))]
+        m.studios = [studio(1, "Flow Södermalm", ["Yoga"]), studio(2, "Flow Vasastan", ["Yoga"])]
+        m.showSampleShop = true
+        XCTAssertEqual(m.samplePicks.yoga, 1, "no visits yet: the first of two equally near")
+        XCTAssertEqual(m.sampleShop?.city, "STO")
+        m.favoriteIds = [2: 9]
+        XCTAssertEqual(m.sampleShop?.products.first?.studioId, 2, "a favourite changes the pick without a reload")
+        m.visitHistory = [BruceAPI.Visit(id: 1, studioId: 1, checkedInAt: "2026-10-20T08:00:00Z")]
+        XCTAssertEqual(m.sampleShop?.products.first?.studioId, 1, "so does the visit history")
+        m.shopReal = ShopCatalog(city: "STO", storefronts: [Storefront(studioId: 1, sellerName: "Flow Södermalm AB", city: "STO", consentAt: "2026-11-09")],
+                                 products: [Product(id: "mat", studioId: 1, title: "Mat", kind: .mat, priceOre: 100, fulfilment: .desk)])
+        XCTAssertEqual(m.sampleShop?.products.first?.studioId, 2, "a studio that went live with a real listing gets no samples")
+        XCTAssertEqual(m.shop?.products.map(\.id).first, "mat")
+        XCTAssertTrue(m.showsOrders, "a real shop is listed")
+        // "Forgot your towel?" nudges a real moment: a sample towel never does, not even at a Wellness studio.
+        m.shopReal = nil
+        m.studios = [try! JSONDecoder().decode(BruceAPI.Studio.self, from: Data(#"{"id":5,"name":"Flow Spa","status":"LIVE","city_id":1,"label":"WELLNESS","studio_categories":[{"category_id":2,"category":{"id":2,"title":"Yoga"}}]}"#.utf8))]
+        XCTAssertEqual(m.shop?.towel(for: 5)?.title, "Mat towel")
+        XCTAssertNil(m.towelPrompt(studioId: 5))
+    }
+
+    func testSampleSwitchDefaultsOnOutsideTheDemo() {
+        let was = AppModel.demo
+        defer { AppModel.demo = was }
+        AppModel.demo = false
+        UserDefaults.standard.removeObject(forKey: "showSampleShop")
+        XCTAssertTrue(AppModel.savedSampleShop(), "on by default")
+        UserDefaults.standard.set(false, forKey: "showSampleShop")
+        XCTAssertFalse(AppModel.savedSampleShop())
+        UserDefaults.standard.removeObject(forKey: "showSampleShop")
+        AppModel.demo = true
+        XCTAssertFalse(AppModel.savedSampleShop(), "the demo shows none unless BRUCE_SAMPLE_SHOP=1")
+    }
+}
