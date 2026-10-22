@@ -59,6 +59,9 @@ enum SheetRoute: Hashable {
     case racePlan(String)
     /// Start a crew for a race by its My races key (RaceSocial.swift).
     case newCrew(String)
+    /// The shop's checkout sheet for a listing, and Menu › Orders (Shop.swift, phase 4).
+    case shopCheckout(String)
+    case orders
     /// The member's result for a race by its My races key (Races.swift RaceResult).
     case raceResult(String)
 }
@@ -269,6 +272,11 @@ final class AppModel {
     var shopLoading = false
     @ObservationIgnored var shopFetchedAt: Date?
     @ObservationIgnored var shopTapped: Set<String> = []
+    /// Menu › Orders (Shop.swift, phase 4): what the member bought in the studio shop, from our server.
+    var orders: [Order] = []
+    var ordersLoaded = false
+    /// What the product page hands the checkout sheet (variant, delivery); the sheet keeps its own copy.
+    var checkoutDraft: CheckoutDraft?
     /// Challenges with friends (Challenges.swift), from the auto-book server.
     var challenges: [ChallengeSummary] = []
     var challengeDetails: [String: ChallengeDetail] = [:]

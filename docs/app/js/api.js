@@ -131,6 +131,9 @@ export const Server = {
   notify: (dropId, on) => server(on ? 'PUT' : 'DELETE', '/me/notify/' + enc(dropId)),
   myShop: () => server('GET', '/me/shop'),
   tap: (productId) => server('POST', '/shop/tap', { productId }),
+  /** Phase 4: a Stripe Checkout Session on the studio's account, and the member's orders. */
+  checkout: (body) => server('POST', '/checkout', body),
+  orders: () => server('GET', '/me/orders'),
 };
 
 const yyyymmdd = (d) => d.toISOString().slice(0, 10).replace(/-/g, '');

@@ -9,6 +9,7 @@ import { decode as decodeRaces, entries as raceEntries, upcoming as upcomingRace
 import { makePlan, count as planCount, category as planCategory } from './raceplan.js';
 import { DEMO_RACES, DEMO_MY_RACES, DEMO_TRAINING_CLUBS } from './demo.js';
 import { sharesGoing } from './crews.js';
+import * as Sh from './shop.js';
 import { decode as decodeShop, merge as mergeShop } from './shop.js';
 
 const STUDIO_CACHE_MS = 12 * 3600 * 1000;
@@ -43,6 +44,7 @@ export const S = {
   trainingClubs: [],                                   // studios with an organiser's training status (the catalog's trainingClubs)
   raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0, raceGoingLoading: null,   // friends going (crews.js)
   shop: null, shopAt: 0, shopLoading: null, shopNotify: new Set(), shopTapped: new Set(),       // the studio shop (shop.js), null until read
+  orders: [], ordersLoaded: false,                                                             // Menu › Orders (shop.js, phase 4)
 };
 
 export const emit = () => S.listeners.forEach((f) => { try { f(); } catch (e) { console.error(e); } });
@@ -70,7 +72,7 @@ export function setAuth(a) {
 }
 export function clearData() {
   ['studios', 'studioDetails', 'classDetails', 'bookings', 'standbys', 'watches', 'openings', 'bookmarks', 'favorites', 'classCache'].forEach((k) => S[k].clear());
-  Object.assign(S, { raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0, shop: null, shopAt: 0, shopNotify: new Set(), shopTapped: new Set() });
+  Object.assign(S, { raceGoing: { going: {}, sharing: false, mine: [] }, raceGoingAt: 0, shop: null, shopAt: 0, shopNotify: new Set(), shopTapped: new Set(), orders: [], ordersLoaded: false });
   Object.assign(S, { history: null, historyLoading: null, challenges: null, friends: [], friendsBookings: [], notifications: [], reviewable: [], visits: null, limits: [], user: null, membership: null, block: null, home: null, studiosLoading: null });
 }
 
@@ -521,6 +523,25 @@ export async function setNotify(d, on) {
   await Server.notify(d.id, on);
   if (on) S.shopNotify.add(d.id); else S.shopNotify.delete(d.id);
   emit();
+}
+/** Phase 4: Stripe Checkout for a draft (shop.js `draft`): the URL to send the browser to, or null with a toast's worth
+ *  of reason thrown. The demo opens nothing. */
+export async function startCheckout(d) {
+  const problem = Sh.draftProblem(d);
+  if (problem) throw new Error(problem);
+  if (isDemo()) return null;
+  if (!loggedIn()) throw new Error('Log in first.');
+  if (!serverOn()) throw new Error('Checkout goes through our server, which is off in Settings.');
+  const r = await Server.checkout(Sh.checkoutBody(d));
+  const url = Sh.httpsUrl(r && r.url);
+  if (!url) throw new Error(Sh.NO_CHECKOUT);
+  return url;
+}
+/** Menu › Orders: the demo's orders in demo mode, else GET /me/orders. A failed read keeps what is shown. */
+export async function loadOrders() {
+  if (!isDemo() && (!loggedIn() || !serverOn())) { S.ordersLoaded = true; return S.orders; }
+  try { S.orders = Sh.decodeOrders(await Server.orders()); S.ordersLoaded = true; emit(); } catch (e) { S.ordersLoaded = true; }
+  return S.orders;
 }
 /** One to the day's anonymous counter when a listing is opened; never in the demo, once per listing and visit. */
 export function tapProduct(id) {

@@ -191,10 +191,14 @@ My classes tabs, with class and studio pages and account sheets.
   ticket after a check-in at a sauna or spa that lists one. **Drops**: a pre-order window with its minimum run
   ("31 of 40"), **Reserve** while it is open (it opens the studio's own checkout), "Drop open" and **"Ready for pickup"**
   by push and email to everyone who tapped Notify me, and a **finisher tee** tied to a challenge with friends that only
-  that challenge's finishers see ("Unlocked", a size pick, Reserve) on the challenge page. Prices are in kronor incl.
-  25% VAT. The studio is the seller: Brüce lists, reminds and never holds money or an address, no product carries a
-  Bruce or Brüce mark, and the whole feature stays hidden where nothing is listed. Production starts with an empty
-  catalogue; the demo has three fictional studios.
+  that challenge's finishers see ("Unlocked", a size pick, Reserve) on the challenge page. **Checkout** (once a studio
+  connects a Stripe account): the product page offers **Pick up at the studio** (free, the default) or **Ship to me**,
+  a checkout sheet names the studio as the seller and shows the VAT, and **Buy** opens Stripe Checkout on the studio's
+  own account in the browser (Swish, Klarna, card, Apple Pay, as the studio set up; physical goods are never in-app
+  purchases); the order confirmation comes with a **pickup code**, **Menu › Orders** shows status and code, and "Ready
+  for pickup" arrives by push and email. Prices are in kronor incl. 25% VAT. The studio is the seller: Brüce lists,
+  reminds and never holds money or an address, no product carries a Bruce or Brüce mark, and the whole feature stays
+  hidden where nothing is listed. Production starts with an empty catalogue; the demo has three fictional studios.
 - **Monthly goals** (iPhone and web): e.g. 20 gym visits and 2 swims a month, counted from your checked-in
   visits, with pace, a streak and a calendar of the month, on My classes and under Statistics. Goals stay on the
   device; with the server on, "Reminder when behind" sends a push.
@@ -235,9 +239,12 @@ My classes tabs, with class and studio pages and account sheets.
   [iOS README](Bruce-iOS/README.md#performance-measured-against-the-public-endpoints-logged-out-simulator).
 - **Offline demo mode** for screenshots and UI work (see below).
 
-Account changes, membership plans, pausing, checkout, payments, vouchers, sign-up and password reset are
-**display-only**: they show the screens but never send a request. Buying tickets and drop-in classes is
-deliberately not implemented.
+Account changes, membership plans, pausing, Bruce's own checkout, payments, vouchers, sign-up and password reset are
+**display-only**: they show the screens but never send a request. Buying tickets and drop-in classes from Bruce is
+deliberately not implemented. The one thing that can be bought is a **studio shop** listing (see above), and only
+through Stripe Checkout on the studio's own account, opened in the browser: Brüce never takes a payment itself, never
+sees a card or an address, and the whole checkout stays dormant until the server has a Stripe key and the studio a
+connected account. Until a studio is connected, listings say "Ask at the desk" or open the studio's webshop.
 
 ### iOS: Liquid Glass
 
@@ -517,7 +524,8 @@ friends card: Show friends I'm going and Start a crew), `crewrace` (a race page 
 (Home › Shop), `shopdrops` (its Drops chip), `product` (the bastu towel), `drop` (the race-day tee), `studioshop` (the
 sauna's Shop at the desk rail), `towel` (the ticket with Forgot your towel?), `homeshop` (Home's Shop section), `finisher`
 (a finished challenge with its finisher tee), `finishertee` (the unlocked drop's page), `dropready` (a drop ready at the
-desk), …; the full list is in
+desk), `buy` (the towel's page with the pickup or shipping choice and Buy), `shopcheckout` (the checkout sheet), `orders`
+(Menu › Orders with a pickup code), …; the full list is in
 [`Shared/BruceCore/Demo.swift`](Shared/BruceCore/Demo.swift)). Demo Home shows the Next race card with the plan's week.
 Demo mode is not reachable from the UI.
 

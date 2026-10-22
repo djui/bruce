@@ -580,6 +580,22 @@ export function handleServer(method, path, body) {
     return ok2({ ok: true, notify: method === 'PUT', push: false, email: null });
   }
   if (path === '/me/shop' && method === 'GET') return ok2(Object.assign({ notify: [...demoNotify].sort() }, DEMO_FINISHER()));
+  // Phase 4: the sauna's checkout (a made-up Session the web app never opens in the demo) and the member's orders.
+  if (path === '/checkout' && method === 'POST') {
+    const c = DEMO_SHOP();
+    const p = c.products.find((x) => x.id === body.productId);
+    if (!p) return fail(404, 'product not found');
+    const front = c.storefronts.find((s) => s.studioId === p.studioId);
+    if (!front || !front.checkout) return fail(409, 'the studio has no checkout yet');
+    const v = p.variants.find((x) => x.id === body.variantId);
+    if (p.variants.length && !v) return fail(400, 'variantId');
+    const qty = Number.isInteger(body.qty) && body.qty >= 1 && body.qty <= 5 ? body.qty : null;
+    if (!qty) return fail(400, 'qty');
+    if (body.delivery === 'ship' && front.shippingOre == null) return fail(400, 'the studio does not ship');
+    const totalOre = p.priceOre * qty + (body.delivery === 'ship' ? front.shippingOre : 0);
+    return ok2({ url: 'https://checkout.stripe.com/c/pay/cs_test_demo', sessionId: 'cs_test_demo', totalOre, vatOre: Math.round(totalOre - totalOre / 1.25) });
+  }
+  if (path === '/me/orders' && method === 'GET') return ok2({ orders: DEMO_ORDERS() });
   return fail(404, 'Not available in the demo: ' + path);
 }
 
@@ -598,6 +614,18 @@ export function DEMO_FINISHER(now) {
       variants: ['xs', 's', 'm', 'l', 'xl'].map((s) => ({ id: s, label: s.toUpperCase(), inStock: true })) }],
   };
 }
+/** Menu › Orders in the demo (DemoShop.swift `Order.demo`): a bastu towel ready at the desk, and a race-day tee being
+ *  printed. Fictional. */
+export function DEMO_ORDERS(now) {
+  const t = now || Date.now();
+  const ago = (d) => new Date(t - d * 86400000).toISOString();
+  return [
+    { id: 'demo-order-towel', studioId: 9850, dropId: null, items: [{ productId: 'angan-bastu-towel', variantId: 'natural', title: 'Bastu towel', label: 'Natural', qty: 1, unitOre: 44900 }],
+      totalOre: 44900, vatOre: 8980, delivery: 'pickup', status: 'ready', statusText: 'Ready for pickup', pickupCode: 'K7P2Q', sellerName: 'Ångan Bastu AB', pickupNote: 'At the desk, every day 07–22', createdAt: ago(3), updatedAt: ago(0.5) },
+    { id: 'demo-order-tee', studioId: 9840, dropId: 'hornstull-race-day-2027', items: [{ productId: 'karnan-race-day-tee', variantId: 'm', title: 'Hornstull Race Day tee', label: 'M', qty: 1, unitOre: 34900 }],
+      totalOre: 34900, vatOre: 6980, delivery: 'pickup', status: 'printing', statusText: 'Being printed', pickupCode: 'R4XM8', sellerName: 'Kärnan Reformer AB', pickupNote: 'At the desk, weekdays 06–20', createdAt: ago(6), updatedAt: ago(2) },
+  ];
+}
 /** The demo catalogue (DemoShop.swift): three fictional studios with the listings from the Studio Merch mockups and a
  *  race-day tee drop that closes in two and a half days. No product carries a Bruce or Brüce mark; the webshop is made up.
  *  Production starts with an empty catalogue. */
@@ -609,7 +637,8 @@ export function DEMO_SHOP(now) {
     storefronts: [
       { studioId: 9830, sellerName: 'Yogaloft Södermalm AB', city: 'STO', webshopUrl: 'https://shop.example.org/yogaloft', pickupNote: 'At the desk, every day 07–21', consentAt: '2026-11-10' },
       { studioId: 9840, sellerName: 'Kärnan Reformer AB', city: 'STO', webshopUrl: null, pickupNote: 'At the desk, weekdays 06–20', consentAt: '2026-11-12' },
-      { studioId: 9850, sellerName: 'Ångan Bastu AB', city: 'STO', webshopUrl: 'https://shop.example.org/angan-bastu', pickupNote: 'At the desk, every day 07–22', consentAt: '2026-11-09' },
+      // The sauna is connected to Stripe in the demo (phase 4): Buy, pickup or shipping for 49 kr.
+      { studioId: 9850, sellerName: 'Ångan Bastu AB', city: 'STO', webshopUrl: 'https://shop.example.org/angan-bastu', pickupNote: 'At the desk, every day 07–22', consentAt: '2026-11-09', checkout: true, shippingOre: 4900 },
     ],
     products: [
       { id: 'yogaloft-cork-mat', studioId: 9830, title: 'Cork yoga mat', kind: 'mat', description: 'Natural cork on rubber · 183 × 61 cm · 4 mm', priceOre: 79500, vatRate: 25, fulfilment: 'link', linkUrl: 'https://shop.example.org/yogaloft/cork-mat', variants: [] },

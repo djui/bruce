@@ -180,11 +180,17 @@ struct Storefront: Codable, Hashable, Identifiable {
     var webshopUrl: String? = nil
     var pickupNote: String? = nil
     var consentAt: String
+    /// The server has a Stripe key and the studio a connected account (phase 4): Buy opens Stripe Checkout on the studio's account.
+    var checkout = false
+    /// Shipping incl. VAT when the studio ships ("Ship to me · 49 kr"); nil = pickup only.
+    var shippingOre: Int? = nil
     var id: Int { studioId }
     var webshop: URL? { ShopLink.https(webshopUrl) }
+    var ships: Bool { shippingOre != nil }
 
-    init(studioId: Int, sellerName: String, city: String, webshopUrl: String? = nil, pickupNote: String? = nil, consentAt: String) {
+    init(studioId: Int, sellerName: String, city: String, webshopUrl: String? = nil, pickupNote: String? = nil, consentAt: String, checkout: Bool = false, shippingOre: Int? = nil) {
         self.studioId = studioId; self.sellerName = sellerName; self.city = city; self.webshopUrl = webshopUrl; self.pickupNote = pickupNote; self.consentAt = consentAt
+        self.checkout = checkout; self.shippingOre = shippingOre
     }
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -194,6 +200,102 @@ struct Storefront: Codable, Hashable, Identifiable {
         webshopUrl = try c.decodeIfPresent(String.self, forKey: .webshopUrl)
         pickupNote = try c.decodeIfPresent(String.self, forKey: .pickupNote)
         consentAt = try c.decode(String.self, forKey: .consentAt)
+        checkout = try c.decodeIfPresent(Bool.self, forKey: .checkout) ?? false
+        shippingOre = try c.decodeIfPresent(Int.self, forKey: .shippingOre)
+    }
+}
+
+// MARK: - Checkout (phase 4)
+
+/// How the member wants it: at the desk (free, the default) or shipped (where the studio ships; the address goes to Stripe).
+enum Delivery: String, Codable, CaseIterable, Hashable {
+    case pickup, ship
+}
+
+/// What the checkout sheet shows before Stripe takes over: one listing, its variant, the count, the delivery, the sums.
+struct CheckoutDraft: Hashable {
+    static let maxQty = 5
+    var product: Product
+    var storefront: Storefront
+    var variant: ProductVariant?
+    var qty = 1
+    var delivery: Delivery = .pickup
+
+    var subtotalOre: Int { product.priceOre * qty }
+    var shippingOre: Int { delivery == .ship ? storefront.shippingOre ?? 0 : 0 }
+    var totalOre: Int { subtotalOre + shippingOre }
+    var vatOre: Int { ShopMoney.vatPart(totalOre, rate: product.vatRate) }
+    /// "Bastu towel · Natural × 2".
+    var itemLine: String { product.title + (variant.map { " · \($0.label)" } ?? "") + (qty > 1 ? " × \(qty)" : "") }
+    /// Why it can't go to Stripe yet; nil when it can.
+    var problem: String? {
+        if !storefront.checkout { return Copy.shopNoCheckout }
+        if !product.variants.isEmpty, variant == nil { return Copy.shopPickVariant }
+        if let v = variant, !v.inStock { return Copy.shopOutOfStock }
+        if delivery == .ship, !storefront.ships { return Copy.shopNoShipping }
+        if !(1...Self.maxQty).contains(qty) { return "1 to \(Self.maxQty) of each" }
+        return nil
+    }
+    var body: [String: Any] {
+        var b: [String: Any] = ["productId": product.id, "qty": qty, "delivery": delivery.rawValue, "returnTo": "app"]
+        if let v = variant { b["variantId"] = v.id }
+        return b
+    }
+}
+
+/// An order as `GET /me/orders` lists it: what was bought, the status, the pickup code, the seller. Never an address.
+struct Order: Codable, Hashable, Identifiable {
+    struct Item: Codable, Hashable {
+        var productId: String
+        var variantId: String? = nil
+        var title: String
+        var label: String? = nil
+        var qty = 1
+        var unitOre = 0
+        /// "Bastu towel · Natural × 2".
+        var line: String { title + (label.map { " · \($0)" } ?? "") + (qty > 1 ? " × \(qty)" : "") }
+    }
+    var id: String
+    var studioId: Int
+    var dropId: String? = nil
+    var items: [Item] = []
+    var totalOre: Int
+    var vatOre = 0
+    var delivery: Delivery = .pickup
+    var status: String
+    var statusText: String? = nil
+    var pickupCode: String? = nil
+    var sellerName: String? = nil
+    var pickupNote: String? = nil
+    var createdAt: String
+    var updatedAt: String? = nil
+
+    var created: Date? { BruceDate.parse(createdAt) }
+    var isReady: Bool { status == "ready" }
+    var isDone: Bool { ["collected", "delivered", "refunded"].contains(status) }
+    /// "Ready for pickup", "Paid · being prepared for pickup" (the server's words, else ours).
+    var statusLine: String { statusText ?? Order.statusText(status, delivery: delivery) }
+    static func statusText(_ status: String, delivery: Delivery) -> String {
+        switch status {
+        case "paid": return delivery == .ship ? "Paid · being prepared" : "Paid · being prepared for pickup"
+        case "printing": return "Being printed"
+        case "shipped": return delivery == .ship ? "On its way" : "On its way to the studio"
+        case "ready": return "Ready for pickup"
+        case "delivered": return "Delivered"
+        case "collected": return "Collected"
+        case "refunded": return "Refunded"
+        default: return status
+        }
+    }
+    var symbol: String {
+        switch status {
+        case "ready": return "checkmark.seal.fill"
+        case "shipped": return "shippingbox"
+        case "printing": return "printer"
+        case "delivered", "collected": return "checkmark.circle"
+        case "refunded": return "arrow.uturn.backward.circle"
+        default: return "bag"
+        }
     }
 }
 
@@ -324,6 +426,23 @@ enum ShopServer {
     static func mine(session: Session) async throws -> Mine {
         try JSONDecoder().decode(Mine.self, from: try await BruceAPI.send(AutoBookServer.request("GET", "me/shop", session: session)))
     }
+    /// `POST /checkout`: a Stripe Checkout Session on the studio's account; the app opens the URL in the browser.
+    struct Checkout: Decodable { let url: String; let sessionId: String?; let totalOre: Int?; let vatOre: Int? }
+    static func checkout(_ draft: CheckoutDraft, session: Session) async throws -> Checkout {
+        try JSONDecoder().decode(Checkout.self, from: try await BruceAPI.send(AutoBookServer.request("POST", "checkout", session: session, body: draft.body)))
+    }
+    /// `GET /me/orders`: a broken row is skipped, not the list.
+    struct Orders: Decodable {
+        var orders: [Order] = []
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            orders = (try c.decodeIfPresent([LossyItem<Order>].self, forKey: .orders) ?? []).compactMap(\.value)
+        }
+        enum CodingKeys: String, CodingKey { case orders }
+    }
+    static func orders(session: Session) async throws -> [Order] {
+        try JSONDecoder().decode(Orders.self, from: try await BruceAPI.send(AutoBookServer.request("GET", "me/orders", session: session))).orders
+    }
     /// `POST /shop/tap`: one to the day's counter for a listing; no user id goes with it.
     static func tap(productId: String) async {
         guard let base = URL(string: AutoBookServer.url), base.host != nil else { return }
@@ -408,5 +527,44 @@ extension AppModel {
         dismissSheets()
         stacks[.home] = [.shop]
         tab = .home
+    }
+
+    // MARK: Checkout (phase 4)
+
+    /// Buy is offered only where the server and the studio can take the payment (`Storefront.checkout`).
+    func canBuy(_ product: Product) -> Bool { shopStorefront(product.studioId)?.checkout == true }
+
+    /// The checkout sheet's draft for a listing: its first in-stock variant picked, pickup by default.
+    func checkoutDraft(for product: Product, delivery: Delivery = .pickup, variant: ProductVariant? = nil) -> CheckoutDraft? {
+        guard let front = shopStorefront(product.studioId) else { return nil }
+        return CheckoutDraft(product: product, storefront: front, variant: variant ?? product.inStockVariants.first, qty: 1, delivery: front.ships ? delivery : .pickup)
+    }
+
+    /// Opens Stripe Checkout for the draft: the URL to show in the browser (SFSafariViewController on the iPhone), or nil
+    /// with a toast. The demo opens nothing. Apple's guideline 3.1.3(e): physical goods are never in-app purchases.
+    func startCheckout(_ draft: CheckoutDraft) async -> URL? {
+        if let p = draft.problem { flash(p); return nil }
+        if AppModel.demo { flash("Demo: Stripe Checkout would open now (offline, nothing sent)"); return nil }
+        guard tokenUsable, let s = session else { present(.login); return nil }
+        guard AutoBookServer.isConfigured else { flash(Copy.shopNoCheckout); return nil }
+        do {
+            let r = try await ShopServer.checkout(draft, session: s)
+            guard let u = ShopLink.https(r.url) else { flash(Copy.shopNoCheckout); return nil }
+            return u
+        } catch { flash(Challenge.message(error)); return nil }
+    }
+
+    /// Menu › Orders: the demo's orders in demo mode, else `GET /me/orders`. A failed read keeps what is shown.
+    func loadOrders() async {
+        if AppModel.demo { if orders.isEmpty { orders = Order.demo }; return }
+        guard tokenUsable, let s = session, AutoBookServer.isConfigured else { return }
+        if let list = try? await ShopServer.orders(session: s) { orders = list; ordersLoaded = true }
+    }
+
+    /// Back from Stripe (`bruece://orders?paid=…`) or an order push: Menu › Orders, read again.
+    func showOrders() {
+        dismissSheets()
+        present(.orders)
+        Task { await loadOrders() }
     }
 }

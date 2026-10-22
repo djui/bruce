@@ -13,7 +13,9 @@ extension ShopCatalog {
         let fronts = [
             Storefront(studioId: demoYogaloft, sellerName: "Yogaloft Södermalm AB", city: "STO", webshopUrl: "https://shop.example.org/yogaloft", pickupNote: "At the desk, every day 07–21", consentAt: "2026-11-10"),
             Storefront(studioId: demoKarnan, sellerName: "Kärnan Reformer AB", city: "STO", webshopUrl: nil, pickupNote: "At the desk, weekdays 06–20", consentAt: "2026-11-12"),
-            Storefront(studioId: demoAngan, sellerName: "Ångan Bastu AB", city: "STO", webshopUrl: "https://shop.example.org/angan-bastu", pickupNote: "At the desk, every day 07–22", consentAt: "2026-11-09"),
+            // The sauna is connected to Stripe in the demo (phase 4): Buy, pickup or shipping for 49 kr.
+            Storefront(studioId: demoAngan, sellerName: "Ångan Bastu AB", city: "STO", webshopUrl: "https://shop.example.org/angan-bastu", pickupNote: "At the desk, every day 07–22", consentAt: "2026-11-09",
+                       checkout: true, shippingOre: 4900),
         ]
         let products = [
             Product(id: "yogaloft-cork-mat", studioId: demoYogaloft, title: "Cork yoga mat", kind: .mat, description: "Natural cork on rubber · 183 × 61 cm · 4 mm", priceOre: 79500, fulfilment: .link,
@@ -41,6 +43,20 @@ extension ShopCatalog {
                           opensAt: ms(now.addingTimeInterval(-2 * 86_400)), closesAt: ms(now.addingTimeInterval(6 * 86_400)), minQty: 20, maxQty: 30, reserved: 12,
                           pickupFrom: RaceDay.adding(16, to: RaceDay.today(now)), linkUrl: "https://shop.example.org/karnan/finisher-tee", unlocked: true)]
         return ShopCatalog(city: "STO", storefronts: fronts, products: products, drops: drops)
+    }
+}
+
+extension Order {
+    /// Menu › Orders in the demo: a bastu towel ready at the desk, and a race-day tee being printed. Fictional.
+    static var demo: [Order] {
+        let iso = ISO8601DateFormatter()
+        let ago = { (d: Double) in iso.string(from: Date().addingTimeInterval(-d * 86_400)) }
+        return [
+            Order(id: "demo-order-towel", studioId: ShopCatalog.demoAngan, items: [Item(productId: "angan-bastu-towel", variantId: "natural", title: "Bastu towel", label: "Natural", qty: 1, unitOre: 44900)],
+                  totalOre: 44900, vatOre: 8980, delivery: .pickup, status: "ready", pickupCode: "K7P2Q", sellerName: "Ångan Bastu AB", pickupNote: "At the desk, every day 07–22", createdAt: ago(3), updatedAt: ago(0.5)),
+            Order(id: "demo-order-tee", studioId: ShopCatalog.demoKarnan, dropId: "hornstull-race-day-2027", items: [Item(productId: "karnan-race-day-tee", variantId: "m", title: "Hornstull Race Day tee", label: "M", qty: 1, unitOre: 34900)],
+                  totalOre: 34900, vatOre: 6980, delivery: .pickup, status: "printing", pickupCode: "R4XM8", sellerName: "Kärnan Reformer AB", pickupNote: "At the desk, weekdays 06–20", createdAt: ago(6), updatedAt: ago(2)),
+        ]
     }
 }
 

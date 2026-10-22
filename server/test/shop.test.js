@@ -316,3 +316,221 @@ test("cron: 'Drop open' once when the window opens (push and email to the Notify
   assert.equal(sent.pushes.length, 3);
   assert.ok(DB.rows("drops", "id = 'late'")[0].opened_sent_at);
 });
+
+// ---------------------------------------------------------------- phase 4: checkout
+
+import { verifyStripeSignature, cleanCheckout, orderTotals, pickupCode, orderStatusText, orderConfirmedMessage, orderUpdateMessage } from "../src/shop.js";
+import { stripeForm } from "../src/worker.js";
+
+/** Signs a raw body the way Stripe does: HMAC-SHA256 of "<t>.<body>" with the endpoint secret. */
+async function sign(body, secret, t) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${body}`));
+  return `t=${t},v1=${[...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+}
+
+test("the Stripe signature: the right secret and a fresh timestamp, else refused", async () => {
+  const body = '{"id":"evt_1","type":"checkout.session.completed"}';
+  const now = Date.parse("2027-02-05T08:00:00Z");
+  const header = await sign(body, "whsec_test", Math.floor(now / 1000));
+  assert.equal(await verifyStripeSignature(header, body, "whsec_test", now), true);
+  assert.equal(await verifyStripeSignature(header, body, "whsec_other", now), false, "another secret");
+  assert.equal(await verifyStripeSignature(header, body + " ", "whsec_test", now), false, "a changed body");
+  assert.equal(await verifyStripeSignature(header, body, "whsec_test", now + 301_000), false, "a replay after five minutes");
+  assert.equal(await verifyStripeSignature(header, body, "whsec_test", now + 299_000), true, "within the tolerance");
+  assert.equal(await verifyStripeSignature(await sign(body, "whsec_test", Math.floor(now / 1000)) + ",v1=" + "0".repeat(64), body, "whsec_test", now), true, "any v1 may match");
+  assert.equal(await verifyStripeSignature("t=1,v0=abc", body, "whsec_test", now), false, "no v1");
+  assert.equal(await verifyStripeSignature(null, body, "whsec_test", now), false);
+  assert.equal(await verifyStripeSignature(header, body, "", now), false);
+});
+
+test("checkout: what the apps may ask for, the sums with VAT and shipping, the pickup code, the words", () => {
+  const storefront = { studioId: 9850, sellerName: "Example Bastu AB", shippingOre: 4900 };
+  const product = { id: "towel", title: "Bastu towel", priceOre: 44900, vatRate: 25, variants: [{ id: "natural", label: "Natural", inStock: true }, { id: "x", label: "Out", inStock: false }] };
+  const ok = cleanCheckout({ variantId: "natural", qty: 2, delivery: "ship" }, { storefront, product });
+  assert.equal(ok.error, undefined);
+  assert.deepEqual(orderTotals(ok), { items: [{ productId: "towel", variantId: "natural", title: "Bastu towel", label: "Natural", qty: 2, unitOre: 44900 }],
+    subtotalOre: 89800, shippingOre: 4900, totalOre: 94700, vatOre: 18940 });
+  assert.equal(cleanCheckout({ variantId: "natural" }, { storefront, product }).delivery, "pickup", "pickup is the default");
+  assert.equal(orderTotals(cleanCheckout({ variantId: "natural" }, { storefront, product })).shippingOre, 0);
+  for (const [body, re] of [[{}, /size or option/], [{ variantId: "x" }, /out of stock/], [{ variantId: "natural", qty: 6 }, /qty/], [{ variantId: "natural", qty: 1.5 }, /qty/],
+    [{ variantId: "natural", delivery: "drone" }, /delivery/], [{ variantId: "natural", delivery: "ship" }, /does not ship/]]) {
+    const front = re.test("does not ship") ? { ...storefront, shippingOre: null } : storefront;
+    assert.match(cleanCheckout(body, { storefront: front, product }).error, re, JSON.stringify(body));
+  }
+  assert.match(cleanCheckout({}, { storefront, product: null }).error, /not found/);
+  const closed = { opensAt: 1, closesAt: 2 };
+  assert.match(cleanCheckout({ variantId: "natural" }, { storefront, product, drop: closed }, 5).error, /not open/);
+  assert.equal(cleanCheckout({ variantId: "natural" }, { storefront, product, drop: { opensAt: 1, closesAt: 9 } }, 5).drop.closesAt, 9);
+  const plain = { id: "hat", title: "Felt hat", priceOre: 29900, vatRate: 25, variants: [] };
+  assert.equal(cleanCheckout({}, { storefront, product: plain }).variant, null, "no variants: none needed");
+  const code = pickupCode();
+  assert.match(code, /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/, "nothing that reads as 0, O, 1, I or L");
+  assert.equal(pickupCode(() => new Uint8Array([0, 1, 2, 30, 31])), "ABC9A");
+  assert.equal(orderStatusText("paid", "pickup"), "Paid · being prepared for pickup");
+  assert.equal(orderStatusText("shipped", "ship"), "On its way");
+  assert.equal(orderStatusText("ready", "pickup"), "Ready for pickup");
+  const order = { items: [{ title: "Bastu towel", label: "Natural", qty: 2 }], totalOre: 94700, delivery: "pickup", pickupCode: "K7P2Q" };
+  assert.deepEqual(orderConfirmedMessage(order, storefront), { title: "Order confirmed: Bastu towel · Natural × 2", body: "947 kr paid to Example Bastu AB. Show code K7P2Q at the desk once it's ready; we'll tell you." });
+  assert.match(orderConfirmedMessage({ ...order, delivery: "ship" }, storefront).body, /ships to the address you gave Stripe/);
+  assert.deepEqual(orderUpdateMessage(order, "ready", { sellerName: "Example Bastu AB", pickupNote: "At the desk" }), { title: "Ready for pickup: Bastu towel · Natural × 2", body: "Show code K7P2Q at Example Bastu AB, At the desk." });
+  assert.equal(orderUpdateMessage(order, "shipped", storefront).body, "Your order is on its way to Example Bastu AB. We'll tell you when it's ready for pickup.");
+  assert.equal(stripeForm({ mode: "payment", line_items: [{ quantity: 2, price_data: { currency: "sek", unit_amount: 44900 } }], shipping_address_collection: { allowed_countries: ["SE"] }, skip: null }).toString(),
+    "mode=payment&line_items%5B0%5D%5Bquantity%5D=2&line_items%5B0%5D%5Bprice_data%5D%5Bcurrency%5D=sek&line_items%5B0%5D%5Bprice_data%5D%5Bunit_amount%5D=44900&shipping_address_collection%5Ballowed_countries%5D%5B0%5D=SE");
+});
+
+/** A fake Bruce (42, 7), Stripe (every Checkout Session is cs_test_1) and the notices; records what was sent. */
+function fakeStripeWorld() {
+  const sent = { pushes: [], emails: [], stripe: [] };
+  globalThis.fetch = async (url, init = {}) => {
+    url = String(url);
+    if (url.startsWith("https://api.push.apple.com/")) { sent.pushes.push(JSON.parse(init.body)); return ok({}); }
+    if (url === "https://api.resend.com/emails") { sent.emails.push(JSON.parse(init.body)); return ok({ id: "e" }); }
+    if (url.startsWith("https://api.stripe.com/")) { sent.stripe.push({ url, headers: init.headers, form: new URLSearchParams(init.body) }); return ok({ id: "cs_test_1", url: "https://checkout.stripe.com/c/pay/cs_test_1" }); }
+    const uid = +String(init.headers?.["X-Access-Token"] ?? "").replace(/^t/, "");
+    if (![42, 7].includes(uid)) return new Response("", { status: 401 });
+    const u = new URL(url);
+    if (u.pathname.startsWith("/v52/user/")) return ok({ user: { id: uid, email: `${uid}@b.se`, first_name: "Uwe" } });
+    if (u.pathname === "/v52/booking") return ok({ bookings: [], metadata: {} });
+    return ok({ classes: [], metadata: {} });
+  };
+  return sent;
+}
+async function stripeEnv(DB, extra) {
+  const { privateKey } = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"]);
+  const pem = Buffer.from(await crypto.subtle.exportKey("pkcs8", privateKey)).toString("base64");
+  return { DB, SHOP_FEED_TOKEN: "shop-secret", STRIPE_SECRET_KEY: "sk_test_x", STRIPE_WEBHOOK_SECRET: "whsec_test", POD_WEBHOOK_SECRET: "pod-secret",
+           APNS_KEY: `-----BEGIN PRIVATE KEY-----\n${pem}\n-----END PRIVATE KEY-----`, APNS_KEY_ID: "K", APNS_TEAM_ID: "T", APNS_TOPIC: "net.dauernheim.bruce",
+           RESEND_API_KEY: "re_test", EMAIL_FROM: "Brüce <autobook@example.com>", ...extra };
+}
+const connected = { ...front, stripeAccount: "acct_1ExampleStudio", shippingOre: 4900 };
+const hook = (env, raw, header) => worker.fetch(new Request("https://x/hooks/stripe", { method: "POST", headers: header ? { "stripe-signature": header } : {}, body: raw }), env, { waitUntil() {} })
+  .then(async (r) => ({ status: r.status, body: await r.json() }));
+const paidEvent = (session, extra = {}) => JSON.stringify({ id: "evt_1", type: "checkout.session.completed", account: "acct_1ExampleStudio",
+  data: { object: { id: session, payment_status: "paid", amount_total: 44900, client_reference_id: "42", metadata: { userId: "42", productId: "towel", variantId: "natural", qty: "1", delivery: "pickup", dropId: "", studioId: "9850", ...extra } } } });
+
+test("HTTP: checkout is dormant without a Stripe key or a connected studio; with both it opens a Session on the studio's account", async () => {
+  const DB = d1([{ user_id: 42, access_token: "t42", rules: "[]", devices: JSON.stringify([device]), state: JSON.stringify({ email: "42@b.se" }) }]);
+  const sent = fakeStripeWorld();
+  const quiet = { DB, SHOP_FEED_TOKEN: "shop-secret" };
+  await post(quiet, { source: "op", storefronts: [front] });
+  assert.equal((await as(42, quiet, "POST", "/checkout", { productId: "towel", variantId: "natural" })).status, 503, "no key: the apps keep the link-out");
+  assert.equal((await call(quiet, "GET", "/shop?city=STO")).body.storefronts[0].checkout, false);
+  const env = await stripeEnv(DB);
+  assert.equal((await call(env, "GET", "/shop?city=STO")).body.storefronts[0].checkout, false, "a key, but no connected account");
+  assert.equal((await as(42, env, "POST", "/checkout", { productId: "towel", variantId: "natural" })).status, 409);
+  await post(env, { source: "op", storefronts: [connected] });
+  const city = await call(env, "GET", "/shop?city=STO");
+  assert.deepEqual([city.body.storefronts[0].checkout, city.body.storefronts[0].shippingOre], [true, 4900]);
+  assert.equal(city.body.storefronts[0].stripeAccount, undefined, "the account id stays on the server");
+  assert.equal((await worker.fetch(new Request("https://x/checkout", { method: "POST", headers: { "X-Access-Token": "nope", "X-User-Id": "42" }, body: "{}" }), env, {})).status, 401);
+  assert.equal((await as(42, env, "POST", "/checkout", { productId: "nope" })).status, 404);
+  assert.equal((await as(42, env, "POST", "/checkout", { productId: "towel" })).status, 400, "a size or option is needed");
+  const r = await as(42, env, "POST", "/checkout", { productId: "towel", variantId: "natural", qty: 2, delivery: "ship", returnTo: "app" });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.body, { url: "https://checkout.stripe.com/c/pay/cs_test_1", sessionId: "cs_test_1", totalOre: 94700, vatOre: 18940 });
+  assert.equal(sent.stripe.length, 1);
+  const req = sent.stripe[0];
+  assert.equal(req.url, "https://api.stripe.com/v1/checkout/sessions");
+  assert.equal(req.headers["Stripe-Account"], "acct_1ExampleStudio", "a direct charge on the studio's account");
+  assert.equal(req.headers.authorization, "Bearer sk_test_x");
+  assert.equal(req.form.get("mode"), "payment");
+  assert.equal(req.form.get("line_items[0][price_data][product_data][name]"), "Bastu towel · Natural");
+  assert.equal(req.form.get("line_items[0][price_data][unit_amount]"), "44900");
+  assert.equal(req.form.get("line_items[0][quantity]"), "2");
+  assert.equal(req.form.get("line_items[1][price_data][product_data][name]"), "Shipping");
+  assert.equal(req.form.get("line_items[1][price_data][unit_amount]"), "4900");
+  assert.equal(req.form.get("shipping_address_collection[allowed_countries][0]"), "SE", "the address goes to Stripe, never here");
+  assert.equal(req.form.get("success_url"), "bruece://orders?paid={CHECKOUT_SESSION_ID}");
+  assert.equal(req.form.get("customer_email"), "42@b.se");
+  assert.deepEqual([req.form.get("metadata[userId]"), req.form.get("metadata[productId]"), req.form.get("metadata[delivery]")], ["42", "towel", "ship"]);
+  assert.equal(req.form.get("payment_method_types[0]"), null, "Stripe's Dashboard decides the methods");
+  const web = await as(42, env, "POST", "/checkout", { productId: "towel", variantId: "natural" });
+  assert.equal(sent.stripe[1].form.get("success_url"), "https://djui.github.io/bruce/app/#/home/orders?paid={CHECKOUT_SESSION_ID}");
+  assert.equal(sent.stripe[1].form.get("shipping_address_collection[allowed_countries][0]"), null, "pickup asks for no address");
+  assert.equal(web.body.totalOre, 44900);
+});
+
+test("HTTP: the Stripe webhook writes one order per session with a pickup code and tells the member; the print partner moves it on", async () => {
+  const DB = d1([{ user_id: 42, access_token: "t42", rules: "[]", devices: JSON.stringify([device]), state: JSON.stringify({ email: "42@b.se" }) }]);
+  const sent = fakeStripeWorld();
+  const env = await stripeEnv(DB);
+  await post(env, { source: "op", storefronts: [{ ...connected, drops: [{ ...drop, opensAt: "2020-01-01T00:00:00Z", closesAt: "2099-01-01T00:00:00Z" }] }] });
+  const raw = paidEvent("cs_test_1");
+  assert.equal((await hook({ ...env, STRIPE_WEBHOOK_SECRET: undefined }, raw, await sign(raw, "whsec_test", Math.floor(Date.now() / 1000)))).status, 503);
+  assert.equal((await hook(env, raw)).status, 400, "no signature");
+  assert.equal((await hook(env, raw, await sign(raw, "whsec_wrong", Math.floor(Date.now() / 1000)))).status, 400);
+  assert.equal((await hook(env, raw, await sign(raw, "whsec_test", Math.floor(Date.now() / 1000) - 3600))).status, 400, "an old event");
+  const other = JSON.stringify({ id: "evt_2", type: "payment_intent.succeeded" });
+  assert.deepEqual((await hook(env, other, await sign(other, "whsec_test", Math.floor(Date.now() / 1000)))).body, { received: true, ignored: "payment_intent.succeeded" });
+  const first = await hook(env, raw, await sign(raw, "whsec_test", Math.floor(Date.now() / 1000)));
+  assert.equal(first.status, 200);
+  assert.ok(first.body.orderId);
+  const rows = DB.rows("orders");
+  assert.equal(rows.length, 1);
+  assert.deepEqual([rows[0].user_id, rows[0].studio_id, rows[0].status, rows[0].delivery, rows[0].total_ore, rows[0].vat_ore, rows[0].stripe_session, rows[0].stripe_account],
+    [42, 9850, "paid", "pickup", 44900, 8980, "cs_test_1", "acct_1ExampleStudio"]);
+  assert.match(rows[0].pickup_code, /^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{5}$/);
+  assert.deepEqual(JSON.parse(rows[0].items), [{ productId: "towel", variantId: "natural", title: "Bastu towel", label: "Natural", qty: 1, unitOre: 44900 }]);
+  assert.equal(sent.pushes.length, 1);
+  assert.equal(sent.pushes[0].aps.alert.title, "Order confirmed: Bastu towel · Natural");
+  assert.match(sent.pushes[0].aps.alert.body, new RegExp(`449 kr paid to Example Bastu AB. Show code ${rows[0].pickup_code} at the desk`));
+  assert.equal(sent.pushes[0].aps.category, "SHOP_ORDER");
+  assert.equal(sent.emails.length, 1);
+  assert.match(sent.emails[0].text, /Open your orders: https:\/\/djui\.github\.io\/bruce\/app\/#\/home\/orders/);
+  // The same session again (Stripe retries): nothing new.
+  assert.deepEqual((await hook(env, raw, await sign(raw, "whsec_test", Math.floor(Date.now() / 1000)))).body, { received: true, duplicate: true });
+  assert.equal(DB.rows("orders").length, 1);
+  const unpaid = raw.replace('"payment_status":"paid"', '"payment_status":"unpaid"').replace("cs_test_1", "cs_test_2");
+  assert.deepEqual((await hook(env, unpaid, await sign(unpaid, "whsec_test", Math.floor(Date.now() / 1000)))).body, { received: true, ignored: "not paid" });
+  // A paid tee of the drop counts towards the run; no address anywhere.
+  const teeEvent = paidEvent("cs_test_3", { productId: "tee", variantId: "", qty: "2", dropId: "race-day" });
+  await hook(env, teeEvent, await sign(teeEvent, "whsec_test", Math.floor(Date.now() / 1000)));
+  assert.equal((await call(env, "GET", "/shop?city=STO")).body.drops[0].reserved, 33, "31 from the feed and 2 paid");
+  assert.ok(!Object.keys(DB.rows("orders")[0]).some((k) => /address|street|zip/.test(k)));
+  // The member's orders.
+  const mine = await as(42, env, "GET", "/me/orders");
+  assert.equal(mine.body.orders.length, 2);
+  assert.deepEqual([mine.body.orders[1].statusText, mine.body.orders[1].sellerName, mine.body.orders[1].pickupCode], ["Paid · being prepared for pickup", "Example Bastu AB", rows[0].pickup_code]);
+  assert.equal(mine.body.orders[0].userId, undefined);
+  assert.deepEqual((await as(7, env, "GET", "/me/orders")).body.orders, [], "only one's own");
+  // The print partner: its secret, printing, shipped (to the studio), then delivered there = ready for pickup, with the code.
+  const pod = (body, secret = "pod-secret") => worker.fetch(new Request("https://x/hooks/pod", { method: "POST", headers: secret ? { "x-pod-secret": secret } : {}, body: JSON.stringify(body) }), env, { waitUntil() {} })
+    .then(async (r) => ({ status: r.status, body: await r.json() }));
+  const id = rows[0].id;
+  assert.equal((await worker.fetch(new Request("https://x/hooks/pod", { method: "POST", body: "{}" }), { DB }, {})).status, 503);
+  assert.equal((await pod({ orderId: id, status: "shipped" }, "wrong")).status, 401);
+  assert.equal((await pod({ orderId: id, status: "lost" })).status, 400);
+  assert.equal((await pod({ orderId: "nope", status: "shipped" })).status, 404);
+  assert.deepEqual((await pod({ orderId: id, status: "printing", podOrder: "pod-77" })).body, { ok: true, status: "printing" });
+  assert.equal(DB.rows("orders", `id = '${id}'`)[0].pod_order, "pod-77");
+  assert.equal(sent.pushes.length, 2, "printing is quiet");
+  assert.deepEqual((await pod({ podOrder: "pod-77", status: "shipped" })).body, { ok: true, status: "shipped" });
+  assert.equal(sent.pushes[2].aps.alert.title, "On its way: Bastu towel · Natural");
+  assert.deepEqual((await pod({ podOrder: "pod-77", status: "delivered" })).body, { ok: true, status: "ready" }, "delivered to the studio: ready for pickup");
+  assert.equal(sent.pushes[3].aps.alert.title, "Ready for pickup: Bastu towel · Natural");
+  assert.match(sent.pushes[3].aps.alert.body, new RegExp(`Show code ${rows[0].pickup_code} at Example Bastu AB, At the desk`));
+  assert.equal(sent.pushes[3].orderId, id);
+  assert.deepEqual((await pod({ podOrder: "pod-77", status: "shipped" })).body, { ok: true, status: "ready", unchanged: true }, "nothing goes back from ready");
+  assert.equal((await as(42, env, "GET", "/me/orders")).body.orders.find((o) => o.id === id).status, "ready");
+});
+
+test("cron: a drop marked ready tells its buyers with their pickup code and moves their orders to ready", async () => {
+  const DB = d1([{ user_id: 42, access_token: "t42", rules: "[]", devices: JSON.stringify([device]), state: JSON.stringify({ email: "42@b.se" }) },
+                 { user_id: 7, access_token: "t7", rules: "[]", devices: "[]", state: JSON.stringify({ email: "7@b.se" }) }]);
+  const sent = fakeStripeWorld();
+  const env = await stripeEnv(DB);
+  const open = { ...drop, opensAt: "2020-01-01T00:00:00Z", closesAt: "2099-01-01T00:00:00Z" };
+  await post(env, { source: "op", storefronts: [{ ...connected, drops: [open] }] });
+  await as(7, env, "PUT", "/me/notify/race-day");
+  const teeEvent = paidEvent("cs_test_9", { productId: "tee", variantId: "", qty: "1", dropId: "race-day" });
+  await hook(env, teeEvent, await sign(teeEvent, "whsec_test", Math.floor(Date.now() / 1000)));
+  sent.pushes.length = 0; sent.emails.length = 0;
+  await post(env, { source: "op", storefronts: [{ ...connected, drops: [{ ...open, ready: true }] }] });
+  await sendDropNotices(env, Date.now());
+  assert.equal(DB.rows("orders")[0].status, "ready");
+  assert.equal(sent.pushes.length, 1, "42's device, with the code");
+  assert.match(sent.pushes[0].aps.alert.body, new RegExp(`Show code ${DB.rows("orders")[0].pickup_code}`));
+  assert.equal(sent.emails.length, 2, "the buyer and the Notify me member, each once");
+  assert.deepEqual(sent.emails.map((e) => e.to[0]).sort(), ["42@b.se", "7@b.se"]);
+});

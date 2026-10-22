@@ -1,4 +1,5 @@
 import SwiftUI
+import SafariServices
 
 // Studio shop on the iPhone (Shop.swift): Home's Shop section with the drop card, Home › Shop with its chips, a
 // product page, the "Shop at the desk" rail on a studio page and the "Forgot your towel?" card on the ticket after a
@@ -222,6 +223,8 @@ struct ProductView: View {
     @Environment(AppModel.self) var m
     @Environment(\.openURL) private var openURL
     let productId: String
+    @State private var variantId: String?
+    @State private var delivery: Delivery = .pickup
 
     var body: some View {
         Group {
@@ -251,8 +254,9 @@ struct ProductView: View {
                 }
                 if !p.variants.isEmpty { variants(p) }
                 if let drop { dropBlock(drop, p, studio) }
+                if buyable(p, drop), let front { deliveryBlock(p, front, studio) }
                 NavigationLink(value: Route.studio(p.studioId)) {
-                    InfoRow(title: studio, subtitle: front.map { Copy.shopSoldBy($0.sellerName, desk: p.fulfilment == .desk) } ?? "Studio page").padding(14)
+                    InfoRow(title: studio, subtitle: front.map { Copy.shopSoldBy($0.sellerName, desk: p.fulfilment == .desk, checkout: $0.checkout) } ?? "Studio page").padding(14)
                 }
                 .buttonStyle(.plain)
                 .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 22))
@@ -267,18 +271,42 @@ struct ProductView: View {
         .safeAreaInset(edge: .bottom) { actions(p, front, drop).padding(Theme.gutter) }
     }
 
+    /// Buy is on the page when the studio takes payment through Brüce (phase 4) and the listing is open to buy: no drop,
+    /// or a drop whose window is open. A drop that is ready or closed is only a notice.
+    func buyable(_ p: Product, _ drop: Drop?) -> Bool { m.canBuy(p) && (drop == nil || drop?.state() == .open) }
+
+    /// The one picked, else the first in stock (what the checkout sheet starts with).
+    func picked(_ p: Product) -> ProductVariant? { p.variants.first { $0.id == variantId && $0.inStock } ?? p.inStockVariants.first }
+
     func variants(_ p: Product) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let pickable = m.canBuy(p)
+        let current = picked(p)?.id
+        return VStack(alignment: .leading, spacing: 8) {
             Text(p.kind == .apparel ? "SIZES" : "OPTIONS").bruceFont(11, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
             ScrollView(.horizontal, showsIndicators: false) {
                 GlassEffectContainer {
                     HStack(spacing: 8) {
                         ForEach(p.variants) { v in
-                            Text(v.label + (v.inStock ? "" : " · out")).bruceFont(14, weight: .semibold).foregroundStyle(v.inStock ? Theme.ink : Theme.tertiary)
-                                .padding(.horizontal, 14).frame(height: 34).glassEffect(.regular, in: .capsule)
+                            if pickable && v.inStock {
+                                GlassChip(selected: v.id == current, action: { variantId = v.id }) { Text(v.label) }
+                            } else {
+                                Text(v.label + (v.inStock ? "" : " · out")).bruceFont(14, weight: .semibold).foregroundStyle(v.inStock ? Theme.ink : Theme.tertiary)
+                                    .padding(.horizontal, 14).frame(height: 34).glassEffect(.regular, in: .capsule)
+                            }
                         }
                     }
                 }
+            }
+        }
+    }
+
+    /// "How do you want it?": pick up at the desk (free, the default) or shipped where the studio ships (mockup 5).
+    func deliveryBlock(_ p: Product, _ front: Storefront, _ studio: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(Copy.shopHowTitle.uppercased()).bruceFont(11, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
+            DeliveryRow(title: Copy.shopPickupAt(studio), subtitle: Copy.shopPickupFree, symbol: "building.2", selected: delivery == .pickup || !front.ships) { delivery = .pickup }
+            if front.ships {
+                DeliveryRow(title: Copy.shopShipPrice(front), subtitle: Copy.shopShipNote, symbol: "shippingbox", selected: delivery == .ship) { delivery = .ship }
             }
         }
     }
@@ -333,7 +361,13 @@ struct ProductView: View {
     /// No checkout yet. A drop's Reserve opens the studio's own checkout while the window is open; else the desk, the
     /// product's own page or the studio's webshop.
     @ViewBuilder func actions(_ p: Product, _ front: Storefront?, _ drop: Drop?) -> some View {
-        if let drop, drop.state() == .open {
+        if buyable(p, drop), let front {
+            let draft = CheckoutDraft(product: p, storefront: front, variant: picked(p), qty: 1, delivery: front.ships ? delivery : .pickup)
+            LimeButton(title: Copy.shopBuy(ShopMoney.kr(draft.totalOre)), systemImage: "bag") {
+                m.checkoutDraft = draft
+                m.present(.shopCheckout(p.id))
+            }
+        } else if let drop, drop.state() == .open {
             if let u = drop.reserveURL() {
                 VStack(spacing: 6) {
                     Button { openURL(u) } label: {
@@ -377,6 +411,206 @@ struct ProductView: View {
     }
 }
 
+/// One way to get it, with a check mark on the chosen one.
+struct DeliveryRow: View {
+    let title: String
+    let subtitle: String
+    let symbol: String
+    let selected: Bool
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 12) {
+                Image(systemName: symbol).bruceFont(18).frame(width: 26)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title).bruceFont(16, weight: .semibold).foregroundStyle(Theme.ink)
+                    Text(subtitle).bruceFont(13).foregroundStyle(Theme.secondary)
+                }
+                Spacer()
+                Image(systemName: selected ? "checkmark.circle.fill" : "circle").bruceFont(22).foregroundStyle(selected ? Theme.limeInk : Theme.tertiary)
+            }
+            .padding(14)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .glassEffect(selected ? .regular.tint(Theme.lime.opacity(0.18)).interactive() : .regular.interactive(), in: .rect(cornerRadius: 18))
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+// MARK: - Checkout (phase 4)
+
+/// Mockup 5: what is being bought, how many, how it comes, the sums with the VAT, who sells it, and Pay, which opens
+/// Stripe Checkout on the studio's account in an in-app Safari view (never an in-app purchase: physical goods,
+/// App Review guideline 3.1.3(e)). Brüce never sees the card or an address.
+struct ShopCheckoutSheet: View {
+    @Environment(AppModel.self) var m
+    let productId: String
+    @State private var draft: CheckoutDraft?
+    @State private var safari: SafariItem?
+    @State private var busy = false
+
+    var body: some View {
+        Group {
+            if let d = draft { content(d) } else { EmptyState(system: "bag", text: "This listing is no longer there.") }
+        }
+        .sheetChrome(Copy.shopCheckoutTitle)
+        .onAppear { if draft == nil, let p = m.shopProduct(productId) { draft = m.checkoutDraft?.product.id == p.id ? m.checkoutDraft : m.checkoutDraft(for: p) } }
+        .fullScreenCover(item: $safari) { item in SafariView(url: item.url).ignoresSafeArea() }
+    }
+
+    func content(_ d: CheckoutDraft) -> some View {
+        let studio = m.studioName(d.product.studioId)
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 14) {
+                    ProductArt(kind: d.product.kind, corner: 14, symbolSize: 26).frame(width: 64, height: 64)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(d.product.title).bruceFont(17, weight: .bold)
+                        Text([d.variant?.label, studio].compactMap { $0 }.joined(separator: " · ")).bruceFont(13).foregroundStyle(Theme.secondary)
+                    }
+                    Spacer()
+                    Text(ShopMoney.exact(d.product.priceOre)).bruceFont(15, weight: .semibold).monospacedDigit()
+                }
+                HStack {
+                    Text("Quantity").bruceFont(16, weight: .semibold)
+                    Spacer()
+                    Stepper(value: bind(\.qty), in: 1...CheckoutDraft.maxQty) { Text("\(d.qty)").bruceFont(17, weight: .bold).monospacedDigit() }
+                        .fixedSize()
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(Copy.shopHowTitle.uppercased()).bruceFont(11, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
+                    DeliveryRow(title: Copy.shopPickupAt(studio), subtitle: d.storefront.pickupNote ?? Copy.shopPickupFree, symbol: "building.2", selected: d.delivery == .pickup) { draft?.delivery = .pickup }
+                    if d.storefront.ships {
+                        DeliveryRow(title: Copy.shopShipPrice(d.storefront), subtitle: Copy.shopShipNote, symbol: "shippingbox", selected: d.delivery == .ship) { draft?.delivery = .ship }
+                    }
+                }
+                VStack(spacing: 8) {
+                    sum(d.itemLine, ShopMoney.exact(d.subtotalOre))
+                    if d.delivery == .ship { sum("Shipping", ShopMoney.exact(d.shippingOre)) }
+                    Divider()
+                    HStack {
+                        Text("Total").bruceFont(17, weight: .bold)
+                        Spacer()
+                        Text(ShopMoney.exact(d.totalOre)).bruceFont(20, weight: .heavy).monospacedDigit()
+                    }
+                    sum(Copy.shopVatLine(d.product.vatRate), ShopMoney.exact(d.vatOre), muted: true)
+                }
+                .padding(16)
+                .glassEffect(.regular, in: .rect(cornerRadius: 22))
+                Text(Copy.shopSeller(d.storefront, vicinity: m.studio(d.product.studioId)?.vicinity)).bruceFont(13).foregroundStyle(Theme.secondary).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(Theme.gutter).padding(.bottom, 120)
+        }
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 8) {
+                if let problem = d.problem {
+                    Text(problem).bruceFont(13).foregroundStyle(Theme.red).multilineTextAlignment(.center)
+                }
+                LimeButton(title: Copy.shopPay(ShopMoney.exact(d.totalOre)), systemImage: "lock.fill") { pay(d) }
+                    .disabled(busy || d.problem != nil).opacity(d.problem != nil ? 0.6 : 1)
+                Text(Copy.shopPayMethods).bruceFont(12).foregroundStyle(Theme.secondary)
+                Label(Copy.shopPaySafety, systemImage: "lock.shield").bruceFont(11).foregroundStyle(Theme.secondary).multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(Theme.gutter)
+        }
+    }
+
+    func sum(_ label: String, _ value: String, muted: Bool = false) -> some View {
+        HStack {
+            Text(label).bruceFont(14).foregroundStyle(muted ? Theme.secondary : Theme.ink)
+            Spacer()
+            Text(value).bruceFont(14, weight: muted ? .regular : .semibold).foregroundStyle(muted ? Theme.secondary : Theme.ink).monospacedDigit()
+        }
+    }
+
+    func bind<T>(_ key: WritableKeyPath<CheckoutDraft, T>) -> Binding<T> {
+        Binding(get: { draft![keyPath: key] }, set: { draft?[keyPath: key] = $0 })
+    }
+
+    func pay(_ d: CheckoutDraft) {
+        busy = true
+        Task {
+            if let u = await m.startCheckout(d) { safari = SafariItem(url: u) }
+            busy = false
+        }
+    }
+}
+
+struct SafariItem: Identifiable {
+    let url: URL
+    var id: String { url.absoluteString }
+}
+
+/// Stripe Checkout in SFSafariViewController: the member stays in the app, Safari's cookies and Apple Pay are there,
+/// and the success URL (bruece://orders) brings them back to Menu › Orders.
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        let c = SFSafariViewController(url: url)
+        c.dismissButtonStyle = .close
+        c.preferredControlTintColor = UIColor(Theme.limeInk)
+        return c
+    }
+    func updateUIViewController(_ c: SFSafariViewController, context: Context) {}
+}
+
+// MARK: - Orders
+
+/// Menu › Orders: what the member bought from studio shops, the status as the server words it, and the pickup code.
+struct OrdersView: View {
+    @Environment(AppModel.self) var m
+    var body: some View {
+        List {
+            if m.orders.isEmpty {
+                EmptyState(system: "bag", text: m.ordersLoaded || AppModel.demo ? Copy.shopOrdersEmpty : "Loading…").listRowBackground(Color.clear).listRowSeparator(.hidden)
+            }
+            ForEach(m.orders) { o in
+                OrderRow(order: o)
+            }
+            Section { } footer: { Text(Copy.shopOrdersNote) }
+        }
+        .listStyle(.insetGrouped)
+        .sheetChrome(Copy.shopOrdersTitle)
+        .task { await m.loadOrders() }
+        .refreshable { await m.loadOrders() }
+    }
+}
+
+struct OrderRow: View {
+    @Environment(AppModel.self) var m
+    let order: Order
+    var body: some View {
+        let o = order
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: o.symbol).bruceFont(20).foregroundStyle(o.isReady ? Theme.limeInk : Theme.secondary).frame(width: 28)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(o.items.map(\.line).joined(separator: ", ")).bruceFont(16, weight: .semibold)
+                    Text([o.sellerName ?? m.studioName(o.studioId), Copy.shopOrderDate(o)].filter { !$0.isEmpty }.joined(separator: " · ")).bruceFont(13).foregroundStyle(Theme.secondary)
+                }
+                Spacer()
+                Text(ShopMoney.kr(o.totalOre)).bruceFont(15, weight: .semibold).monospacedDigit()
+            }
+            Text(o.statusLine).bruceFont(13, weight: .bold).foregroundStyle(o.isReady ? Color.black : Theme.ink)
+                .padding(.horizontal, 10).padding(.vertical, 5)
+                .background(Capsule().fill(o.isReady ? Theme.lime : Theme.chipGrey))
+            if let code = o.pickupCode, !o.isDone {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(Copy.shopPickupCode.uppercased()).bruceFont(11, weight: .heavy, width: .expanded).foregroundStyle(Theme.secondary)
+                    Text(code).font(.system(size: 30, weight: .heavy, design: .monospaced)).kerning(4)
+                    if let note = o.pickupNote { Text(note).bruceFont(13).foregroundStyle(Theme.secondary) }
+                }
+                .padding(.top, 2)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel("Pickup code \(code.map(String.init).joined(separator: " "))")
+            }
+        }
+        .padding(.vertical, 6)
+    }
+}
+
 // MARK: - Studio page
 
 /// "Shop at the desk" on a studio page (mockup 2): the listings as a rail, who sells them and how to pay.
@@ -403,7 +637,7 @@ struct ShopRail: View {
                 .padding(.horizontal, -Theme.gutter)
                 .scrollClipDisabled()
                 HStack {
-                    Text(Copy.shopSoldBy(front.sellerName, desk: products.contains { $0.fulfilment == .desk })).bruceFont(13).foregroundStyle(Theme.secondary)
+                    Text(Copy.shopSoldBy(front.sellerName, desk: products.contains { $0.fulfilment == .desk }, checkout: front.checkout)).bruceFont(13).foregroundStyle(Theme.secondary)
                     Spacer(minLength: 8)
                     if let u = front.webshop {
                         Button { openURL(u) } label: { Label(Copy.shopWebshop, systemImage: "arrow.up.right.square").bruceFont(13, weight: .bold) }

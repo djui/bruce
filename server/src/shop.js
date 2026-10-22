@@ -160,3 +160,113 @@ export function vatPart(ore, rate) {
 }
 
 const dayText = (ms) => new Date(ms).toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short", timeZone: "Europe/Stockholm" });
+
+// MARK: Checkout (phase 4)
+
+export const MAX_QTY = 5;
+export const DELIVERIES = ["pickup", "ship"];
+export const ORDER_STATUSES = ["paid", "printing", "shipped", "ready", "delivered", "collected", "refunded"];
+/** Letters and digits that can't be misread at the desk (no 0/O, 1/I/L). */
+const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+/** A 5-character pickup code shown at the desk. */
+export function pickupCode(random = (n) => crypto.getRandomValues(new Uint8Array(n))) {
+  return [...random(5)].map((b) => CODE_ALPHABET[b % CODE_ALPHABET.length]).join("");
+}
+
+/**
+ * What a checkout body asks for, checked against the catalogue: `{product, variant, qty, delivery, storefront, drop}`,
+ * or `{error}`. Shipping only where the studio ships; a variant only from the product's list and in stock; a drop only
+ * while its window is open.
+ */
+export function cleanCheckout(body, { storefront, product, drop }, now = Date.now()) {
+  if (!product || !storefront) return { error: "listing not found" };
+  const qty = body?.qty == null ? 1 : body.qty;
+  if (!Number.isInteger(qty) || qty < 1 || qty > MAX_QTY) return { error: `qty must be 1-${MAX_QTY}` };
+  const delivery = body?.delivery == null ? "pickup" : body.delivery;
+  if (!DELIVERIES.includes(delivery)) return { error: "delivery must be pickup or ship" };
+  if (delivery === "ship" && storefront.shippingOre == null) return { error: "this studio does not ship: pick it up at the desk" };
+  let variant = null;
+  if (product.variants.length) {
+    variant = product.variants.find((v) => v.id === body?.variantId) ?? null;
+    if (!variant) return { error: "pick a size or option" };
+    if (!variant.inStock) return { error: "that option is out of stock" };
+  }
+  if (drop && dropState(drop, now) !== "open") return { error: "the pre-order is not open" };
+  return { product, variant, qty, delivery, storefront, drop: drop ?? null };
+}
+
+/** The order's lines and sums: `{items, subtotalOre, shippingOre, totalOre, vatOre}`; shipping carries the goods' VAT rate. */
+export function orderTotals({ product, variant, qty, delivery, storefront }) {
+  const items = [{ productId: product.id, variantId: variant?.id ?? null, title: product.title, label: variant?.label ?? null, qty, unitOre: product.priceOre }];
+  const subtotalOre = product.priceOre * qty;
+  const shippingOre = delivery === "ship" ? storefront.shippingOre ?? 0 : 0;
+  const totalOre = subtotalOre + shippingOre;
+  return { items, subtotalOre, shippingOre, totalOre, vatOre: vatPart(totalOre, product.vatRate) };
+}
+
+/** "Bastu towel · Natural × 2". */
+export const itemLine = (it) => `${it.title}${it.label ? ` · ${it.label}` : ""}${it.qty > 1 ? ` × ${it.qty}` : ""}`;
+
+/**
+ * Checks a Stripe webhook's `Stripe-Signature` header against the raw body: HMAC-SHA256 of "<t>.<body>" with the
+ * endpoint secret, any `v1` signature may match, and the timestamp must be within `toleranceS` of now (a replayed
+ * event is refused). Web Crypto; the comparison is constant-time.
+ */
+export async function verifyStripeSignature(header, body, secret, now = Date.now(), toleranceS = 300) {
+  if (!header || !secret) return false;
+  const sigs = [];
+  let t = null;
+  for (const item of String(header).split(",")) {
+    const [k, v] = item.trim().split("=");
+    if (k === "t") t = Number(v);
+    else if (k === "v1" && /^[0-9a-f]{64}$/.test(v ?? "")) sigs.push(v);
+  }
+  if (!Number.isFinite(t) || !sigs.length || Math.abs(now / 1000 - t) > toleranceS) return false;
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${t}.${body}`));
+  const expected = [...new Uint8Array(mac)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  return sigs.some((s) => timingSafeEqual(s, expected));
+}
+
+function timingSafeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** The status as the apps word it. */
+export function orderStatusText(status, delivery) {
+  switch (status) {
+    case "paid": return delivery === "ship" ? "Paid · being prepared" : "Paid · being prepared for pickup";
+    case "printing": return "Being printed";
+    case "shipped": return delivery === "ship" ? "On its way" : "On its way to the studio";
+    case "ready": return "Ready for pickup";
+    case "delivered": return "Delivered";
+    case "collected": return "Collected";
+    case "refunded": return "Refunded";
+    default: return status;
+  }
+}
+
+/** "Order confirmed: Bastu towel" with the pickup code, or that it ships. */
+export function orderConfirmedMessage(order, storefront) {
+  const what = order.items.map(itemLine).join(", ");
+  const body = order.delivery === "ship" ? `${krText(order.totalOre)} paid to ${storefront.sellerName}. It ships to the address you gave Stripe; we'll tell you when it's on its way.`
+    : `${krText(order.totalOre)} paid to ${storefront.sellerName}. Show code ${order.pickupCode} at the desk once it's ready; we'll tell you.`;
+  return { title: `Order confirmed: ${what}`, body };
+}
+
+/** The push and email when the print partner moves an order on: shipped, delivered, or ready at the desk. */
+export function orderUpdateMessage(order, status, storefront) {
+  const what = order.items.map(itemLine).join(", ");
+  const seller = storefront?.sellerName ?? "the studio";
+  switch (status) {
+    case "ready": return readyMessage(what, storefront, order.pickupCode);
+    case "shipped": return { title: `On its way: ${what}`, body: order.delivery === "ship" ? "Your order has shipped. Tracking, when there is any, comes from the sender."
+      : `Your order is on its way to ${seller}. We'll tell you when it's ready for pickup.` };
+    case "delivered": return { title: `Delivered: ${what}`, body: "Your order has been delivered." };
+    default: return { title: `${orderStatusText(status, order.delivery)}: ${what}`, body: `Your order with ${seller}.` };
+  }
+}

@@ -10,7 +10,7 @@ import { renderClass, renderStudio } from './detail.js';
 import { toast, fitTitle } from './ui.js';
 import { renderChallenge } from './challenges.js';
 import { renderRace } from './racesui.js';
-import { renderShop, renderProduct } from './shopui.js';
+import { renderShop, renderProduct, openOrders } from './shopui.js';
 import { challengeIdFromHash, challengeRoute } from './links.js';
 import { openNotifications, openMenu } from './sheets.js';
 
@@ -69,6 +69,8 @@ function route() {
   document.body.classList.remove('logged-out');
   const r = parse();
   if (!r.tab) { location.replace('#/home'); return; }
+  // Stripe Checkout's way back (#/home/orders?paid=…) and a plain link to Menu › Orders: the sheet over Home.
+  if (/^#\/[a-z]+\/orders(\?|$)/.test(location.hash)) { const paid = r.params.has('paid'); location.replace('#/' + r.tab); openOrders(paid); return; }
   const tabChanged = r.tab !== current.tab || r.query !== current.query;
   const detailChanged = JSON.stringify(r.detail) !== JSON.stringify(current.detail);
   trackBack(r, detailChanged);
