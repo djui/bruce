@@ -5,22 +5,26 @@ import QuickLook
 
 struct MenuSheet: View {
     @Environment(AppModel.self) var m
-    let rows: [(String, String, SheetRoute)] = [
-        ("person.crop.circle", "Account", .account),
-        ("gearshape", "Settings", .settings),
-        ("calendar.badge.clock", "Auto-book", .autoBook),
-        ("target", "Monthly goals", .goals),
-        ("person.2", "Invite friends", .invite),
-        ("gift", "Redeem voucher", .voucher),
-        ("bubble.left.and.bubble.right", "Support", .support),
-    ]
+    /// Orders (the studio shop, Shop.swift) only where a shop is listed or something was bought.
+    var rows: [(String, String, SheetRoute)] {
+        [
+            ("person.crop.circle", "Account", .account),
+            ("gearshape", "Settings", .settings),
+            ("calendar.badge.clock", "Auto-book", .autoBook),
+            ("target", "Monthly goals", .goals),
+        ] + (m.showsShop || !m.orders.isEmpty ? [("bag", Copy.shopOrdersTitle, .orders)] : []) + [
+            ("person.2", "Invite friends", .invite),
+            ("gift", "Redeem voucher", .voucher),
+            ("bubble.left.and.bubble.right", "Support", .support),
+        ]
+    }
     var body: some View {
         List {
             Section {
                 ForEach(rows.indices, id: \.self) { i in
                     let r = rows[i]
                     Button {
-                        if (r.1 == "Account" || r.1 == "Monthly goals") && !m.isLoggedIn { m.sheets = [.login] } else { m.sheets = [r.2] }
+                        if (r.1 == "Account" || r.1 == "Monthly goals" || r.1 == Copy.shopOrdersTitle) && !m.isLoggedIn { m.sheets = [.login] } else { m.sheets = [r.2] }
                     } label: {
                         Label {
                             Text(r.1).bruceFont(17, weight: .medium).foregroundStyle(Theme.ink)

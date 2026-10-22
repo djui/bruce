@@ -35,14 +35,19 @@
 // operator (`POST /shop/import`), served per city and studio (`GET /shop`, `GET /shop/studio/<id>`), with Notify me for
 // planned drops (`PUT /me/notify/<dropId>`) and anonymous daily tap counters. The minute cron sends "Drop open" and
 // "Ready for pickup" by push and email to a drop's Notify me list; a drop tied to a challenge is shown only to that
-// challenge's finishers (`GET /me/shop`). The studio sells; nothing here takes money. The pure logic is in ./shop.js.
+// challenge's finishers (`GET /me/shop`). Checkout (0009): `POST /checkout` opens a Stripe Checkout Session on the
+// studio's connected account (the studio is the seller; Brüce holds no money and no address), `POST /hooks/stripe`
+// writes the order with a pickup code, `POST /hooks/pod` takes the print partner's shipped and delivered events, and
+// `GET /me/orders` lists them. Dormant until STRIPE_SECRET_KEY and a storefront's `stripe_account` are set. The pure
+// logic is in ./shop.js.
 
 import {
   localDay, addDays, monthStart, visitsFromBookings, dailyRows, fromDetail, goalReminders, challengePeriod, challengeStats,
   cleanChallenge, cohortValues, percentiles, PERCENTILE_METRICS, crewWeeks, crewMessage, mondayOf,
 } from "./insights.js";
 import { brokenHabit, recommendClasses, nudgeMessage, cleanLapseDays, HABIT_LOOKBACK_DAYS, RECOMMEND_DAYS, LAPSE_DAYS } from "./habits.js";
-import { cleanStorefront, MAX_STOREFRONTS, isFinisher, dropOpenMessage, readyMessage } from "./shop.js";
+import { cleanStorefront, MAX_STOREFRONTS, isFinisher, dropOpenMessage, readyMessage, cleanCheckout, orderTotals, pickupCode, verifyStripeSignature,
+  orderStatusText, orderConfirmedMessage, orderUpdateMessage, vatPart } from "./shop.js";
 
 const API = "https://api.bruce.app";
 const USER_AGENT = "Bruce/14.4.2_538 (iOS27.0.0; Apple)";
@@ -1047,8 +1052,10 @@ const SHOP_CACHE = "public, max-age=300";
 /** Closed drops stay in the catalogue this long (the pickup still has to happen); then they are left out. */
 const DROP_LINGER_MS = 30 * 86400_000;
 
-const rowToStorefront = (r) => ({ studioId: r.studio_id, sellerName: r.seller_name, city: r.city, webshopUrl: r.webshop_url ?? null,
-  pickupNote: r.pickup_note ?? null, consentAt: r.consent_at });
+/** Checkout is on only with a Stripe key on the server and the studio's connected account; the apps keep the link-out otherwise. */
+const checkoutOn = (env, r) => !!(env?.STRIPE_SECRET_KEY && r?.stripe_account);
+const rowToStorefront = (r, env) => ({ studioId: r.studio_id, sellerName: r.seller_name, city: r.city, webshopUrl: r.webshop_url ?? null,
+  pickupNote: r.pickup_note ?? null, consentAt: r.consent_at, checkout: checkoutOn(env, r), shippingOre: r.shipping_ore ?? null });
 const rowToProduct = (r, variants) => ({ id: r.id, studioId: r.studio_id, title: r.title, kind: r.kind, description: r.description ?? null,
   priceOre: r.price_ore, vatRate: r.vat_rate, fulfilment: r.fulfilment, linkUrl: r.link_url ?? null, variants });
 const rowToDrop = (r) => ({ id: r.id, studioId: r.studio_id, productId: r.product_id, challengeId: r.challenge_id ?? null, title: r.title,
@@ -1081,7 +1088,7 @@ async function productsWithVariants(DB, products) {
  * for it, are only in `GET /me/shop` for that challenge's finishers. Storefronts without an active product are left
  * out, so the apps show no shop where nothing is listed.
  */
-export async function catalogue(DB, { city, studioId }, now = Date.now()) {
+export async function catalogue(DB, { city, studioId }, now = Date.now(), env = {}) {
   const { results: fronts } = await DB.prepare(`SELECT * FROM storefronts WHERE ${studioId ? "studio_id = ?" : "city = ?"} ORDER BY studio_id`)
     .bind(studioId ?? city).all();
   const empty = { storefronts: [], products: [], drops: [] };
@@ -1093,7 +1100,17 @@ export async function catalogue(DB, { city, studioId }, now = Date.now()) {
   const { results: drops } = await DB.prepare(`SELECT d.* FROM drops d JOIN products p ON p.id = d.product_id WHERE d.challenge_id IS NULL AND p.active = 1
       AND d.closes_at > ? AND d.studio_id IN (SELECT value FROM json_each(?)) ORDER BY d.opens_at, d.id`).bind(now - DROP_LINGER_MS, ids).all();
   const listed = new Set(products.map((p) => p.studio_id));
-  return { storefronts: fronts.filter((f) => listed.has(f.studio_id)).map(rowToStorefront), products: await productsWithVariants(DB, products), drops: drops.map(rowToDrop) };
+  return { storefronts: fronts.filter((f) => listed.has(f.studio_id)).map((f) => rowToStorefront(f, env)), products: await productsWithVariants(DB, products),
+           drops: await withPaidOrders(DB, drops.map(rowToDrop)) };
+}
+
+/** Paid orders of a drop count towards its run ("31 of 40"), on top of what the studio reports in the feed. */
+async function withPaidOrders(DB, drops) {
+  if (!drops.length) return drops;
+  const { results } = await DB.prepare(`SELECT drop_id, SUM(json_extract(value, '$.qty')) AS n FROM orders, json_each(orders.items)
+      WHERE status != 'refunded' AND drop_id IN (SELECT value FROM json_each(?)) GROUP BY drop_id`).bind(JSON.stringify(drops.map((d) => d.id))).all();
+  const paid = new Map(results.map((r) => [r.drop_id, r.n ?? 0]));
+  return drops.map((d) => ({ ...d, reserved: d.reserved + (paid.get(d.id) ?? 0) }));
 }
 
 /** Whether a member finished a challenge (shop.js `isFinisher`): their leaderboard entry, from the stored per-visit detail. */
@@ -1125,7 +1142,7 @@ async function unlockedDrops(DB, userId, today, now = Date.now()) {
   if (!drops.length) return { drops: [], products: [] };
   const { results: products } = await DB.prepare("SELECT * FROM products WHERE id IN (SELECT value FROM json_each(?)) ORDER BY studio_id, sort, id")
     .bind(JSON.stringify([...new Set(drops.map((d) => d.product_id))])).all();
-  return { drops: drops.map((r) => ({ ...rowToDrop(r), unlocked: true })), products: await productsWithVariants(DB, products) };
+  return { drops: await withPaidOrders(DB, drops.map((r) => ({ ...rowToDrop(r), unlocked: true }))), products: await productsWithVariants(DB, products) };
 }
 
 /**
@@ -1147,7 +1164,15 @@ export async function sendDropNotices(env, now) {
       const front = { sellerName: d.seller_name, pickupNote: d.pickup_note };
       const msg = kind === "opened" ? dropOpenMessage(rowToDrop(d), { priceOre: d.price_ore }, front) : readyMessage(d.title, front);
       const { results: who } = await DB.prepare("SELECT user_id FROM notify WHERE drop_id = ?").bind(d.id).all();
+      // Ready: the drop's paid pickup orders are at the desk too; each buyer hears once, with their pickup code.
+      const buyers = kind === "ready" ? (await DB.prepare(`SELECT * FROM orders WHERE drop_id = ? AND delivery = 'pickup' AND status IN ('paid', 'printing', 'shipped')`).bind(d.id).all()).results : [];
+      for (const o of buyers) {
+        await DB.prepare("UPDATE orders SET status = 'ready', updated_at = ?, ready_sent_at = ? WHERE id = ?").bind(new Date(now).toISOString(), now, o.id).run();
+        await tellOrder(env, rowToOrder(o), "ready", front);
+      }
+      const told = new Set(buyers.map((o) => o.user_id));
       for (const { user_id } of who) {
+        if (told.has(user_id)) continue;
         const u = await getUser(env, user_id);
         if (!u) continue;
         const [gone] = await Promise.all([push(env, u.devices, msg.title, msg.body, { dropId: d.id, productId: d.product_id }, SHOP_PUSH),
@@ -1156,6 +1181,169 @@ export async function sendDropNotices(env, now) {
       }
     }
   }
+}
+
+// MARK: Checkout (phase 4)
+
+const STRIPE_API = "https://api.stripe.com/v1";
+/** Where Stripe sends the member back: Menu › Orders in the web app, or the iPhone app's own link. */
+const ORDERS_URL = "https://djui.github.io/bruce/app/#/home/orders";
+const APP_ORDERS_URL = "bruece://orders";
+/** Order pushes: category SHOP_ORDER, payload {orderId} (opens Menu › Orders). */
+const ORDER_PUSH = "SHOP_ORDER";
+
+const rowToOrder = (r) => ({ id: r.id, userId: r.user_id, studioId: r.studio_id, dropId: r.drop_id ?? null, items: JSON.parse(r.items), totalOre: r.total_ore,
+  vatOre: r.vat_ore, delivery: r.delivery, status: r.status, statusText: orderStatusText(r.status, r.delivery), pickupCode: r.pickup_code ?? null,
+  stripeSession: r.stripe_session ?? null, createdAt: r.created_at, updatedAt: r.updated_at });
+
+/** Form-encodes a nested object the way Stripe's API wants it (`line_items[0][price_data][currency]=sek`). */
+export function stripeForm(obj, prefix = "", out = new URLSearchParams()) {
+  for (const [k, v] of Object.entries(obj)) {
+    if (v == null) continue;
+    const key = prefix ? `${prefix}[${k}]` : k;
+    if (typeof v === "object") stripeForm(v, key, out); else out.append(key, String(v));
+  }
+  return out;
+}
+
+/** One POST to Stripe on the studio's connected account (a direct charge: the studio is the merchant of record). */
+async function stripePost(env, account, path, form) {
+  const res = await fetch(`${STRIPE_API}${path}`, { method: "POST", body: form.toString(),
+    headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}`, "Stripe-Account": account, "content-type": "application/x-www-form-urlencoded" } });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error?.message ?? `HTTP ${res.status}`);
+  return body;
+}
+
+/** Tells the member about their order: a push (category SHOP_ORDER) and an email with a link to their orders. */
+async function tellOrder(env, order, status, front) {
+  const u = await getUser(env, order.userId);
+  if (!u) return;
+  const msg = status === "paid" ? orderConfirmedMessage(order, front) : orderUpdateMessage(order, status, front);
+  const [gone] = await Promise.all([push(env, u.devices, msg.title, msg.body, { orderId: order.id }, ORDER_PUSH),
+                                    email(env, u, msg.title, msg.body, null, { link: ORDERS_URL, linkText: "Open your orders" })]);
+  if (gone.length) { u.devices = u.devices.filter((x) => !gone.includes(x.token)); await saveUser(env, u); }
+}
+
+/**
+ * `POST /checkout` `{productId, variantId, qty, delivery, returnTo}`: a Stripe Checkout Session on the studio's connected
+ * account for one listing (and its drop, while the window is open), answered as `{url, sessionId, totalOre, vatOre}`;
+ * the app opens the URL in the browser (Apple's guideline 3.1.3(e): physical goods are not in-app purchases). Stripe's
+ * Dashboard decides the payment methods (Swish, Klarna, card, Apple Pay). Shipping, where the studio offers it, asks
+ * Stripe for the address: nothing of it reaches this server. 503 without a Stripe key, 409 for a studio without a
+ * connected account (the apps then keep the link-out).
+ */
+export async function checkoutRoute(request, env) {
+  if (!env.STRIPE_SECRET_KEY) return json({ error: "checkout is not set up on this server" }, 503);
+  const auth = await authenticate(request, env);
+  if (!auth) return json({ error: "unauthorized" }, 401);
+  const DB = await db(env);
+  const body = await request.json().catch(() => ({}));
+  const productId = typeof body.productId === "string" && /^[a-z0-9]+(-[a-z0-9]+)*$/.test(body.productId) && body.productId.length <= 80 ? body.productId : null;
+  if (!productId) return json({ error: "productId is required" }, 400);
+  const p = await DB.prepare("SELECT * FROM products WHERE id = ? AND active = 1").bind(productId).first();
+  if (!p) return json({ error: "listing not found" }, 404);
+  const front = await DB.prepare("SELECT * FROM storefronts WHERE studio_id = ?").bind(p.studio_id).first();
+  if (!checkoutOn(env, front)) return json({ error: "this studio has no checkout yet: ask at the desk or use its webshop" }, 409);
+  const [product] = await productsWithVariants(DB, [p]);
+  const dropRow = await DB.prepare("SELECT * FROM drops WHERE product_id = ?").bind(p.id).first();
+  const drop = dropRow ? rowToDrop(dropRow) : null;
+  if (drop?.challengeId && !(await finishedChallenge(DB, drop.challengeId, auth.userId, localDay(Date.now())))) return json({ error: "this drop is for the challenge's finishers" }, 403);
+  const c = cleanCheckout(body, { storefront: rowToStorefront(front, env), product, drop });
+  if (c.error) return json({ error: c.error }, 400);
+  const t = orderTotals(c);
+  const back = body.returnTo === "app" ? APP_ORDERS_URL : ORDERS_URL;
+  const form = stripeForm({
+    mode: "payment",
+    line_items: [{ quantity: c.qty, price_data: { currency: "sek", unit_amount: product.priceOre, product_data: { name: product.title + (c.variant ? ` · ${c.variant.label}` : "") } } },
+                 ...(t.shippingOre ? [{ quantity: 1, price_data: { currency: "sek", unit_amount: t.shippingOre, product_data: { name: "Shipping" } } }] : [])],
+    success_url: `${back}?paid={CHECKOUT_SESSION_ID}`,
+    cancel_url: back,
+    client_reference_id: String(auth.userId),
+    customer_email: auth.email ?? undefined,
+    shipping_address_collection: c.delivery === "ship" ? { allowed_countries: ["SE"] } : undefined,
+    metadata: { userId: auth.userId, productId: product.id, variantId: c.variant?.id ?? "", qty: c.qty, delivery: c.delivery, dropId: drop?.id ?? "", studioId: p.studio_id },
+  });
+  let session;
+  try { session = await stripePost(env, front.stripe_account, "/checkout/sessions", form); } catch (e) { return json({ error: `Stripe: ${e.message}` }, 502); }
+  await rememberLogin(env, auth);   // the order's push and email need the row
+  return json({ url: session.url, sessionId: session.id, totalOre: t.totalOre, vatOre: t.vatOre });
+}
+
+/**
+ * `POST /hooks/stripe`: Stripe's webhook, checked with HMAC-SHA256 against STRIPE_WEBHOOK_SECRET (`Stripe-Signature`,
+ * five minutes of tolerance). `checkout.session.completed` with a paid session writes the order once (the session id is
+ * unique), with a pickup code for a pickup, and tells the member. Other events are acknowledged and ignored.
+ */
+export async function stripeHookRoute(request, env) {
+  if (!env.STRIPE_WEBHOOK_SECRET) return json({ error: "no webhook secret configured" }, 503);
+  const raw = await request.text();
+  if (!(await verifyStripeSignature(request.headers.get("stripe-signature"), raw, env.STRIPE_WEBHOOK_SECRET))) return json({ error: "bad signature" }, 400);
+  let event;
+  try { event = JSON.parse(raw); } catch { return json({ error: "not JSON" }, 400); }
+  if (event?.type !== "checkout.session.completed") return json({ received: true, ignored: event?.type ?? "unknown" });
+  const s = event.data?.object ?? {};
+  if (s.payment_status !== "paid" || typeof s.id !== "string") return json({ received: true, ignored: "not paid" });
+  const m = s.metadata ?? {};
+  const userId = parseInt(m.userId ?? s.client_reference_id ?? "", 10);
+  const qty = Math.max(1, parseInt(m.qty ?? "1", 10) || 1);
+  const delivery = m.delivery === "ship" ? "ship" : "pickup";
+  if (!userId || typeof m.productId !== "string") return json({ received: true, ignored: "no member or listing" });
+  const DB = await db(env);
+  const p = await DB.prepare("SELECT * FROM products WHERE id = ?").bind(m.productId).first();
+  const studioId = p?.studio_id ?? parseInt(m.studioId ?? "0", 10);
+  const front = await DB.prepare("SELECT * FROM storefronts WHERE studio_id = ?").bind(studioId).first();
+  const variant = m.variantId ? await DB.prepare("SELECT * FROM variants WHERE id = ?").bind(variantKey(m.productId, m.variantId)).first() : null;
+  const totalOre = Number.isInteger(s.amount_total) ? s.amount_total : (p?.price_ore ?? 0) * qty;
+  const order = { id: newId(), userId, studioId, dropId: m.dropId || null, delivery, status: "paid", stripeSession: s.id, stripeAccount: event.account ?? null,
+    items: [{ productId: m.productId, variantId: m.variantId || null, title: p?.title ?? m.productId, label: variant?.label ?? null, qty, unitOre: p?.price_ore ?? Math.round(totalOre / qty) }],
+    totalOre, vatOre: vatPart(totalOre, p?.vat_rate ?? 25), pickupCode: delivery === "pickup" ? pickupCode() : null };
+  const at = new Date().toISOString();
+  const inserted = await DB.prepare(`INSERT INTO orders (id, user_id, studio_id, drop_id, items, total_ore, vat_ore, delivery, status, stripe_session, stripe_account, pickup_code, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'paid', ?, ?, ?, ?, ?) ON CONFLICT(stripe_session) DO NOTHING RETURNING id`)
+    .bind(order.id, userId, studioId, order.dropId, JSON.stringify(order.items), totalOre, order.vatOre, delivery, s.id, order.stripeAccount, order.pickupCode, at, at).first();
+  if (!inserted) return json({ received: true, duplicate: true });
+  await tellOrder(env, order, "paid", { sellerName: front?.seller_name ?? "the studio", pickupNote: front?.pickup_note ?? null });
+  return json({ received: true, orderId: order.id });
+}
+
+/**
+ * `POST /hooks/pod` with `X-Pod-Secret: <POD_WEBHOOK_SECRET>`: the print partner's events, `{orderId | podOrder, status:
+ * printing|shipped|delivered, podOrder}`. A pickup order that was delivered (to the studio) is ready at the desk; the
+ * member hears about shipped, delivered and ready.
+ */
+export async function podHookRoute(request, env) {
+  if (!env.POD_WEBHOOK_SECRET) return json({ error: "no print partner secret configured" }, 503);
+  if ((request.headers.get("x-pod-secret") ?? "") !== env.POD_WEBHOOK_SECRET) return json({ error: "unauthorized" }, 401);
+  const body = await request.json().catch(() => null);
+  const status = ["printing", "shipped", "delivered"].includes(body?.status) ? body.status : null;
+  const podOrder = typeof body?.podOrder === "string" && body.podOrder.trim() ? body.podOrder.trim().slice(0, 80) : null;
+  if (!status || (typeof body.orderId !== "string" && !podOrder)) return json({ error: "orderId or podOrder, and status (printing, shipped or delivered) are required" }, 400);
+  const DB = await db(env);
+  const row = typeof body.orderId === "string" ? await DB.prepare("SELECT * FROM orders WHERE id = ?").bind(body.orderId).first()
+    : await DB.prepare("SELECT * FROM orders WHERE pod_order = ?").bind(podOrder).first();
+  if (!row) return json({ error: "order not found" }, 404);
+  if (["ready", "delivered", "collected", "refunded"].includes(row.status) && status !== "delivered") return json({ ok: true, status: row.status, unchanged: true });
+  const next = status === "delivered" ? (row.delivery === "pickup" ? "ready" : "delivered") : status;
+  if (next === row.status) return json({ ok: true, status: next, unchanged: true });
+  const now = Date.now();
+  await DB.prepare("UPDATE orders SET status = ?, pod_order = COALESCE(?, pod_order), updated_at = ?, ready_sent_at = CASE WHEN ? IN ('ready', 'delivered') THEN ? ELSE ready_sent_at END WHERE id = ?")
+    .bind(next, podOrder, new Date(now).toISOString(), next, now, row.id).run();
+  if (next !== "printing") {
+    const front = await DB.prepare("SELECT * FROM storefronts WHERE studio_id = ?").bind(row.studio_id).first();
+    await tellOrder(env, rowToOrder(row), next, { sellerName: front?.seller_name ?? "the studio", pickupNote: front?.pickup_note ?? null });
+  }
+  return json({ ok: true, status: next });
+}
+
+/** `GET /me/orders`: the member's orders, newest first, with the seller's name. */
+export async function ordersRoute(request, env) {
+  const auth = await authenticate(request, env);
+  if (!auth) return json({ error: "unauthorized" }, 401);
+  const DB = await db(env);
+  const { results } = await DB.prepare(`SELECT o.*, s.seller_name, s.pickup_note FROM orders o LEFT JOIN storefronts s ON s.studio_id = o.studio_id
+      WHERE o.user_id = ? ORDER BY o.created_at DESC LIMIT 100`).bind(auth.userId).all();
+  return json({ orders: results.map((r) => ({ ...rowToOrder(r), userId: undefined, sellerName: r.seller_name ?? null, pickupNote: r.pickup_note ?? null })) });
 }
 
 /**
@@ -1172,11 +1360,11 @@ export async function shopRoute(request, env, path) {
   if (request.method === "GET" && path === "/shop") {
     const city = (new URL(request.url).searchParams.get("city") ?? "").toUpperCase();
     if (!/^[A-Z]{2,5}$/.test(city)) return json({ error: "city (a Bruce city code) is required" }, 400);
-    return cached({ city, ...(await catalogue(DB, { city })) });
+    return cached({ city, ...(await catalogue(DB, { city }, Date.now(), env)) });
   }
   const studio = path.match(/^\/shop\/studio\/(\d{1,9})$/);
   if (request.method === "GET" && studio) {
-    const c = await catalogue(DB, { studioId: +studio[1] });
+    const c = await catalogue(DB, { studioId: +studio[1] }, Date.now(), env);
     return cached({ studioId: +studio[1], storefront: c.storefronts[0] ?? null, products: c.products, drops: c.drops });
   }
   if (request.method === "POST" && path === "/shop/tap") {
@@ -1212,10 +1400,10 @@ export async function shopRoute(request, env, path) {
   const at = new Date().toISOString();
   const stmts = [DB.prepare("DELETE FROM storefronts WHERE source = ? AND studio_id NOT IN (SELECT value FROM json_each(?))").bind(source, JSON.stringify(mine.map((f) => f.studioId)))];
   for (const f of mine) {
-    stmts.push(DB.prepare(`INSERT INTO storefronts (studio_id, seller_name, city, webshop_url, stripe_account, pickup_note, consent_at, source, updated_at)
-        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ON CONFLICT(studio_id) DO UPDATE SET seller_name = ?2, city = ?3, webshop_url = ?4, stripe_account = ?5,
-        pickup_note = ?6, consent_at = ?7, source = ?8, updated_at = ?9`)
-      .bind(f.studioId, f.sellerName, f.city, f.webshopUrl, f.stripeAccount, f.pickupNote, f.consentAt, source, at));
+    stmts.push(DB.prepare(`INSERT INTO storefronts (studio_id, seller_name, city, webshop_url, stripe_account, pickup_note, consent_at, source, updated_at, shipping_ore)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10) ON CONFLICT(studio_id) DO UPDATE SET seller_name = ?2, city = ?3, webshop_url = ?4, stripe_account = ?5,
+        pickup_note = ?6, consent_at = ?7, source = ?8, updated_at = ?9, shipping_ore = ?10`)
+      .bind(f.studioId, f.sellerName, f.city, f.webshopUrl, f.stripeAccount, f.pickupNote, f.consentAt, source, at, f.shippingOre));
     // Products, variants and drops the feed no longer has go; the rest is updated in place, so Notify me rows stay.
     stmts.push(DB.prepare("DELETE FROM products WHERE studio_id = ? AND id NOT IN (SELECT value FROM json_each(?))").bind(f.studioId, JSON.stringify(f.products.map((p) => p.id))));
     for (const p of f.products) {
@@ -1724,6 +1912,10 @@ export default {
     const race = path.match(/^\/me\/races\/([a-z0-9-]{1,100})$/);
     if (race && request.method === "DELETE") return racesRoute(request, env, race[1]);
     if (path === "/shop" || path.startsWith("/shop/")) return shopRoute(request, env, path);
+    if (route === "POST /checkout") return checkoutRoute(request, env);
+    if (route === "POST /hooks/stripe") return stripeHookRoute(request, env);
+    if (route === "POST /hooks/pod") return podHookRoute(request, env);
+    if (route === "GET /me/orders") return ordersRoute(request, env);
     const notify = path.match(/^\/me\/notify\/([a-z0-9]+(?:-[a-z0-9]+)*)$/);
     if (notify && notify[1].length <= 80 && (request.method === "PUT" || request.method === "DELETE")) return notifyRoute(request, env, notify[1]);
     if (route === "GET /me/shop") return notifyRoute(request, env, null);

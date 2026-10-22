@@ -245,6 +245,10 @@ extension AppModel {
         case "dropready":
             if let i = shop?.drops.firstIndex(where: { $0.id == "hornstull-race-day-2027" }) { shop?.drops[i].ready = true }
             push(.product("karnan-race-day-tee"))
+        // Phase 4: the towel's page with the delivery choice, the checkout sheet (mockup 5) and Menu › Orders.
+        case "buy": push(.product("angan-bastu-towel")); demoScrollBottom = true
+        case "shopcheckout": push(.product("angan-bastu-towel")); present(.shopCheckout("angan-bastu-towel"))
+        case "orders": present(.orders)
         case "classes": tab = .explore; demoExploreTab = 1
         case "classesfiltered": tab = .explore; demoExploreTab = 1; currentlyOpen = true
         case "detail": push(.classDetail(9001))

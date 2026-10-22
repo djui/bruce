@@ -10,7 +10,8 @@ import { goalsCardHTML, openGoals, openGoalEditor } from './goalsui.js';
 import { openWrapped } from './wrapped.js';
 import { cancelStrikes, cancelCost, POLICY, STRIKES_TO_BLOCK, BLOCK_DAYS, STRIKE_EXPIRY_DAYS, NO_SHOW_STRIKES } from './rules.js';
 import { templateOf, candidateDays, pick } from './bookagain.js';
-import { towelCardHTML } from './shopui.js';
+import { towelCardHTML, openOrders } from './shopui.js';
+import * as Sh from './shop.js';
 
 // ---------------------------------------------------------------- booking rules (book / cancel)
 
@@ -275,12 +276,14 @@ function relTime(iso) {
 
 const MENU = [
   ['person', 'Account', openAccount], ['chart', 'Statistics', openStatistics], ['receipt', 'Payments and receipts', openPayments],
+  // Orders (the studio shop, shop.js) only where a shop is listed or something was bought.
+  ['gift', 'Orders', () => openOrders(), () => !Sh.isEmpty(S.shop) || S.orders.length > 0],
   ['gift', 'Invite friends', openVouchers], ['spark', 'Your ' + new Date().getFullYear() + ' Wrapped', () => openWrapped()], ['gear', 'Settings', openSettings],
 ];
 export function openMenu() {
   const u = S.user;
   const s = sheet('', '<div class="menu-head">' + avatar(u || {}, 56) + '<div><h2>' + esc(fullName(u) || 'Member') + '</h2><p class="muted">' + (u ? 'Member #' + u.id : '') + (St.isDemo() ? ' · Demo' : '') + '</p></div></div>' +
-    '<div class="card menu">' + MENU.map(([ic, t], i) => '<button class="mrow" data-m="' + i + '">' + icon(ic) + '<span class="grow">' + esc(t) + '</span>' + icon('chevron') + '</button>').join('') + '</div>' +
+    '<div class="card menu">' + MENU.map(([ic, t, , when], i) => (when && !when() ? '' : '<button class="mrow" data-m="' + i + '">' + icon(ic) + '<span class="grow">' + esc(t) + '</span>' + icon('chevron') + '</button>')).join('') + '</div>' +
     '<div class="card menu"><a class="mrow" href="https://github.com/djui/bruce" target="_blank" rel="noopener">' + icon('info') + '<span class="grow">About Brüce</span>' + icon('chevron') + '</a>' +
     '<button class="mrow red" data-logout>' + icon('logout') + '<span class="grow">' + (St.isDemo() ? 'Leave demo' : 'Log out') + '</span></button></div>' +
     '<p class="muted small note">Unofficial and not affiliated with Bruce Studios AB. Tickets and memberships are only sold in the official app.</p>');

@@ -279,6 +279,8 @@ struct SheetScreen: View {
         case .racePlan(let key): RacePlanSheet(key: key)
         case .raceResult(let key): RaceResultEditor(key: key)
         case .newCrew(let key): NewCrewSheet(raceKey: key)
+        case .shopCheckout(let id): ShopCheckoutSheet(productId: id)
+        case .orders: OrdersView()
         }
     }
 }

@@ -290,6 +290,42 @@ own payment link or shop) while the window is open, and the studio reports what 
   (`src/shop.js` `isFinisher`, from the stored per-visit detail). The apps show it on the challenge page ("Unlocked",
   a size pick, Reserve) and lay it over the catalogue.
 
+### Checkout
+
+Phase 4 (`migrations/0009_shop_orders.sql`): a studio that connects a Stripe account sells through **Stripe Checkout on
+its own account** (Stripe Connect, a direct charge: the studio is the merchant of record, Stripe pays it, it issues the
+receipt). Brüce holds no money and no address: the order row keeps what was bought, the status, the Checkout Session id
+and a pickup code; a shipping address, where the studio ships, is typed into Stripe's page and goes to Stripe and the
+print partner only. Everything here stays dormant until `STRIPE_SECRET_KEY` is set and the studio's feed entry carries
+its `stripeAccount` (`acct_…`); until then the apps keep the phase 3 link-out (Ask at the desk, Webshop, Reserve).
+
+- `POST /checkout` `{"productId","variantId","qty","delivery":"pickup"|"ship","returnTo":"app"|"web"}` (Bruce login) creates
+  the Session with the listing as a line item (price in öre incl. VAT, a shipping line when the studio ships, `shipping_ore`
+  in the feed as `shippingOre`), the member's email for the receipt, `metadata` with the member and listing, and the
+  success URL back to Menu › Orders (`bruece://orders` for the iPhone app, the web app otherwise). Stripe's Dashboard
+  for the connected account decides the payment methods (Swish, Klarna, card, Apple Pay); the server sends none. The
+  app opens `url` in the browser (SFSafariViewController on the iPhone): Apple's guideline 3.1.3(e) keeps physical goods
+  out of in-app purchase. A drop tied to a challenge checks out only for its finishers; a drop only while its window is open.
+- `POST /hooks/stripe` is the webhook endpoint (`https://<worker>/hooks/stripe`, event `checkout.session.completed`,
+  "Listen to events on Connected accounts"). The `Stripe-Signature` header is checked with HMAC-SHA256 against
+  `STRIPE_WEBHOOK_SECRET` (Web Crypto, five minutes of tolerance against replays). A paid session writes the order once
+  (the session id is unique, so Stripe's retries change nothing), with a 5-character pickup code for a pickup (no 0/O or
+  1/I/L), and tells the member by push (category `SHOP_ORDER`, payload `{orderId}`) and email ("Order confirmed: Bastu
+  towel · Natural" / "449 kr paid to Ångan Bastu AB. Show code K7P2Q at the desk once it's ready; we'll tell you."). A
+  paid order of a drop counts towards its "31 of 40".
+- `POST /hooks/pod` with `X-Pod-Secret: <POD_WEBHOOK_SECRET>` and `{"orderId" | "podOrder", "status": "printing" |
+  "shipped" | "delivered", "podOrder"}` takes the print partner's events (or the operator's, by hand). "Delivered" of a
+  pickup order means it reached the studio: the order is **ready** and the member hears "Ready for pickup" with the
+  code; a shipped order's "shipped" and "delivered" are passed on. A drop marked `ready` in the feed moves its paid
+  pickup orders to ready too, each buyer told once with their code.
+- `GET /me/orders` lists the member's orders, newest first, with the status as the apps word it, the pickup code and
+  the seller. Orders stay when the member switches the server off or their login expires (they are the studio's record
+  of a sale); the notices then have no device or address to go to.
+
+Secrets, each with `npx wrangler secret put`: `STRIPE_SECRET_KEY` (the platform's secret key), `STRIPE_WEBHOOK_SECRET`
+(the endpoint's signing secret from the Stripe Dashboard), `POD_WEBHOOK_SECRET` (any shared secret agreed with the
+print partner). None is set yet.
+
 ## Users and what is stored
 
 There is no shared key. The app signs in with the user's own Bruce login (`X-Access-Token` and `X-User-Id`
@@ -306,7 +342,8 @@ A 401 from Bruce deletes the row too (and pushes "Auto-book paused"; the app sen
 Challenge, participant and history tables: see "Challenges with friends" above; the `nudges` table (one row per user:
 the last skipped habit told and its push) under "Skipped a habit"; `user_races` under "Race reminders" and "Friends
 going"; crews (`challenges.race_id`, `challenges.weekly`, `crew_updates`) under "Race crews"; the shop's `storefronts`,
-`products`, `variants`, `drops`, `notify` (user id and drop) and `taps` (no user id) under "Shop".
+`products`, `variants`, `drops`, `notify` (user id and drop) and `taps` (no user id) under "Shop", and `orders` (what was
+bought, the status, the Stripe session, a pickup code; never an address or a card) under "Checkout".
 
 ## Set up
 
@@ -319,7 +356,10 @@ npx wrangler secret put APNS_KEY_ID            # its Key ID
 npx wrangler secret put APNS_TEAM_ID           # Apple team id
 npx wrangler secret put RESEND_API_KEY         # optional: Resend API key, for booking emails
 npx wrangler secret put SHOP_FEED_TOKEN        # optional: lets the operator post the shop catalogue (POST /shop/import)
-npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges, user_races, crews, shop
+npx wrangler secret put STRIPE_SECRET_KEY      # optional: switches on the shop's checkout for studios with a connected account (see "Checkout")
+npx wrangler secret put STRIPE_WEBHOOK_SECRET  # with it: the signing secret of the /hooks/stripe endpoint
+npx wrangler secret put POD_WEBHOOK_SECRET     # optional: the print partner's shared secret for /hooks/pod
+npx wrangler d1 migrations apply bruce-autobook --remote   # challenges, participants, daily_counts, nudges, user_races, crews, shop, orders
 npx wrangler deploy
 ```
 
@@ -366,6 +406,10 @@ All requests need the user's Bruce login (CORS is open, the web app calls the se
 | `PUT /me/notify/<dropId>` | | Notify me on for a drop → `{ok, notify: true, push, email}`; 404 for an unknown drop. Stores the login; creates the user's row if needed |
 | `DELETE /me/notify/<dropId>` | | Notify me off → `{ok, notify: false}` |
 | `GET /me/shop` | | `{notify:[dropId], drops:[...], products:[...]}`: the drops the member asked to be told about, and the drops a finished challenge unlocked for them (`unlocked: true`) with those drops' products (see "Drops") |
+| `POST /checkout` | `{"productId","variantId","qty","delivery","returnTo"}` | A Stripe Checkout Session on the studio's account → `{url, sessionId, totalOre, vatOre}` (see "Checkout"); 503 without a Stripe key, 409 for a studio without a connected account, 400 for a missing size, a closed drop or shipping where there is none, 403 for a finishers' drop |
+| `POST /hooks/stripe` | Stripe's event, `Stripe-Signature` | `checkout.session.completed` → the order row and the member's notice → `{received, orderId}`; 400 for a bad signature, 503 without the secret. No login |
+| `POST /hooks/pod` | `{"orderId" \| "podOrder","status","podOrder"}` with `X-Pod-Secret` | Moves an order on (printing, shipped, delivered → ready for a pickup) → `{ok, status}`; 401 without the secret, 503 with none configured. No login |
+| `GET /me/orders` | | `{orders:[{id,studioId,dropId,items,totalOre,vatOre,delivery,status,statusText,pickupCode,sellerName,pickupNote,createdAt,updatedAt}]}`, newest first |
 | `POST /challenges` | `{"title","metric","target","category","categoryTitle","start","end","repeatMonthly","invite":[userId]}`, or a crew `{"title","raceId","weekly","end","invite"}` | Creates a challenge (`metric` `classes`, `visits`, `minutes` or `target`; days `YYYY-MM-DD`, at most 366) or a race crew (see "Race crews"; 409 when already in a crew for the race), invites friends by push → 201 `{challenge}` |
 | `GET /challenges` | | `{challenges:[…], usesBruce:[userId]}`: the caller's challenges and invites, and which friends use the server |
 | `GET /challenges/<id>` | | Participants: `{challenge, leaderboard:[{userId,name,status,rank,score,visits,classes,dropins,minutes,studios,topStudio,topClass,categories,together,lastVisit,done,daily,recent}], months:[{month,label,entries}], crew, updatedAt}` (`crew` for crews only); others: a preview `{challenge, joinable}` |

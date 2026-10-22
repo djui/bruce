@@ -2,11 +2,11 @@
 // (#/home/shop/all) with its chips, a product page (#/<tab>/product/<id>), the "Shop at the desk" rail on a studio page
 // and "Forgot your towel?" on the ticket. Everything shows only while the city's catalogue has something in it. The
 // studio sells: the buttons say "Ask at the desk" or open its webshop, and Notify me only reminds.
-import { $, esc, icon } from './util.js';
+import { $, esc, icon, fmt } from './util.js';
 import * as St from './store.js';
 import { S } from './store.js';
 import * as Sh from './shop.js';
-import { glassBtn, empty, loading, toast, chip, run } from './ui.js';
+import { glassBtn, empty, loading, toast, chip, run, sheet, pill } from './ui.js';
 
 const studioShort = (id) => St.studioName(id).split(' ')[0];
 export const shopRoute = (tab) => '#/' + (tab || 'home') + '/shop/all';
@@ -120,6 +120,7 @@ export function renderShop(el, ctx) {
  *  drop's window and Notify me when it is one, and "Ask at the desk" or the webshop. Opening it counts one anonymous tap. */
 export function renderProduct(el, id, ctx) {
   const close = glassBtn(ctx.wide ? 'close' : 'back', 'data-sact="back"', ctx.wide ? 'Close' : 'Back');
+  const state = { variantId: null, delivery: 'pickup' };
   const draw = () => {
     const c = S.shop;
     const p = Sh.product(c, id);
@@ -130,8 +131,15 @@ export function renderProduct(el, id, ctx) {
     const url = Sh.httpsUrl(p.linkUrl) || (front && Sh.httpsUrl(front.webshopUrl));
     const link = url && (p.fulfilment !== 'desk' || p.linkUrl);
     const now = Date.now(), dstate = d && Sh.dropState(d, now), reserve = d && Sh.reserveUrl(d, now), on = d && S.shopNotify.has(d.id);
+    // Phase 4: Buy where the studio is connected and the listing is open to buy (no drop, or a drop whose window is open).
+    const buy = Sh.canBuy(c, p) && (!d || dstate === 'open');
+    const draft = buy ? Sh.draft(c, p, state) : null;
+    const variants = p.variants.length ? '<p class="small muted">' + (p.kind === 'apparel' ? 'SIZES' : 'OPTIONS') + '</p><div class="chips wrap">' +
+      p.variants.map((v) => (buy && v.inStock ? '<button class="chip" data-variant="' + esc(v.id) + '" aria-pressed="' + (draft && draft.variant && draft.variant.id === v.id) + '">' + esc(v.label) + '</button>'
+        : '<span class="chip' + (v.inStock ? '' : ' off') + '">' + esc(v.label) + (v.inStock ? '' : ' · out') + '</span>')).join('') + '</div>' : '';
     // A drop's Reserve opens the studio's own checkout while the window is open; before it, Notify me; at the desk, "Ready for pickup".
-    const actions = d && dstate === 'open' ? (reserve ? '<a class="btn lime" href="' + esc(reserve) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' ' + esc('Reserve · ' + Sh.kr(p.priceOre)) + '</a><p class="muted small center">' + esc(Sh.RESERVE_HINT) + '</p>'
+    const actions = buy ? '<button class="btn lime" data-buy>' + icon('gift') + ' ' + esc('Buy · ' + Sh.kr(Sh.totals(draft).totalOre)) + '</button>'
+      : d && dstate === 'open' ? (reserve ? '<a class="btn lime" href="' + esc(reserve) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' ' + esc('Reserve · ' + Sh.kr(p.priceOre)) + '</a><p class="muted small center">' + esc(Sh.RESERVE_HINT) + '</p>'
         : '<span class="btn glass" aria-disabled="true">' + icon('person') + ' ' + esc(Sh.RESERVE_DESK) + '</span>')
       : d && dstate === 'ready' ? '<span class="btn lime" aria-disabled="true">' + icon('checkSeal') + ' ' + Sh.READY + '</span>'
       : d && dstate === 'upcoming' ? '<button class="btn ' + (on ? 'glass' : 'lime') + '" data-notify="' + esc(d.id) + '" aria-pressed="' + on + '">' + icon('bell') + (on ? ' Notify me is on' : ' Notify me') + '</button>'
@@ -141,19 +149,90 @@ export function renderProduct(el, id, ctx) {
       '<div class="pane-pad"><h1 class="product-title">' + esc(p.title) + '</h1>' +
       '<p class="muted small">' + esc([studio, p.description].filter(Boolean).join(' · ')) + '</p>' +
       '<p class="price-row"><b>' + esc(Sh.kr(p.priceOre)) + '</b><span class="muted small">incl. VAT</span></p>' +
-      (p.variants.length ? '<p class="small muted">' + (p.kind === 'apparel' ? 'SIZES' : 'OPTIONS') + '</p><div class="chips wrap">' + p.variants.map((v) => '<span class="chip' + (v.inStock ? '' : ' off') + '">' + esc(v.label) + (v.inStock ? '' : ' · out') + '</span>').join('') + '</div>' : '') +
+      variants +
       (d ? dropBlockHTML(d, studio) : '') +
-      '<a class="card row-card" href="' + ctx.link('studio', p.studioId) + '">' + icon('building') + '<div class="grow"><b>' + esc(studio) + '</b><p class="muted">' + esc(front ? Sh.soldBy(front.sellerName, p.fulfilment === 'desk') : 'Studio page') + '</p></div>' + icon('chevron') + '</a>' +
+      (buy ? deliveryHTML(front, studio, draft.delivery, 'data-delivery') : '') +
+      '<a class="card row-card" href="' + ctx.link('studio', p.studioId) + '">' + icon('building') + '<div class="grow"><b>' + esc(studio) + '</b><p class="muted">' + esc(front ? Sh.soldBy(front.sellerName, p.fulfilment === 'desk', front.checkout) : 'Studio page') + '</p></div>' + icon('chevron') + '</a>' +
       (front && front.pickupNote ? '<p class="muted small">' + icon('pin') + ' ' + esc(front.pickupNote) + '</p>' : '') +
       '<p class="muted small note">' + esc(Sh.NOT_AFFILIATED) + '</p>' +
       '<div class="actions sticky">' + actions + '</div></div>';
   };
   el.onclick = (e) => {
     if (e.target.closest('[data-sact="back"]')) { ctx.close(); return; }
+    const v = e.target.closest('[data-variant]');
+    if (v) { state.variantId = v.dataset.variant; draw(); return; }
+    const dl = e.target.closest('[data-delivery]');
+    if (dl) { state.delivery = dl.dataset.delivery; draw(); return; }
+    if (e.target.closest('[data-buy]')) { openCheckout(id, state); return; }
     shopClick(e, draw);
   };
   draw();
   St.loadShop().then(() => { draw(); St.tapProduct(id); });
+}
+
+/** "How do you want it?": pick up at the desk (free, the default) or shipped where the studio ships. */
+function deliveryHTML(front, studio, delivery, attr) {
+  const row = (key, ic, title, sub) => '<button class="delivery-row" ' + attr + '="' + key + '" aria-pressed="' + (delivery === key) + '">' + icon(ic) + '<span class="grow"><b>' + esc(title) + '</b><small class="muted">' + esc(sub) + '</small></span>' + (delivery === key ? icon('checkSeal', 'tick') : '<i class="ring"></i>') + '</button>';
+  return '<p class="small muted">' + esc(Sh.HOW_TITLE.toUpperCase()) + '</p><div class="stack delivery">' +
+    row('pickup', 'building', Sh.pickupAt(studio), front.pickupNote || Sh.PICKUP_FREE) +
+    (Sh.ships(front) ? row('ship', 'location', Sh.shipPrice(front), Sh.SHIP_NOTE) : '') + '</div>';
+}
+
+// ---------------------------------------------------------------- checkout and orders (phase 4)
+
+/** Mockup 5: what is being bought, how many, how it comes, the sums with the VAT, who sells it, and Pay, which sends the
+ *  browser to Stripe Checkout on the studio's account. Brüce never sees the card or an address. */
+export function openCheckout(productId, opts) {
+  const p = Sh.product(S.shop, productId);
+  const d = p && Sh.draft(S.shop, p, opts);
+  if (!d) { toast(Sh.NO_CHECKOUT); return; }
+  const studio = St.studioName(p.studioId);
+  const vicinity = (St.studio(p.studioId) || {}).vicinity;
+  const s = sheet('Checkout', '');
+  const draw = () => {
+    const t = Sh.totals(d), problem = Sh.draftProblem(d);
+    s.body.innerHTML = '<div class="checkout-item">' + art(p.kind, 'small') + '<div class="grow"><b>' + esc(p.title) + '</b><p class="muted small">' + esc([d.variant && d.variant.label, studio].filter(Boolean).join(' · ')) + '</p></div><b class="num">' + esc(Sh.krExact(p.priceOre)) + '</b></div>' +
+      '<div class="row-between qty"><b>Quantity</b><span class="stepper"><button data-q="-1" aria-label="Fewer"' + (d.qty <= 1 ? ' disabled' : '') + '>−</button><b>' + d.qty + '</b><button data-q="1" aria-label="More"' + (d.qty >= Sh.MAX_QTY ? ' disabled' : '') + '>+</button></span></div>' +
+      deliveryHTML(d.storefront, studio, d.delivery, 'data-cdelivery') +
+      '<div class="card sums"><span>' + esc(Sh.itemLine(p.title, d.variant && d.variant.label, d.qty)) + '</span><b>' + esc(Sh.krExact(t.subtotalOre)) + '</b>' +
+      (d.delivery === 'ship' ? '<span>Shipping</span><b>' + esc(Sh.krExact(t.shippingOre)) + '</b>' : '') +
+      '<span class="total">Total</span><b class="total">' + esc(Sh.krExact(t.totalOre)) + '</b>' +
+      '<span class="muted">' + esc(Sh.vatLine(p.vatRate == null ? 25 : p.vatRate)) + '</span><b class="muted">' + esc(Sh.krExact(t.vatOre)) + '</b></div>' +
+      '<p class="muted small">' + esc(Sh.sellerLine(d.storefront, vicinity)) + '</p>' +
+      (problem ? '<p class="small red center">' + esc(problem) + '</p>' : '') +
+      '<div class="stack"><button class="btn lime" data-pay' + (problem ? ' disabled' : '') + '>' + icon('lock') + ' ' + esc('Pay ' + Sh.krExact(t.totalOre)) + '</button>' +
+      '<p class="muted small center">' + esc(Sh.PAY_METHODS) + '</p><p class="muted small">' + icon('lock') + ' ' + esc(Sh.PAY_SAFETY) + '</p></div>';
+  };
+  s.body.addEventListener('click', (e) => {
+    const q = e.target.closest('[data-q]');
+    if (q) { d.qty = Math.min(Sh.MAX_QTY, Math.max(1, d.qty + +q.dataset.q)); draw(); return; }
+    const dl = e.target.closest('[data-cdelivery]');
+    if (dl) { d.delivery = dl.dataset.cdelivery; draw(); return; }
+    const pay = e.target.closest('[data-pay]');
+    if (pay) run(pay, async () => {
+      const url = await St.startCheckout(d);
+      if (!url) { toast(Sh.DEMO_CHECKOUT); return; }
+      location.assign(url);
+    });
+  });
+  draw();
+}
+
+/** Menu › Orders: what the member bought from studio shops, the status as the server words it, and the pickup code. */
+export function openOrders(paid) {
+  const s = sheet('Orders', loading());
+  const draw = () => {
+    const list = S.orders;
+    s.body.innerHTML = (!list.length ? (S.ordersLoaded ? empty('gift', Sh.ORDERS_EMPTY) : loading()) :
+      list.map((o) => '<div class="card order"><div class="order-top">' + icon(Sh.isReady(o) ? 'checkSeal' : o.status === 'shipped' ? 'location' : 'gift') + '<div class="grow"><b>' + esc(o.items.map((i) => Sh.itemLine(i.title, i.label, i.qty)).join(', ')) + '</b>' +
+        '<p class="muted small">' + esc([o.sellerName || St.studioName(o.studioId), fmt(o.createdAt, { day: 'numeric', month: 'short' })].filter(Boolean).join(' · ')) + '</p></div><b class="num">' + esc(Sh.kr(o.totalOre)) + '</b></div>' +
+        pill(Sh.orderLine(o), Sh.isReady(o) ? 'lime' : '') +
+        (o.pickupCode && !Sh.isDone(o) ? '<p class="small muted code-label">PICKUP CODE</p><b class="pickup-code" aria-label="Pickup code ' + esc(o.pickupCode.split('').join(' ')) + '">' + esc(o.pickupCode) + '</b>' + (o.pickupNote ? '<p class="muted small">' + esc(o.pickupNote) + '</p>' : '') : '') + '</div>').join('')) +
+      '<p class="muted small note">' + esc(Sh.ORDERS_NOTE) + '</p>';
+  };
+  draw();
+  St.loadOrders().then(draw);
+  if (paid) toast(Sh.PAID_OPEN);
 }
 
 /** The drop's window: "Pre-order until Sun 7 Feb · one print run", the countdown, "31 of 40" and Notify me; "Ready for
@@ -178,7 +257,7 @@ export function shopRailHTML(studioId, tab) {
   const url = Sh.httpsUrl(front.webshopUrl);
   return '<div class="card shop-rail"><div class="row-between"><h3 class="section-head">Shop at the desk</h3><span class="muted small">' + products.length + (products.length === 1 ? ' item' : ' items') + '</span></div>' +
     '<div class="hscroll shop-row">' + products.map((p) => tileHTML(p, productRoute(tab, p.id), true)).join('') + '</div>' +
-    '<div class="row-between seller"><span class="muted small">' + esc(Sh.soldBy(front.sellerName, products.some((p) => p.fulfilment === 'desk'))) + '</span>' +
+    '<div class="row-between seller"><span class="muted small">' + esc(Sh.soldBy(front.sellerName, products.some((p) => p.fulfilment === 'desk'), front.checkout)) + '</span>' +
     (url ? '<a class="btn glass sm" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer">' + icon('external') + ' Webshop</a>' : '<span class="chip">Ask at the desk</span>') + '</div></div>';
 }
 

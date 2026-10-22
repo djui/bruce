@@ -27,7 +27,8 @@ extension AppModel {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    /// bruece://checkin, bruece://visits, bruece://class/<id> (WidgetSnapshot.swift).
+    /// bruece://checkin, bruece://visits, bruece://class/<id> (WidgetSnapshot.swift); bruece://orders?paid=… is Stripe
+    /// Checkout's way back (Shop.swift).
     func open(widgetURL url: URL) {
         guard url.scheme == WidgetSnapshot.scheme else { return }
         let parts = [url.host].compactMap { $0 } + url.pathComponents.filter { $0 != "/" }
@@ -36,6 +37,9 @@ extension AppModel {
         case "visits": dismissSheets(); present(isLoggedIn ? .visits : .login)
         case "class": if parts.count > 1, let id = Int(parts[1]) { dismissSheets(); push(.classDetail(id)) }
         case "ticket": if parts.count > 1, let id = Int(parts[1]) { dismissSheets(); present(.ticket(id)) }
+        case "orders":
+            showOrders()
+            if url.query?.contains("paid=") == true { flash(Copy.shopPaidOpen) }
         default: break
         }
     }

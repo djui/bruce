@@ -93,24 +93,28 @@ struct NotificationIcon: View {
 
 struct MenuSheet: View {
     @Environment(AppModel.self) var m
-    let rows: [(String, String, SheetRoute?)] = [
-        ("person.crop.circle", "Account", .account),
-        ("gearshape", "Settings", .settings),
-        ("calendar.badge.clock", "Auto-book", .autoBook),
-        ("person.2", "Invite friends", .invite),
-        ("gift", "Redeem voucher", .voucher),
-        ("bubble.left.and.bubble.right", "Chat with support", .support),
-        ("questionmark.circle", "FAQ", .help),
-        ("camera", "Community", .info("Community")),
-        ("square.on.square", "Gift cards", .info("Gift cards")),
-    ]
+    /// Orders (the studio shop, Shop.swift) only where a shop is listed or something was bought.
+    var rows: [(String, String, SheetRoute?)] {
+        [
+            ("person.crop.circle", "Account", .account),
+            ("gearshape", "Settings", .settings),
+            ("calendar.badge.clock", "Auto-book", .autoBook),
+        ] + (m.showsShop || !m.orders.isEmpty ? [("bag", Copy.shopOrdersTitle, .orders)] : []) + [
+            ("person.2", "Invite friends", .invite),
+            ("gift", "Redeem voucher", .voucher),
+            ("bubble.left.and.bubble.right", "Chat with support", .support),
+            ("questionmark.circle", "FAQ", .help),
+            ("camera", "Community", .info("Community")),
+            ("square.on.square", "Gift cards", .info("Gift cards")),
+        ]
+    }
     var body: some View {
         VStack(spacing: 0) {
             Capsule().fill(Color(white: 0.85)).frame(width: 92, height: 8).padding(.top, 12).padding(.bottom, 18)
             ForEach(rows.indices, id: \.self) { i in
                 let r = rows[i]
                 Button {
-                    if r.1 == "Account" && !m.isLoggedIn { m.sheets = [.login] }
+                    if (r.1 == "Account" || r.1 == Copy.shopOrdersTitle) && !m.isLoggedIn { m.sheets = [.login] }
                     else if let s = r.2 { m.sheets = [s] }
                 } label: {
                     VStack(spacing: 0) {

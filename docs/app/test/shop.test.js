@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as Sh from '../js/shop.js';
-import { DEMO_SHOP, handleServer } from '../js/demo.js';
+import { DEMO_SHOP, DEMO_ORDERS, handleServer } from '../js/demo.js';
 
 const at = (s) => Date.parse(s);
 const drop = { id: 'race-day', studioId: 9840, productId: 'tee', title: 'Race Day tee', opensAt: at('2027-01-25T08:00:00Z'), closesAt: at('2027-02-07T22:00:00Z'), minQty: 25, maxQty: 40, reserved: 31, pickupFrom: '2027-02-20' };
@@ -165,4 +165,81 @@ test('the demo: the finished challenge unlocks the finisher tee, which stays out
   assert.deepEqual(done.leaderboard.map((r) => [r.name, r.score, r.done]), [['Friend Two', 23, true], ['Demo', 20, true], ['Friend One', 17, false]]);
   assert.equal(done.challenge.period.daysLeft, 0, 'over');
   for (const p of DEMO_FINISHER(now).products) assert.doesNotMatch(p.title, /br[uü]ce/i);
+});
+
+// ---------------------------------------------------------------- checkout (phase 4)
+
+const towel = { id: 'towel', studioId: 9850, title: 'Bastu towel', kind: 'towel', priceOre: 44900, vatRate: 25, fulfilment: 'desk', linkUrl: null,
+  variants: [{ id: 'natural', label: 'Natural', inStock: true }, { id: 'charcoal', label: 'Charcoal', inStock: false }] };
+const connected = { studioId: 9850, sellerName: 'Ångan Bastu AB', city: 'STO', pickupNote: 'At the desk', consentAt: '2026-11-09', checkout: true, shippingOre: 4900 };
+const cat = Sh.decode({ city: 'STO', storefronts: [connected, { studioId: 9840, sellerName: 'Kärnan Reformer AB', consentAt: '2026-11-12' }], products: [towel, Object.assign({}, towel, { id: 'socks', studioId: 9840, kind: 'socks' })], drops: [] });
+
+test('checkout: the draft, its sums, the VAT and what stops it', () => {
+  assert.equal(Sh.canBuy(cat, Sh.product(cat, 'towel')), true, 'the connected studio sells through Brüce');
+  assert.equal(Sh.canBuy(cat, Sh.product(cat, 'socks')), false, 'a phase 3 storefront (no checkout field) keeps the desk');
+  assert.equal(Sh.storefront(cat, 9840).checkout, false);
+  assert.equal(Sh.ships(Sh.storefront(cat, 9850)), true);
+  assert.equal(Sh.ships(Sh.storefront(cat, 9840)), false);
+  const d = Sh.draft(cat, Sh.product(cat, 'towel'));
+  assert.equal(d.variant.id, 'natural', 'the first in-stock variant is picked');
+  assert.equal(d.delivery, 'pickup', 'pickup is the default');
+  assert.equal(Sh.draft(cat, Sh.product(cat, 'towel'), { variantId: 'charcoal', delivery: 'ship' }).variant.id, 'natural', 'an out-of-stock pick falls back');
+  assert.equal(Sh.draft(cat, Sh.product(cat, 'towel'), { delivery: 'ship' }).delivery, 'ship');
+  assert.equal(Sh.draft(cat, Sh.product(cat, 'socks'), { delivery: 'ship' }).delivery, 'pickup', 'no shipping where the studio has none');
+  d.qty = 2;
+  assert.deepEqual(Sh.totals(d), { subtotalOre: 89800, shippingOre: 0, totalOre: 89800, vatOre: 17960 });
+  d.delivery = 'ship';
+  assert.deepEqual(Sh.totals(d), { subtotalOre: 89800, shippingOre: 4900, totalOre: 94700, vatOre: 18940 });
+  assert.equal(Sh.itemLine('Bastu towel', 'Natural', 2), 'Bastu towel · Natural × 2');
+  assert.equal(Sh.itemLine('Felt hat', null, 1), 'Felt hat');
+  assert.deepEqual(Sh.checkoutBody(d), { productId: 'towel', variantId: 'natural', qty: 2, delivery: 'ship', returnTo: 'web' });
+  assert.equal(Sh.draftProblem(d), null);
+  assert.equal(Sh.draftProblem(Object.assign({}, d, { qty: 6 })), '1 to 5 of each');
+  assert.equal(Sh.draftProblem(Object.assign({}, d, { variant: null })), Sh.PICK_VARIANT);
+  assert.equal(Sh.draftProblem(Object.assign({}, d, { variant: towel.variants[1] })), Sh.OUT_OF_STOCK);
+  assert.equal(Sh.draftProblem(Object.assign({}, d, { storefront: Object.assign({}, connected, { shippingOre: null }) })), Sh.NO_SHIPPING);
+  assert.equal(Sh.draftProblem(Object.assign({}, d, { storefront: Object.assign({}, connected, { checkout: false }) })), Sh.NO_CHECKOUT);
+  assert.equal(Sh.shipPrice(connected), 'Ship to me · 49 kr');
+  assert.equal(Sh.sellerLine(connected, 'Hornstull'), 'Seller: Ångan Bastu AB, Hornstull. Receipt and withdrawal form come by email from the studio.');
+  assert.equal(Sh.vatLine(25), 'incl. VAT 25%');
+});
+
+test('orders: the list as GET /me/orders sends it, the status words and the code', () => {
+  const list = Sh.decodeOrders({ orders: [
+    { id: 'old', studioId: 9850, totalOre: 100, status: 'collected', createdAt: '2026-10-01T10:00:00Z', items: [{ title: 'Hat' }], pickupCode: 'AAAAA' },
+    { id: 'o1', studioId: 9850, items: [{ productId: 'towel', variantId: 'natural', title: 'Bastu towel', label: 'Natural', qty: 1, unitOre: 44900 }], totalOre: 44900, vatOre: 8980, delivery: 'pickup', status: 'ready', statusText: 'Ready for pickup', pickupCode: 'K7P2Q', sellerName: 'Ångan Bastu AB', createdAt: '2026-11-20T10:00:00Z' },
+    { id: 'bad' },
+  ] });
+  assert.deepEqual(list.map((o) => o.id), ['o1', 'old'], 'newest first, a broken row skipped');
+  assert.equal(Sh.isReady(list[0]), true);
+  assert.equal(Sh.isDone(list[0]), false);
+  assert.equal(Sh.isDone(list[1]), true, 'a collected order shows no code');
+  assert.equal(Sh.orderLine(list[0]), 'Ready for pickup');
+  assert.equal(Sh.orderLine({ status: 'paid', delivery: 'pickup' }), 'Paid · being prepared for pickup');
+  assert.equal(Sh.orderLine({ status: 'paid', delivery: 'ship' }), 'Paid · being prepared');
+  assert.equal(Sh.orderLine({ status: 'shipped', delivery: 'ship' }), 'On its way');
+  assert.equal(Sh.orderLine({ status: 'shipped', delivery: 'pickup' }), 'On its way to the studio');
+  assert.equal(Sh.orderLine({ status: 'printing' }), 'Being printed');
+  assert.equal(list[1].items[0].qty, 1, 'defaults fill a thin row');
+});
+
+test('demo: the sauna is connected, its checkout answers, and the orders', () => {
+  const c = Sh.decode(DEMO_SHOP());
+  assert.equal(Sh.canBuy(c, Sh.product(c, 'angan-bastu-towel')), true);
+  assert.equal(Sh.canBuy(c, Sh.product(c, 'karnan-grip-socks')), false, 'the other studios keep the desk and the webshop');
+  assert.equal(Sh.storefront(c, 9850).shippingOre, 4900);
+  const ok = handleServer('POST', '/checkout', { productId: 'angan-bastu-towel', variantId: 'natural', qty: 2, delivery: 'ship', returnTo: 'web' });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.totalOre, 94700);
+  assert.equal(ok.body.vatOre, 18940);
+  assert.ok(ok.body.url.startsWith('https://checkout.stripe.com/'));
+  assert.equal(handleServer('POST', '/checkout', { productId: 'karnan-grip-socks', variantId: 's-m', qty: 1, delivery: 'pickup' }).status, 409, 'no checkout at a studio without a connected account');
+  assert.equal(handleServer('POST', '/checkout', { productId: 'angan-bastu-towel', qty: 1, delivery: 'pickup' }).status, 400, 'a size is needed');
+  assert.equal(handleServer('POST', '/checkout', { productId: 'angan-bastu-towel', variantId: 'natural', qty: 9, delivery: 'pickup' }).status, 400);
+  assert.equal(handleServer('POST', '/checkout', { productId: 'nope', qty: 1, delivery: 'pickup' }).status, 404);
+  const orders = Sh.decodeOrders(handleServer('GET', '/me/orders').body);
+  assert.deepEqual(orders.map((o) => o.status), ['ready', 'printing']);
+  assert.equal(orders[0].pickupCode, 'K7P2Q');
+  assert.equal(DEMO_ORDERS().length, 2);
+  for (const o of DEMO_ORDERS()) assert.ok(!/br[uü]ce/i.test(JSON.stringify(o.items)), 'no product carries a Bruce or Brüce mark');
 });

@@ -180,4 +180,89 @@ extension ShopTests {
         XCTAssertTrue(Copy.shopFinisherBody(done, studio: "Kärnan Reformer", drop: d).hasPrefix("Only for people who hit 20. One print run, picked up at Kärnan Reformer. Pre-order until "))
         XCTAssertEqual(PushTarget(userInfo: ["dropId": "x", "productId": "karnan-finisher-tee"]), .product("karnan-finisher-tee"))
     }
+
+    // MARK: Checkout (phase 4)
+
+    var towel: Product {
+        Product(id: "towel", studioId: 9850, title: "Bastu towel", kind: .towel, priceOre: 44900, fulfilment: .desk,
+                variants: [ProductVariant(id: "natural", label: "Natural"), ProductVariant(id: "charcoal", label: "Charcoal", inStock: false)])
+    }
+    var connected: Storefront {
+        Storefront(studioId: 9850, sellerName: "Ångan Bastu AB", city: "STO", pickupNote: "At the desk", consentAt: "2026-11-09", checkout: true, shippingOre: 4900)
+    }
+
+    func testCheckoutDraftSumsAndProblems() {
+        var d = CheckoutDraft(product: towel, storefront: connected, variant: towel.variants[0], qty: 2, delivery: .pickup)
+        XCTAssertEqual(d.subtotalOre, 89800)
+        XCTAssertEqual(d.shippingOre, 0)
+        XCTAssertEqual(d.totalOre, 89800)
+        XCTAssertEqual(d.vatOre, 17960, "the VAT inside 898 kr at 25%")
+        XCTAssertEqual(d.itemLine, "Bastu towel · Natural × 2")
+        XCTAssertNil(d.problem)
+        d.delivery = .ship
+        XCTAssertEqual(d.shippingOre, 4900)
+        XCTAssertEqual(d.totalOre, 94700)
+        XCTAssertEqual(d.vatOre, 18940)
+        XCTAssertEqual(d.body["delivery"] as? String, "ship")
+        XCTAssertEqual(d.body["variantId"] as? String, "natural")
+        XCTAssertEqual(d.body["qty"] as? Int, 2)
+        XCTAssertEqual(d.body["returnTo"] as? String, "app")
+        // What stops it before Stripe.
+        var pickupOnly = connected; pickupOnly.shippingOre = nil
+        XCTAssertFalse(pickupOnly.ships)
+        XCTAssertEqual(CheckoutDraft(product: towel, storefront: pickupOnly, variant: towel.variants[0], qty: 1, delivery: .ship).problem, Copy.shopNoShipping)
+        XCTAssertEqual(CheckoutDraft(product: towel, storefront: connected, variant: nil, qty: 1).problem, Copy.shopPickVariant)
+        XCTAssertEqual(CheckoutDraft(product: towel, storefront: connected, variant: towel.variants[1], qty: 1).problem, Copy.shopOutOfStock)
+        XCTAssertEqual(CheckoutDraft(product: towel, storefront: connected, variant: towel.variants[0], qty: 6).problem, "1 to 5 of each")
+        var off = connected; off.checkout = false
+        XCTAssertEqual(CheckoutDraft(product: towel, storefront: off, variant: towel.variants[0]).problem, Copy.shopNoCheckout)
+        XCTAssertEqual(Copy.shopBuy(ShopMoney.kr(d.totalOre)), "Buy · 947 kr")
+        XCTAssertEqual(Copy.shopPay(ShopMoney.exact(d.totalOre)), "Pay 947,00 kr")
+        XCTAssertEqual(Copy.shopShipPrice(connected), "Ship to me · 49 kr")
+        XCTAssertEqual(Copy.shopVatLine(25), "incl. VAT 25%")
+    }
+
+    func testStorefrontAndOrderDecode() throws {
+        // A storefront from phase 3's server has no checkout fields: Buy stays off.
+        let old = try JSONDecoder().decode(Storefront.self, from: Data(#"{"studioId":9850,"sellerName":"Ångan Bastu AB","consentAt":"2026-11-09"}"#.utf8))
+        XCTAssertFalse(old.checkout)
+        XCTAssertFalse(old.ships)
+        let new = try JSONDecoder().decode(Storefront.self, from: Data(#"{"studioId":9850,"sellerName":"Ångan Bastu AB","consentAt":"2026-11-09","checkout":true,"shippingOre":4900}"#.utf8))
+        XCTAssertTrue(new.checkout)
+        XCTAssertEqual(new.shippingOre, 4900)
+        // An order as GET /me/orders lists it.
+        let json = #"{"orders":[{"id":"o1","studioId":9850,"items":[{"productId":"towel","variantId":"natural","title":"Bastu towel","label":"Natural","qty":1,"unitOre":44900}],"totalOre":44900,"vatOre":8980,"delivery":"pickup","status":"ready","statusText":"Ready for pickup","pickupCode":"K7P2Q","sellerName":"Ångan Bastu AB","createdAt":"2026-11-20T10:00:00Z","updatedAt":"2026-11-22T08:00:00Z"},{"id":"bad"}]}"#
+        let orders = try JSONDecoder().decode(ShopServer.Orders.self, from: Data(json.utf8)).orders
+        XCTAssertEqual(orders.count, 1, "a broken row is skipped, not the list")
+        let o = orders[0]
+        XCTAssertTrue(o.isReady)
+        XCTAssertFalse(o.isDone)
+        XCTAssertEqual(o.statusLine, "Ready for pickup")
+        XCTAssertEqual(o.items[0].line, "Bastu towel · Natural")
+        XCTAssertEqual(o.symbol, "checkmark.seal.fill")
+        XCTAssertEqual(Order.statusText("paid", delivery: .pickup), "Paid · being prepared for pickup")
+        XCTAssertEqual(Order.statusText("shipped", delivery: .ship), "On its way")
+        XCTAssertEqual(Order.statusText("delivered", delivery: .ship), "Delivered")
+        XCTAssertEqual(PushTarget(userInfo: ["orderId": "o1"]), .orders)
+    }
+
+    @MainActor func testDemoCheckoutAndOrders() async {
+        AppModel.demo = true
+        let m = AppModel()
+        m.loadDemo()
+        let towel = try! XCTUnwrap(m.shopProduct("angan-bastu-towel"))
+        XCTAssertTrue(m.canBuy(towel), "the demo's sauna is connected")
+        XCTAssertFalse(m.canBuy(try! XCTUnwrap(m.shopProduct("karnan-grip-socks"))), "the others keep the desk and the webshop")
+        let draft = try! XCTUnwrap(m.checkoutDraft(for: towel))
+        XCTAssertEqual(draft.variant?.id, "natural")
+        XCTAssertEqual(draft.delivery, .pickup, "pickup is the default")
+        XCTAssertTrue(draft.storefront.ships)
+        XCTAssertNil(draft.problem)
+        let opened = await m.startCheckout(draft)
+        XCTAssertNil(opened, "the demo opens nothing")
+        await m.loadOrders()
+        XCTAssertEqual(m.orders.map(\.status), ["ready", "printing"])
+        XCTAssertEqual(m.orders[0].pickupCode, "K7P2Q")
+        XCTAssertEqual(m.orders[1].statusLine, "Being printed")
+    }
 }

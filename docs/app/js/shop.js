@@ -19,7 +19,7 @@ export function httpsUrl(s) {
 /** The catalogue as the apps need it, skipping entries they can't read (a new kind, say) instead of failing the answer. */
 export function decode(json) {
   const fronts = ((json && json.storefronts) || []).filter((s) => s && Number.isInteger(s.studioId) && typeof s.sellerName === 'string' && typeof s.consentAt === 'string')
-    .map((s) => Object.assign({ city: '', webshopUrl: null, pickupNote: null }, s));
+    .map((s) => Object.assign({ city: '', webshopUrl: null, pickupNote: null, checkout: false, shippingOre: null }, s, { checkout: s.checkout === true, shippingOre: Number.isInteger(s.shippingOre) && s.shippingOre >= 0 ? s.shippingOre : null }));
   const ids = new Set(fronts.map((s) => s.studioId));
   const products = ((json && json.products) || []).filter((p) => p && typeof p.id === 'string' && ids.has(p.studioId) && typeof p.title === 'string'
     && KINDS.some((k) => k[0] === p.kind) && Number.isInteger(p.priceOre) && p.priceOre >= 0 && FULFILMENTS.includes(p.fulfilment))
@@ -121,9 +121,89 @@ export function krExact(ore) {
 export const vatPart = (ore, rate) => Math.round(ore - ore / (1 + rate / 100));
 
 /** "Sold by Ångan Bastu AB. Pay at the desk." / "Sold by Yogaloft Södermalm AB." */
-export const soldBy = (seller, desk) => (desk ? 'Sold by ' + seller + '. Pay at the desk.' : 'Sold by ' + seller + '.');
+export const soldBy = (seller, desk, checkout) => (checkout ? 'Sold by ' + seller + '. Pay here or at the desk.' : desk ? 'Sold by ' + seller + '. Pay at the desk.' : 'Sold by ' + seller + '.');
 /** Under "Forgot your towel?". */
 export const towelBody = (towel) => 'Rent one at the desk, or take a ' + towel.title.toLowerCase() + ' home for ' + kr(towel.priceOre) + '.';
 export const NOT_AFFILIATED = "The studio is the seller: prices, stock and returns are theirs. Brüce lists what the studio approved and reminds you; it never holds money or your address.";
 export const CATALOG_FOOTER = 'Products are listed with each studio\'s written approval, in kronor incl. 25% VAT. Pickup at the desk comes first; Brüce never holds money or addresses.';
 export const NOTIFY_HINT = 'A push to the Brüce iPhone app and an email from our server when the pre-order opens. Nothing is reserved for you.';
+
+// ---------------------------------------------------------------- checkout (phase 4)
+
+/** Buy is offered only where the server has a Stripe key and the studio a connected account (`storefront.checkout`). */
+export const canBuy = (c, p) => { const f = p && storefront(c, p.studioId); return !!(f && f.checkout); };
+export const ships = (front) => !!front && front.shippingOre != null;
+export const MAX_QTY = 5;
+export const DELIVERIES = ['pickup', 'ship'];
+
+/** The sums of a draft {product, storefront, variant, qty, delivery}: prices incl. VAT, shipping where the studio ships. */
+export function totals(d) {
+  const subtotalOre = d.product.priceOre * d.qty;
+  const shippingOre = d.delivery === 'ship' ? d.storefront.shippingOre || 0 : 0;
+  const totalOre = subtotalOre + shippingOre;
+  return { subtotalOre, shippingOre, totalOre, vatOre: vatPart(totalOre, d.product.vatRate == null ? 25 : d.product.vatRate) };
+}
+/** "Bastu towel · Natural × 2". */
+export const itemLine = (title, label, qty) => title + (label ? ' · ' + label : '') + (qty > 1 ? ' × ' + qty : '');
+/** Why a draft can't go to Stripe yet; null when it can. */
+export function draftProblem(d) {
+  if (!d.storefront || !d.storefront.checkout) return NO_CHECKOUT;
+  if (d.product.variants.length && !d.variant) return PICK_VARIANT;
+  if (d.variant && !d.variant.inStock) return OUT_OF_STOCK;
+  if (d.delivery === 'ship' && !ships(d.storefront)) return NO_SHIPPING;
+  if (!(d.qty >= 1 && d.qty <= MAX_QTY)) return '1 to ' + MAX_QTY + ' of each';
+  return null;
+}
+/** The first in-stock variant picked, pickup by default (what the checkout sheet starts with). */
+export function draft(c, p, opts) {
+  const front = storefront(c, p.studioId);
+  if (!front) return null;
+  const o = opts || {};
+  const variant = p.variants.find((v) => v.id === o.variantId && v.inStock) || p.variants.find((v) => v.inStock) || null;
+  return { product: p, storefront: front, variant, qty: 1, delivery: ships(front) && o.delivery === 'ship' ? 'ship' : 'pickup' };
+}
+/** What POST /checkout takes. */
+export const checkoutBody = (d) => Object.assign({ productId: d.product.id, qty: d.qty, delivery: d.delivery, returnTo: 'web' }, d.variant ? { variantId: d.variant.id } : {});
+
+/** An order's status as the apps word it (the server sends `statusText` too; this is the fallback). */
+export function orderStatusText(status, delivery) {
+  switch (status) {
+    case 'paid': return delivery === 'ship' ? 'Paid · being prepared' : 'Paid · being prepared for pickup';
+    case 'printing': return 'Being printed';
+    case 'shipped': return delivery === 'ship' ? 'On its way' : 'On its way to the studio';
+    case 'ready': return 'Ready for pickup';
+    case 'delivered': return 'Delivered';
+    case 'collected': return 'Collected';
+    case 'refunded': return 'Refunded';
+    default: return status;
+  }
+}
+export const orderLine = (o) => o.statusText || orderStatusText(o.status, o.delivery);
+export const isReady = (o) => o.status === 'ready';
+export const isDone = (o) => ['collected', 'delivered', 'refunded'].includes(o.status);
+/** GET /me/orders as the sheet needs it: broken rows skipped, newest first. */
+export function decodeOrders(json) {
+  return ((json && json.orders) || []).filter((o) => o && typeof o.id === 'string' && Number.isInteger(o.totalOre) && typeof o.status === 'string' && typeof o.createdAt === 'string')
+    .map((o) => Object.assign({ items: [], vatOre: 0, delivery: 'pickup', pickupCode: null, sellerName: null, pickupNote: null, statusText: null, dropId: null }, o,
+      { items: (Array.isArray(o.items) ? o.items : []).filter((i) => i && typeof i.title === 'string').map((i) => Object.assign({ label: null, qty: 1, unitOre: 0 }, i)) }))
+    .sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
+}
+
+export const HOW_TITLE = 'How do you want it?';
+export const PICKUP_FREE = 'Free · at the desk';
+export const pickupAt = (studio) => 'Pick up at ' + studio;
+export const shipPrice = (front) => 'Ship to me · ' + kr(front.shippingOre || 0);
+export const SHIP_NOTE = '2–4 days · the address goes to Stripe';
+export const PAY_METHODS = 'Apple Pay, Swish, Klarna or card, as the studio set up';
+export const PAY_SAFETY = "Payment by Stripe on the studio's account. Brüce never sees your card or address. Menu › Orders shows your pickup code.";
+export const RETURN_NOTE = 'Receipt and withdrawal form come by email from the studio.';
+export const sellerLine = (front, vicinity) => 'Seller: ' + front.sellerName + (vicinity ? ', ' + vicinity : '') + '. ' + RETURN_NOTE;
+export const vatLine = (rate) => 'incl. VAT ' + rate + '%';
+export const NO_CHECKOUT = 'This studio has no checkout in Brüce yet: ask at the desk or use its webshop.';
+export const PICK_VARIANT = 'Pick a size or option first.';
+export const OUT_OF_STOCK = 'That option is out of stock.';
+export const NO_SHIPPING = 'This studio does not ship: pick it up at the desk.';
+export const ORDERS_EMPTY = "Nothing bought yet. What you buy from a studio's shop shows up here with its pickup code.";
+export const ORDERS_NOTE = 'The studio is the seller and sends the receipt. Brüce keeps what you bought, the status and your pickup code; never a card or an address.';
+export const PAID_OPEN = 'Back from Stripe. Your order shows here once Stripe confirms the payment, usually within a minute.';
+export const DEMO_CHECKOUT = 'Demo: Stripe Checkout would open now (offline, nothing sent)';

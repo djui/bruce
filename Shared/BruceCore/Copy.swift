@@ -189,7 +189,9 @@ enum Copy {
     static let shopCatalogFooter = "Products are listed with each studio's written approval, in kronor incl. 25% VAT. Pickup at the desk comes first; Brüce never holds money or addresses."
     static let shopEmptyKind = "Nothing in this group right now."
     /// "Sold by Ångan Bastu AB. Pay at the desk." / "Sold by Yogaloft Södermalm AB."
-    static func shopSoldBy(_ seller: String, desk: Bool) -> String { desk ? "Sold by \(seller). Pay at the desk." : "Sold by \(seller)." }
+    static func shopSoldBy(_ seller: String, desk: Bool, checkout: Bool = false) -> String {
+        checkout ? "Sold by \(seller). Pay here or at the desk." : desk ? "Sold by \(seller). Pay at the desk." : "Sold by \(seller)."
+    }
     /// "Pick up at Kärnan Reformer".
     static func shopPickup(_ studio: String) -> String { "Pick up at \(studio)" }
     /// Under "Forgot your towel?": "Rent one at the desk, or take a bastu towel home for 449 kr."
@@ -213,6 +215,42 @@ enum Copy {
         guard let front else { return "Ready at the desk." }
         return "Ready at the desk: \(front.sellerName)" + (front.pickupNote.map { ", \($0.prefix(1).lowercased() + $0.dropFirst())" } ?? "") + "."
     }
+    // Phase 4: checkout.
+    static let shopCheckoutTitle = "Checkout"
+    static let shopHowTitle = "How do you want it?"
+    static let shopPickupFree = "Free · at the desk"
+    static let shopShipTo = "Ship to me"
+    static let shopShipNote = "2–4 days · the address goes to Stripe"
+    static let shopPayButton = "Pay with Stripe"
+    static let shopPayMethods = "Apple Pay, Swish, Klarna or card, as the studio set up"
+    static let shopPaySafety = "Payment by Stripe on the studio's account, in the browser. Brüce never sees your card or address. Menu › Orders shows your pickup code."
+    static let shopReturnNote = "Receipt and withdrawal form come by email from the studio."
+    static let shopNoCheckout = "This studio has no checkout in Brüce yet: ask at the desk or use its webshop."
+    static let shopPickVariant = "Pick a size or option first."
+    static let shopOutOfStock = "That option is out of stock."
+    static let shopNoShipping = "This studio does not ship: pick it up at the desk."
+    static let shopOrdersTitle = "Orders"
+    static let shopOrdersEmpty = "Nothing bought yet. What you buy from a studio's shop shows up here with its pickup code."
+    static let shopOrdersNote = "The studio is the seller and sends the receipt. Brüce keeps what you bought, the status and your pickup code; never a card or an address."
+    static let shopPickupCode = "Pickup code"
+    static let shopShowCode = "Show the code at the desk."
+    static let shopPaidOpen = "Back from Stripe. Your order shows here once Stripe confirms the payment, usually within a minute."
+    /// "Buy · 449 kr".
+    static func shopBuy(_ price: String) -> String { "Buy · \(price)" }
+    /// "Pay 449,00 kr".
+    static func shopPay(_ price: String) -> String { "Pay \(price)" }
+    /// "Ship to me · 49 kr".
+    static func shopShipPrice(_ front: Storefront) -> String { shopShipTo + " · " + ShopMoney.kr(front.shippingOre ?? 0) }
+    /// "Paid · being prepared for pickup" (the server's words when it sent them, else ours).
+    static func shopOrderDate(_ o: Order) -> String { o.created.map { BruceDate.format($0, "d MMM") } ?? "" }
+    /// "Pick up at Ångan Bastu".
+    static func shopPickupAt(_ studio: String) -> String { "Pick up at \(studio)" }
+    /// "Seller: Ångan Bastu AB, Hornstull. Receipt and withdrawal form come by email."
+    static func shopSeller(_ front: Storefront, vicinity: String?) -> String {
+        "Seller: \(front.sellerName)" + (vicinity.map { ", \($0)" } ?? "") + ". \(shopReturnNote)"
+    }
+    /// "incl. VAT 25%".
+    static func shopVatLine(_ rate: Int) -> String { "incl. VAT \(rate)%" }
     /// A drop's line: "Pre-order until Sun 7 Feb · one print run · pickup from Sat 20 Feb".
     static func shopDropLine(_ d: Drop) -> String {
         (["Pre-order until \(BruceDate.format(d.closes, "EEE d MMM"))", "one print run", d.pickupDayText.map { "pickup from \($0)" }].compactMap { $0 }).joined(separator: " · ")
