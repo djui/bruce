@@ -57,7 +57,8 @@ My classes tabs, with class and studio pages and account sheets.
   rename it or delete it. As in the official app, areas stay on the device. The Classes list can also be
   narrowed by **time of day** (Early, Morning, Lunch, Afternoon, Evening, Late), **duration** (≤ 45, 45–60, 60+ min)
   and **"Bookable now"**, and sorted by start, distance, travel time (your commute mode from Places & commute) or
-  spots left, all in the same filter sheet and on the device.
+  spots left, all in the same filter sheet and on the device. Filters, the chosen area and the city are kept
+  across restarts (UserDefaults; the web version keeps them in localStorage).
   Class rows mark Wellness classes, show a "Waitlist" pill when you are on the waitlist ("Spot open" once it has a free spot) and "Fully
   booked" otherwise, and show the faces of friends who booked the class;
   lists say "Filter active" at the end while filters apply. Deleted classes are hidden, as in the official app.

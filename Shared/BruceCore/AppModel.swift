@@ -74,20 +74,20 @@ final class AppModel {
     var stacks: [Tab: [Route]] = [:]
     var sheets: [SheetRoute] = []
     var wellnessOverlay = false
-    var exploreCategories: Set<Int> = []
+    // Filter panel state. Kept across launches in UserDefaults (SavedFilters, ClassFilters.swift); not in demo mode.
+    var exploreCategories: Set<Int> = SavedFilters.initial.categories { didSet { saveFilters() } }
     var filterOpen = false
     var exploreMap = false
-    // Filter panel state
-    var accessTiers: Set<String> = []
-    var favoritesOnly = false
-    var currentlyOpen = false
-    var soloOnly = false
-    var hideFull = false
+    var accessTiers: Set<String> = SavedFilters.initial.accessTiers { didSet { saveFilters() } }
+    var favoritesOnly = SavedFilters.initial.favoritesOnly { didSet { saveFilters() } }
+    var currentlyOpen = SavedFilters.initial.currentlyOpen { didSet { saveFilters() } }
+    var soloOnly = SavedFilters.initial.soloOnly { didSet { saveFilters() } }
+    var hideFull = SavedFilters.initial.hideFull { didSet { saveFilters() } }
     /// Classes tab: time of day, duration, sort, bookable now (ClassFilters.swift).
-    var classFilters = ClassFilterState()
+    var classFilters = SavedFilters.initial.classFilters { didSet { saveFilters() } }
     /// Saved custom areas (Areas.swift) and the one used as the Explore "Area" filter.
     var areas: [SavedArea] = []
-    var selectedAreaId: UUID?
+    var selectedAreaId: UUID? = SavedFilters.initial.areaId { didSet { saveFilters() } }
     /// Local until the area API is captured; demo mode keeps them in memory only.
     @ObservationIgnored lazy var areaStore: any AreaStore = AppModel.demo ? MemoryAreaStore(AppModel.demoAreas) : LocalAreaStore()
     /// "My area" filter active (= an area is selected). Setting false clears the selection.
@@ -342,7 +342,7 @@ final class AppModel {
     }
 
     var cities: [BruceAPI.City] = []
-    var cityId = 1
+    var cityId = SavedFilters.initial.cityId { didSet { saveFilters() } }
     var city: BruceAPI.City? { cities.first { $0.id == cityId } }
     var cityName: String { city?.name ?? (cityId == 1 ? "Stockholm" : "City #\(cityId)") }
     /// Selected city's centre (map framing, "Entire city").
