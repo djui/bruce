@@ -163,7 +163,11 @@ extension AppModel {
     }
 
     func loadAreas() async {
-        if let list = try? await areaStore.list() { areas = list }
+        if let list = try? await areaStore.list() {
+            areas = list
+            // A restored area filter whose area is gone (or belongs to another city) would hide everything.
+            if let id = selectedAreaId, !list.contains(where: { $0.id == id && $0.cityId == cityId }) { selectedAreaId = nil }
+        }
     }
 
     @discardableResult

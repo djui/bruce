@@ -181,4 +181,16 @@ final class MilestonesTests: XCTestCase {
         XCTAssertEqual(picks[1].reason, "near you")
         XCTAssertTrue(NewToYou.includedInPlan(studios[3], tier: "EPIC")); XCTAssertFalse(NewToYou.includedInPlan(studios[3], tier: "BASE"))
     }
+
+    func testSavedFiltersRoundTripAndTolerateOldShapes() throws {
+        var f = SavedFilters()
+        f.cityId = 3; f.categories = [2, 7]; f.accessTiers = ["BASE"]; f.hideFull = true
+        f.areaId = UUID(); f.classFilters.slots = [.evening]; f.classFilters.sort = .distance
+        let back = try JSONDecoder().decode(SavedFilters.self, from: JSONEncoder().encode(f))
+        XCTAssertEqual(back, f)
+        // A partial or older payload keeps what it has and defaults the rest.
+        let partial = try JSONDecoder().decode(SavedFilters.self, from: Data(#"{"cityId":2,"hideFull":true,"classFilters":"junk"}"#.utf8))
+        XCTAssertEqual(partial.cityId, 2); XCTAssertTrue(partial.hideFull)
+        XCTAssertNil(partial.areaId); XCTAssertEqual(partial.classFilters, ClassFilterState())
+    }
 }

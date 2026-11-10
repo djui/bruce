@@ -101,3 +101,55 @@ extension AppModel {
         return travelOverrides[Recommender.travelKey(from, p, mode)] ?? mode.estimateMinutes(meters: Recommender.meters(from, p))
     }
 }
+
+/// The Explore/Classes filters and the city, saved in UserDefaults so they survive a restart (the web app keeps
+/// the same in localStorage, `bruce.explore` and `bruce.settings`). Demo mode neither reads nor writes them.
+struct SavedFilters: Codable, Equatable {
+    var cityId = 1
+    var categories: Set<Int> = []
+    var accessTiers: Set<String> = []
+    var favoritesOnly = false
+    var currentlyOpen = false
+    var soloOnly = false
+    var hideFull = false
+    var areaId: UUID?
+    var classFilters = ClassFilterState()
+
+    init() {}
+    /// Tolerant decoding: a missing or unknown field falls back to its default instead of dropping everything.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = SavedFilters()
+        cityId = (try? c.decode(Int.self, forKey: .cityId)) ?? d.cityId
+        categories = (try? c.decode(Set<Int>.self, forKey: .categories)) ?? d.categories
+        accessTiers = (try? c.decode(Set<String>.self, forKey: .accessTiers)) ?? d.accessTiers
+        favoritesOnly = (try? c.decode(Bool.self, forKey: .favoritesOnly)) ?? d.favoritesOnly
+        currentlyOpen = (try? c.decode(Bool.self, forKey: .currentlyOpen)) ?? d.currentlyOpen
+        soloOnly = (try? c.decode(Bool.self, forKey: .soloOnly)) ?? d.soloOnly
+        hideFull = (try? c.decode(Bool.self, forKey: .hideFull)) ?? d.hideFull
+        areaId = try? c.decode(UUID.self, forKey: .areaId)
+        classFilters = (try? c.decode(ClassFilterState.self, forKey: .classFilters)) ?? d.classFilters
+    }
+
+    static let key = "savedFilters"
+    /// Read once at launch for the AppModel property defaults.
+    static let initial: SavedFilters = {
+        guard !AppModel.demo, let data = UserDefaults.standard.data(forKey: key),
+              let f = try? JSONDecoder().decode(SavedFilters.self, from: data) else { return SavedFilters() }
+        return f
+    }()
+}
+
+extension AppModel {
+    var savedFilters: SavedFilters {
+        var f = SavedFilters()
+        f.cityId = cityId; f.categories = exploreCategories; f.accessTiers = accessTiers
+        f.favoritesOnly = favoritesOnly; f.currentlyOpen = currentlyOpen; f.soloOnly = soloOnly; f.hideFull = hideFull
+        f.areaId = selectedAreaId; f.classFilters = classFilters
+        return f
+    }
+    func saveFilters() {
+        guard !AppModel.demo, let data = try? JSONEncoder().encode(savedFilters) else { return }
+        UserDefaults.standard.set(data, forKey: SavedFilters.key)
+    }
+}
